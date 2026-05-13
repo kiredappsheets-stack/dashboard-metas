@@ -480,7 +480,7 @@ function renderError(msg) {
 }
 
 function renderDashboard(data) {
-  const colecoes = [...new Set(data.map(d => d.col))];
+  const colecoes = [...new Set(data.map(d => d.col))].sort((a, b) => b.localeCompare(a, 'pt-BR'));
   const totalMeta  = data.reduce((a, d) => a + d.meta, 0);
   const totalVenda = data.reduce((a, d) => a + d.venda, 0);
   const pctGeral   = totalMeta > 0 ? totalVenda / totalMeta : 0;
