@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Acompanhamento de Metas — Coleções</title>
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  /* ── CONFIG: preenche aqui antes de hospedar ── */
+  :root {
+    --client-id:    "24250610-689c-409d-92d7-4f5db4e53731";
+    --tenant-id:    "f6b9f0df-2577-4b82-9dc8-7673ebf160f2";
+    --workspace-id: "me";
+    --dataset-id:   "16c9b92f-9572-452c-ab9e-e84b015f2a58";
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #f7f6f3;
+    --surface:   #ffffff;
+    --border:    rgba(0,0,0,.08);
+    --text:      #1a1916;
+    --muted:     #6b6a66;
+    --hint:      #a8a7a3;
+    --green:     #1D9E75;
+    --green-bg:  #EAF3DE;
+    --green-tx:  #3B6D11;
+    --blue:      #378ADD;
+    --blue-bg:   #E6F1FB;
+    --blue-tx:   #185FA5;
+    --amber:     #EF9F27;
+    --amber-bg:  #FAEEDA;
+    --amber-tx:  #854F0B;
+    --red:       #E24B4A;
+    --red-bg:    #FCEBEB;
+    --red-tx:    #A32D2D;
+    --radius:    10px;
+    --font:      'DM Sans', sans-serif;
+    --mono:      'DM Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0 0 4rem;
+  }
+
+  /* ── HEADER ── */
+  .page-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .page-header h1 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -.01em;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .last-update {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .btn-login {
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--text);
+    color: #fff;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  .btn-login:hover { opacity: .85; }
+  .btn-login.logout { background: transparent; color: var(--muted); border-color: var(--border); }
+
+  /* ── MAIN ── */
+  .main { max-width: 1200px; margin: 0 auto; padding: 2rem 2rem 0; }
+
+  /* ── LOGIN SCREEN ── */
+  .login-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    gap: 16px;
+    text-align: center;
+  }
+  .login-screen .icon { font-size: 48px; margin-bottom: 8px; }
+  .login-screen h2 { font-size: 22px; font-weight: 600; }
+  .login-screen p { font-size: 14px; color: var(--muted); max-width: 340px; line-height: 1.6; }
+  .btn-big {
+    font-family: var(--font);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px 28px;
+    border-radius: 8px;
+    border: none;
+    background: var(--text);
+    color: #fff;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: opacity .15s;
+  }
+  .btn-big:hover { opacity: .85; }
+
+  /* ── LOADING ── */
+  .loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 50vh;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 2px solid var(--border);
+    border-top-color: var(--text);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── ERROR ── */
+  .error-box {
+    background: var(--red-bg);
+    color: var(--red-tx);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    font-size: 13px;
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+  }
+
+  /* ── SECTION LABEL ── */
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    color: var(--hint);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* ── SUMMARY GLOBAL CARDS ── */
+  .summary-global {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+    margin-bottom: 2rem;
+  }
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .kpi-card .lbl { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .kpi-card .val { font-size: 22px; font-weight: 600; letter-spacing: -.02em; color: var(--text); }
+  .kpi-card .sub { font-size: 11px; color: var(--hint); margin-top: 3px; }
+
+  /* ── LEGEND ── */
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .ldot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+  /* ── COL SECTION ── */
+  .col-section { margin-bottom: 1.75rem; }
+
+  /* ── COL SUMMARY CARD ── */
+  .col-summary {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0;
+    border-bottom: none;
+    padding: 14px 18px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: center;
+  }
+  .col-summary .col-name { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+  .col-summary .col-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .col-progress { margin-top: 10px; grid-column: 1/-1; }
+  .col-progress-track {
+    height: 4px;
+    background: var(--bg);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .col-progress-fill { height: 100%; border-radius: 2px; transition: width .6s ease; }
+  .col-stats { display: flex; gap: 20px; align-items: center; }
+  .col-stat { text-align: right; }
+  .col-stat .lbl { font-size: 11px; color: var(--muted); }
+  .col-stat .val { font-size: 13px; font-weight: 600; color: var(--text); }
+  .badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge-green { background: var(--green-bg); color: var(--green-tx); }
+  .badge-blue  { background: var(--blue-bg);  color: var(--blue-tx);  }
+  .badge-amber { background: var(--amber-bg); color: var(--amber-tx); }
+  .badge-red   { background: var(--red-bg);   color: var(--red-tx);   }
+
+  /* ── COL DETAIL (BARS) ── */
+  .col-detail {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 0.5px solid var(--border);
+    border-radius: 0 0 var(--radius) var(--radius);
+    padding: 12px 18px 16px;
+  }
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    position: relative;
+  }
+  .bar-row:last-child { margin-bottom: 0; }
+  .bar-name {
+    font-size: 12px;
+    color: var(--muted);
+    width: 155px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .bar-track {
+    flex: 1;
+    background: var(--bg);
+    border-radius: 4px;
+    height: 22px;
+    position: relative;
+    overflow: visible;
+  }
+  .bar-inner { width: 100%; height: 100%; overflow: hidden; border-radius: 4px; }
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 7px;
+    transition: width .5s ease;
+  }
+  .bar-label-in  { font-size: 11px; font-weight: 600; font-family: var(--mono); white-space: nowrap; }
+  .bar-label-out {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--mono);
+    color: var(--muted);
+    position: absolute;
+    left: calc(100% + 6px);
+    top: 50%;
+    transform: translateY(-50%);
+    white-space: nowrap;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    .main { padding: 1rem 1rem 0; }
+    .col-summary { grid-template-columns: 1fr; }
+    .col-stats { flex-wrap: wrap; gap: 10px; }
+    .bar-name { width: 110px; font-size: 11px; }
+    .summary-global { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <h1>📊 Acompanhamento de Metas por Coleção</h1>
+  <div class="header-right">
+    <span class="last-update" id="lastUpdate"></span>
+    <button class="btn-login" id="btnAuth" onclick="handleAuth()">Entrar com Microsoft</button>
+  </div>
+</header>
+
+<div class="main" id="mainContent">
+  <div class="login-screen" id="loginScreen">
+    <div class="icon">📊</div>
+    <h2>Dashboard de Metas</h2>
+    <p>Faz login com a tua conta Microsoft para visualizar os dados em tempo real do Power BI.</p>
+    <button class="btn-big" onclick="handleAuth()">Entrar com Microsoft</button>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════
+//  ⚙️  CONFIGURAÇÃO — preenche estes valores
+// ════════════════════════════════════════════
+const CONFIG = {
+  clientId:    "24250610-689c-409d-92d7-4f5db4e53731",
+  tenantId:    "f6b9f0df-2577-4b82-9dc8-7673ebf160f2",
+  workspaceId: "me",
+  datasetId:   "16c9b92f-9572-452c-ab9e-e84b015f2a58",
+};
+
+// Query DAX que busca os dados da tabela METAS
+const DAX_QUERY = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  METAS[COLECAO],
+  METAS[NOME],
+  "META",    SUM(METAS[META]),
+  "PCT_META", CALCULATE(AVERAGE(METAS[%META])),
+  "VENDA",   SUMX(METAS, METAS[VENDA])
+)
+ORDER BY METAS[COLECAO] ASC
+`;
+
+// ════════════════════════════════════════════
+//  MSAL — autenticação Microsoft
+// ════════════════════════════════════════════
+const msalConfig = {
+  auth: {
+    clientId: CONFIG.clientId,
+    authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
+    redirectUri: window.location.origin + window.location.pathname,
+  },
+  cache: { cacheLocation: "sessionStorage" }
+};
+
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+const SCOPES = ["https://analysis.windows.net/powerbi/api/Dataset.Read.All"];
+
+let account = null;
+
+async function handleAuth() {
+  if (account) {
+    msalInstance.logoutPopup();
+    account = null;
+    renderLogin();
+    return;
+  }
+  try {
+    const result = await msalInstance.loginPopup({ scopes: SCOPES });
+    account = result.account;
+    loadDashboard();
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+async function getToken() {
+  const req = { scopes: SCOPES, account };
+  try {
+    const result = await msalInstance.acquireTokenSilent(req);
+    return result.accessToken;
+  } catch {
+    const result = await msalInstance.acquireTokenPopup(req);
+    return result.accessToken;
+  }
+}
+
+// ════════════════════════════════════════════
+//  API Power BI — executa DAX
+// ════════════════════════════════════════════
+async function runDaxQuery(token) {
+  const url = `https://api.powerbi.com/v1.0/myorg/groups/${CONFIG.workspaceId}/datasets/${CONFIG.datasetId}/executeQueries`;
+  const body = { queries: [{ query: DAX_QUERY }], serializerSettings: { includeNulls: true } };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`API Power BI: ${res.status} — ${err}`);
+  }
+
+  const json = await res.json();
+  const rows = json.results[0].tables[0].rows;
+
+  return rows.map(r => ({
+    col:   r["METAS[COLECAO]"] || r["COLECAO"] || Object.values(r)[0],
+    rep:   r["METAS[NOME]"]    || r["NOME"]    || Object.values(r)[1],
+    meta:  parseFloat(r["[META]"]     || r["META"]     || 0) || 0,
+    pct:   parseFloat(r["[PCT_META]"] || r["PCT_META"] || null),
+    venda: parseFloat(r["[VENDA]"]    || r["VENDA"]    || 0) || 0,
+  }));
+}
+
+// ════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════
+function shortName(n) {
+  return n.replace(/\b(REPRESENTACOES|REPRESENTACAO|COMERCIAL|LTDA\.?|LIMITADA|UNIPESSOAL|S\/S|& CIA)\b/gi, '')
+          .replace(/\s+/g, ' ').trim();
+}
+function fmtR(v) {
+  return 'R$ ' + Math.round(v).toLocaleString('pt-BR');
+}
+function barColor(pct) {
+  if (pct === null || isNaN(pct) || pct <= 0) return '#E24B4A';
+  if (pct < 0.5)  return '#EF9F27';
+  if (pct < 1)    return '#378ADD';
+  return '#1D9E75';
+}
+function txtOnBar(pct) {
+  if (pct === null || isNaN(pct) || pct <= 0) return '#791F1F';
+  if (pct < 0.5)  return '#633806';
+  if (pct < 1)    return '#0C447C';
+  return '#085041';
+}
+function badgeClass(pct) {
+  if (pct >= 1)   return 'badge-green';
+  if (pct >= 0.5) return 'badge-blue';
+  if (pct > 0)    return 'badge-amber';
+  return 'badge-red';
+}
+function badgeLabel(pct) {
+  if (pct >= 1)   return 'Meta atingida';
+  if (pct >= 0.5) return 'Em andamento';
+  if (pct > 0)    return 'Abaixo da meta';
+  return 'Sem vendas';
+}
+
+// ════════════════════════════════════════════
+//  RENDER
+// ════════════════════════════════════════════
+function renderLogin() {
+  document.getElementById('btnAuth').textContent = 'Entrar com Microsoft';
+  document.getElementById('btnAuth').classList.remove('logout');
+  document.getElementById('mainContent').innerHTML = `
+    <div class="login-screen">
+      <div class="icon">📊</div>
+      <h2>Dashboard de Metas</h2>
+      <p>Faz login com a tua conta Microsoft para visualizar os dados em tempo real do Power BI.</p>
+      <button class="btn-big" onclick="handleAuth()">Entrar com Microsoft</button>
+    </div>`;
+}
+
+function renderLoading() {
+  document.getElementById('mainContent').innerHTML = `
+    <div class="loading"><div class="spinner"></div>A carregar dados do Power BI…</div>`;
+}
+
+function renderError(msg) {
+  document.getElementById('mainContent').innerHTML = `
+    <div class="error-box">
+      <strong>Erro ao carregar dados</strong><br>${msg}<br><br>
+      Verifica se o CLIENT_ID, TENANT_ID, WORKSPACE_ID e DATASET_ID estão correctos no ficheiro index.html.
+    </div>`;
+}
+
+function renderDashboard(data) {
+  const colecoes = [...new Set(data.map(d => d.col))];
+  const totalMeta  = data.reduce((a, d) => a + d.meta, 0);
+  const totalVenda = data.reduce((a, d) => a + d.venda, 0);
+  const pctGeral   = totalMeta > 0 ? totalVenda / totalMeta : 0;
+  const atingiram  = data.filter(d => d.pct !== null && !isNaN(d.pct) && d.pct >= 1).length;
+
+  let html = `
+    <div class="section-label">Resumo geral</div>
+    <div class="summary-global">
+      <div class="kpi-card">
+        <div class="lbl">Meta total</div>
+        <div class="val">${fmtR(totalMeta)}</div>
+        <div class="sub">${data.length} representantes</div>
+      </div>
+      <div class="kpi-card">
+        <div class="lbl">Venda total</div>
+        <div class="val">${fmtR(totalVenda)}</div>
+        <div class="sub">realizada</div>
+      </div>
+      <div class="kpi-card">
+        <div class="lbl">% geral</div>
+        <div class="val" style="color:${barColor(pctGeral)}">${(pctGeral * 100).toFixed(1)}%</div>
+        <div class="sub">da meta</div>
+      </div>
+      <div class="kpi-card">
+        <div class="lbl">Bateram 100%</div>
+        <div class="val">${atingiram}</div>
+        <div class="sub">representantes</div>
+      </div>
+      <div class="kpi-card">
+        <div class="lbl">Coleções</div>
+        <div class="val">${colecoes.length}</div>
+        <div class="sub">ativas</div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><span class="ldot" style="background:#E24B4A"></span>Sem vendas</span>
+      <span><span class="ldot" style="background:#EF9F27"></span>Abaixo de 50%</span>
+      <span><span class="ldot" style="background:#378ADD"></span>50% a 99%</span>
+      <span><span class="ldot" style="background:#1D9E75"></span>100% ou mais</span>
+    </div>
+  `;
+
+  colecoes.forEach(col => {
+    const items    = data.filter(d => d.col === col).sort((a, b) => (b.pct || 0) - (a.pct || 0));
+    const cMeta    = items.reduce((a, d) => a + d.meta, 0);
+    const cVenda   = items.reduce((a, d) => a + d.venda, 0);
+    const cPct     = cMeta > 0 ? cVenda / cMeta : 0;
+    const cAting   = items.filter(d => d.pct !== null && !isNaN(d.pct) && d.pct >= 1).length;
+    const fillW    = Math.min(Math.max(cPct, 0), 1.5) / 1.5 * 100;
+    const maxPct   = Math.max(...items.map(d => d.pct || 0), 1.4);
+
+    const rows = items.map(d => {
+      const pct   = (d.pct !== null && !isNaN(d.pct)) ? d.pct : 0;
+      const fp    = Math.max(0, Math.min(pct / maxPct, 1)) * 100;
+      const lbl   = (d.pct !== null && !isNaN(d.pct)) ? (d.pct * 100).toFixed(1) + '%' : '0%';
+      const bc    = barColor(d.pct);
+      const tc    = txtOnBar(d.pct);
+      const inside = fp > 26;
+      return `
+        <div class="bar-row" title="${d.rep} · Meta: ${fmtR(d.meta)} · Venda: ${fmtR(d.venda)} · ${lbl}">
+          <div class="bar-name" title="${d.rep}">${shortName(d.rep)}</div>
+          <div class="bar-track">
+            <div class="bar-inner">
+              <div class="bar-fill" style="width:${fp}%;background:${bc}">
+                ${inside ? `<span class="bar-label-in" style="color:${tc}">${lbl}</span>` : ''}
+              </div>
+            </div>
+            ${!inside ? `<span class="bar-label-out">${lbl}</span>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    html += `
+      <div class="col-section">
+        <div class="col-summary">
+          <div>
+            <div class="col-name">${col}</div>
+            <div class="col-sub">${items.length} representantes · ${cAting} atingiram 100%</div>
+            <div class="col-progress">
+              <div class="col-progress-track">
+                <div class="col-progress-fill" style="width:${fillW}%;background:${barColor(cPct)}"></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-stats">
+            <div class="col-stat"><div class="lbl">Meta</div><div class="val">${fmtR(cMeta)}</div></div>
+            <div class="col-stat"><div class="lbl">Venda</div><div class="val">${fmtR(cVenda)}</div></div>
+            <div class="col-stat"><div class="lbl">% meta</div><div class="val" style="color:${barColor(cPct)}">${(cPct * 100).toFixed(1)}%</div></div>
+            <span class="badge ${badgeClass(cPct)}">${badgeLabel(cPct)}</span>
+          </div>
+        </div>
+        <div class="col-detail">${rows}</div>
+      </div>`;
+  });
+
+  document.getElementById('mainContent').innerHTML = html;
+
+  const now = new Date();
+  document.getElementById('lastUpdate').textContent =
+    'Atualizado: ' + now.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+
+// ════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════
+async function loadDashboard() {
+  document.getElementById('btnAuth').textContent = 'Sair';
+  document.getElementById('btnAuth').classList.add('logout');
+  renderLoading();
+  try {
+    const token = await getToken();
+    const data  = await runDaxQuery(token);
+    renderDashboard(data);
+  } catch(e) {
+    renderError(e.message);
+  }
+}
+
+// Verifica se já há sessão activa
+(async () => {
+  await msalInstance.initialize();
+  await msalInstance.handleRedirectPromise();
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length > 0) {
+    account = accounts[0];
+    loadDashboard();
+  }
+})();
+</script>
+</body>
+</html>
