@@ -361,13 +361,13 @@ let account = null;
 
 async function handleAuth() {
   if (account) {
-    msalInstance.logoutPopup();
+    msalInstance.logoutRedirect();
     account = null;
     renderLogin();
     return;
   }
   try {
-    const result = await msalInstance.loginPopup({ scopes: SCOPES });
+    const result = await msalInstance.loginRedirect({ scopes: SCOPES });
     account = result.account;
     loadDashboard();
   } catch(e) {
@@ -603,8 +603,8 @@ async function loadDashboard() {
 // Verifica se já há sessão activa
 (async () => {
   await msalInstance.initialize();
-  await msalInstance.handleRedirectPromise();
-  const accounts = msalInstance.getAllAccounts();
+  const redirectResult = await msalInstance.handleRedirectPromise();
+  if (redirectResult && redirectResult.account) { account = redirectResult.account; loadDashboard(); return; } const accounts = msalInstance.getAllAccounts();
   if (accounts.length > 0) {
     account = accounts[0];
     loadDashboard();
