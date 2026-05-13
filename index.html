@@ -283,10 +283,10 @@
     font-family: var(--mono);
     color: var(--muted);
     position: absolute;
-    left: calc(100% + 6px);
     top: 50%;
     transform: translateY(-50%);
     white-space: nowrap;
+    left: var(--bar-left, calc(100% + 6px));
   }
 
   /* ── RESPONSIVE ── */
@@ -552,7 +552,7 @@ function renderDashboard(data) {
                 ${inside ? `<span class="bar-label-in" style="color:${tc}">${lbl}</span>` : ''}
               </div>
             </div>
-            ${!inside ? `<span class="bar-label-out">${lbl}</span>` : ''}
+            ${!inside ? `<span class="bar-label-out" style="left:calc(${fp}% + 6px)">${lbl}</span>` : ''}
           </div>
         </div>`;
     }).join('');
