@@ -329,17 +329,20 @@ const CONFIG = {
   datasetId:   "374fd5f6-a9cb-4a72-bb8e-11930616f40e",
 };
 
-// Query DAX que busca os dados da tabela METAS
+// Query DAX — apenas coleções com COL_ATUAL = "COL ATUAL"
 const DAX_QUERY = `
 EVALUATE
-SUMMARIZECOLUMNS(
-  METAS[COLECAO],
-  METAS[NOME],
-  "META",    SUM(METAS[META]),
-  "PCT_META", CALCULATE(AVERAGE(METAS[%META])),
-  "VENDA",   SUMX(METAS, METAS[VENDA])
+CALCULATETABLE(
+  SUMMARIZECOLUMNS(
+    METAS[COLECAO],
+    METAS[NOME],
+    "META",     SUM(METAS[META]),
+    "PCT_META", CALCULATE(AVERAGE(METAS[%META])),
+    "VENDA",    SUMX(METAS, METAS[VENDA])
+  ),
+  FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")
 )
-ORDER BY METAS[COLECAO] ASC
+ORDER BY METAS[COLECAO] DESC
 `;
 
 // ════════════════════════════════════════════
