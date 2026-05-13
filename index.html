@@ -325,8 +325,8 @@
 const CONFIG = {
   clientId:    "24250610-689c-409d-92d7-4f5db4e53731",
   tenantId:    "f6b9f0df-2577-4b82-9dc8-7673ebf160f2",
-  workspaceId: "me",
-  datasetId:   "16c9b92f-9572-452c-ab9e-e84b015f2a58",
+  workspaceId: "00000000-0000-0000-0000-000000000000",
+  datasetId:   "374fd5f6-a9cb-4a72-bb8e-11930616f40e",
 };
 
 // Query DAX que busca os dados da tabela METAS
@@ -390,7 +390,7 @@ async function getToken() {
 //  API Power BI — executa DAX
 // ════════════════════════════════════════════
 async function runDaxQuery(token) {
-  const url = `https://api.powerbi.com/v1.0/myorg/groups/${CONFIG.workspaceId}/datasets/${CONFIG.datasetId}/executeQueries`;
+  const url = `https://api.powerbi.com/v1.0/myorg/datasets/${CONFIG.datasetId}/executeQueries`;
   const body = { queries: [{ query: DAX_QUERY }], serializerSettings: { includeNulls: true } };
 
   const res = await fetch(url, {
