@@ -950,14 +950,14 @@ async function sendChat() {
 
   const thinking = addMsg('A analisar os dados...', 'bot thinking');
 
-  const systemPrompt = `És um assistente especializado em análise de vendas e metas comerciais.
-Tens acesso aos dados reais de vendas da empresa, incluindo metas, vendas realizadas e percentuais atingidos por representante e coleção.
-Responde sempre em português do Brasil, de forma clara, objetiva e útil.
-Quando apresentares valores, usa o formato R$ com separadores brasileiros.
-Quando apresentares percentuais, usa o símbolo %.
-Se a pergunta não tiver relação com os dados de vendas, responde educadamente que só podes ajudar com questões sobre vendas e metas.
+  const systemPrompt = `És um assistente de vendas direto e objetivo.
+Responde SEMPRE em português do Brasil.
+Seja BREVE: máximo 3 linhas por resposta. Vai direto ao ponto, sem introduções nem explicações longas.
+Use valores em R$ com separadores brasileiros e % quando necessário.
+Se não souber ou não tiver dados, diga em uma linha.
+Se a pergunta não for sobre vendas, diga apenas: "Só respondo sobre vendas e metas."
 
-DADOS ATUAIS:
+DADOS:
 ${buildContext()}`;
 
   const messages = [
@@ -979,7 +979,7 @@ ${buildContext()}`;
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-5',
-        max_tokens: 1024,
+        max_tokens: 300,
         system: systemPrompt,
         messages: [{ role: 'user', content: question }]
       })
@@ -1066,17 +1066,29 @@ function stopListening() {
 function speakResponse(text) {
   if (!synth) return;
   synth.cancel();
-  // Limitar texto para não ser muito longo
-  const shortText = text.length > 400 ? text.substring(0, 400) + '...' : text;
+  const shortText = text.length > 300 ? text.substring(0, 300) + '.' : text;
   const utt = new SpeechSynthesisUtterance(shortText);
   utt.lang = 'pt-BR';
   utt.rate = 1.05;
-  utt.pitch = 1;
-  // Tentar usar voz portuguesa
-  const voices = synth.getVoices();
-  const ptVoice = voices.find(v => v.lang.startsWith('pt'));
-  if (ptVoice) utt.voice = ptVoice;
-  synth.speak(utt);
+  utt.pitch = 0.85;
+
+  function trySpeak() {
+    const voices = synth.getVoices();
+    // Prioridade: voz masculina pt-BR > qualquer pt-BR > qualquer masculina > primeira disponível
+    const ptBR = voices.filter(v => v.lang === 'pt-BR' || v.lang === 'pt_BR');
+    const ptBRMale = ptBR.find(v => /male|masculin|daniel|antonio|breno|lucas|google português brasil/i.test(v.name));
+    const ptAny = voices.find(v => v.lang.startsWith('pt'));
+    const maleAny = voices.find(v => /male|masculin/i.test(v.name) && v.lang.startsWith('pt'));
+    utt.voice = ptBRMale || maleAny || ptAny || voices[0] || null;
+    synth.speak(utt);
+  }
+
+  // Algumas browsers carregam vozes de forma assíncrona
+  if (synth.getVoices().length === 0) {
+    synth.addEventListener('voiceschanged', trySpeak, { once: true });
+  } else {
+    trySpeak();
+  }
 }
 
 </script>
