@@ -905,30 +905,35 @@ function buildContext() {
     ctx += '\n';
   });
 
-  // Adicionar dados de pedidos
+  // Adicionar dados de pedidos — chaves com prefixo PEDIDO[XXX] e medidas [XXX]
   if (cachedPedidos && cachedPedidos.length > 0) {
     ctx += "\n=== PEDIDOS (coleções atuais) ===\n\n";
-    // Agrupar por representante
-    const reps = [...new Set(cachedPedidos.map(p => p['PEDIDO[REP]'] || p['REP'] || ''))].filter(Boolean);
+    const getP = (row, col) => row['PEDIDO['+col+']'] || row[col] || '';
+    const getM = (row, col) => parseFloat(row['['+col+']'] || row[col] || 0) || 0;
+
+    const reps = [...new Set(cachedPedidos.map(p => getP(p,'REP')))].filter(Boolean);
     reps.forEach(rep => {
-      const pedRep = cachedPedidos.filter(p => (p['PEDIDO[REP]'] || p['REP']) === rep);
-      const totalFat = pedRep.reduce((a,p) => a + (parseFloat(p['[FAT_LIQ]'] || p['FAT_LIQ'] || 0)||0), 0);
-      const totalQtd = pedRep.reduce((a,p) => a + (parseFloat(p['[QTDE]'] || p['QTDE'] || 0)||0), 0);
-      const estados = [...new Set(pedRep.map(p => p['PEDIDO[ESTADO]'] || p['ESTADO'] || '').filter(Boolean))].join(', ');
-      ctx += `REP: ${rep} | Faturamento líquido: R$${Math.round(totalFat).toLocaleString('pt-BR')} | Qtd peças: ${Math.round(totalQtd)} | Estados: ${estados}\n`;
-      // Top 5 clientes do rep
-      const clis = [...new Set(pedRep.map(p => p['PEDIDO[CLIENTE]'] || p['CLIENTE'] || '').filter(Boolean))].slice(0,5);
-      if (clis.length) ctx += `  Clientes: ${clis.join(', ')}\n`;
+      const pedRep = cachedPedidos.filter(p => getP(p,'REP') === rep);
+      const totalFat = pedRep.reduce((a,p) => a + getM(p,'FAT_LIQ'), 0);
+      const totalQtd = pedRep.reduce((a,p) => a + getM(p,'QTDE'), 0);
+      const estados = [...new Set(pedRep.map(p => getP(p,'ESTADO')).filter(Boolean))].join(', ');
+      const clis = [...new Set(pedRep.map(p => getP(p,'CLIENTE')).filter(Boolean))];
+      ctx += `REP: ${rep} | Fat. líq.: R$${Math.round(totalFat).toLocaleString('pt-BR')} | Peças: ${Math.round(totalQtd)} | Estados: ${estados}\n`;
+      ctx += `  Clientes (${clis.length}): ${clis.slice(0,8).join(', ')}${clis.length>8?' ...':''}\n`;
     });
   }
 
-  // Adicionar resumo de clientes
+  // Adicionar resumo de clientes — chaves com prefixo CLIENTES[XXX]
   if (cachedClientes && cachedClientes.length > 0) {
-    const ativos = cachedClientes.filter(c => (c['CLIENTES[ATIVO]'] || c['ATIVO']) === 'S');
+    const getC = (row, col) => row['CLIENTES['+col+']'] || row[col] || '';
+    const ativos = cachedClientes.filter(c => getC(c,'ATIVO') === 'S');
+    const estados = [...new Set(cachedClientes.map(c => getC(c,'ESTADO')).filter(Boolean))];
     ctx += `\n=== CLIENTES ===\n`;
-    ctx += `Total de clientes: ${cachedClientes.length} | Ativos: ${ativos.length}\n`;
-    const estados = [...new Set(cachedClientes.map(c => c['CLIENTES[ESTADO]'] || c['ESTADO'] || '').filter(Boolean))];
-    ctx += `Estados atendidos: ${estados.join(', ')}\n`;
+    ctx += `Total: ${cachedClientes.length} | Ativos: ${ativos.length} | Estados: ${estados.join(', ')}\n`;
+    // Lista clientes ativos com rep e cidade
+    ativos.slice(0, 100).forEach(c => {
+      ctx += `  - ${getC(c,'NOME')} | Cidade: ${getC(c,'CIDADE')} | Rep: ${getC(c,'REP')} | Última col: ${getC(c,'ULTIMA_COLECAO')}\n`;
+    });
   }
 
   return ctx;
