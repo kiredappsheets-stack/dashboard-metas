@@ -744,6 +744,7 @@ async function loadDashboard() {
   try {
     const token = await getToken();
     const data  = await runDaxQuery(token);
+    cachedData = data;
     renderDashboard(data);
   } catch(e) {
     renderError(e.message);
@@ -880,12 +881,7 @@ ${buildContext()}`;
   input.focus();
 }
 
-// Guarda os dados quando carregados para o chat usar
-const _origRenderDashboard = renderDashboard;
-function renderDashboard(data) {
-  cachedData = data;
-  _origRenderDashboard(data);
-}
+// Dados guardados pelo loadDashboard para o chat usar
 
 </script>
 
