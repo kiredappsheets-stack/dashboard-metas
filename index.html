@@ -631,6 +631,19 @@ SUMMARIZECOLUMNS(
 ORDER BY PEDIDO[MARCA] ASC, PEDIDO[COLECAO] ASC
 `;
 
+// Coleções com datas — ordem cronológica
+const DAX_COLECOES = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  COLECOES[COLECAO],
+  COLECOES[DESCRICAO],
+  COLECOES[DT_INICIO],
+  COLECOES[DT_FINAL],
+  COLECOES[COL_ATUAL]
+)
+ORDER BY COLECOES[COLECAO] ASC
+`;
+
 // Query para vendas — TODAS as coleções (para o chat)
 const DAX_VENDAS = `
 EVALUATE
@@ -899,7 +912,7 @@ async function loadDashboard() {
   renderLoading();
   try {
     const token = await getToken();
-    const [data, pedidos, clientes, reps, vendas, metasHist, marcas] = await Promise.all([
+    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes] = await Promise.all([
       runDaxQuery(token, DAX_QUERY, false),
       runDaxQuery(token, DAX_PEDIDOS, true),
       runDaxQuery(token, DAX_CLIENTES, true),
@@ -907,6 +920,7 @@ async function loadDashboard() {
       runDaxQuery(token, DAX_VENDAS, true),
       runDaxQuery(token, DAX_METAS_HIST, true),
       runDaxQuery(token, DAX_MARCAS, true),
+      runDaxQuery(token, DAX_COLECOES, true),
     ]);
     cachedData = data;
     cachedPedidos = pedidos;
@@ -915,6 +929,7 @@ async function loadDashboard() {
     cachedVendas = vendas;
     cachedMetasHist = metasHist;
     cachedMarcas = marcas;
+    cachedColecoes = colecoes;
     renderDashboard(data);
   } catch(e) {
     renderError(e.message);
@@ -947,6 +962,7 @@ let cachedReps = null;
 let cachedVendas = null;
 let cachedMetasHist = null;
 let cachedMarcas = null;
+let cachedColecoes = null;
 let chatHistory = [];
 
 function toggleChat() {
@@ -1006,6 +1022,23 @@ function buildContext() {
   const gM = (row,col) => parseFloat(row['['+col+']']   || row[col] || 0) || 0;
 
   let ctx = '';
+
+  // ── COLEÇÕES COM DATAS (ordem cronológica) ──
+  if (cachedColecoes && cachedColecoes.length > 0) {
+    const gCo = (row,col) => row['COLECOES['+col+']'] || row[col] || '';
+    ctx += "=== COLEÇÕES (ordem cronológica com datas) ===\n";
+    ctx += "Use estas datas para calcular comparativos entre coleções. O código numérico indica a ordem (menor = mais antiga).\n\n";
+    const colsOrdenadas = cachedColecoes
+      .filter(r => gCo(r,'COLECAO'))
+      .sort((a,b) => gCo(a,'COLECAO').localeCompare(gCo(b,'COLECAO')));
+    colsOrdenadas.forEach(r => {
+      const atual = gCo(r,'COL_ATUAL') === 'COL ATUAL' ? ' ← COLEÇÃO ATUAL' : '';
+      const dtFim = gCo(r,'DT_FINAL') || '';
+      const dtFimFmt = dtFim ? dtFim.split(' ')[0] : '—';
+      ctx += `  ${gCo(r,'COLECAO')} | ${gCo(r,'DESCRICAO')} | Dt. final: ${dtFimFmt}${atual}\n`;
+    });
+    ctx += '\n';
+  }
 
   // ── REPRESENTANTES ──
   if (cachedReps && cachedReps.length > 0) {
@@ -1146,13 +1179,18 @@ EXEMPLO CORRETO:
 - Coleção 53: R$ 537.282 (+393%)
 
 CÁLCULOS QUE SABES FAZER:
-- Crescimento de uma coleção para outra: ((valor atual - valor anterior) / valor anterior * 100)
-- Ranking de representantes por faturamento
-- Clientes que compraram em X coleções mas não em Y
-- Comparativo de desempenho entre períodos
+- Crescimento de uma coleção para outra: ((valor_novo - valor_anterior) / ABS(valor_anterior) * 100)
+- Crescimento de marca por coleção: filtra por MARCA e compara FAT_LIQ entre coleções
+- Ranking de representantes/marcas por faturamento
+- Comparativo entre períodos usando as datas das coleções
 
-IMPORTANTE: Os dados incluem TODAS as coleções históricas na tabela PEDIDO.
-Quando perguntarem sobre uma marca ou produto específico, analisa os dados de CLIENTES e PEDIDOS disponíveis.
+REGRA IMPORTANTE PARA CÁLCULOS DE MARCAS:
+Os dados de vendas por marca estão na secção "VENDAS POR MARCA E COLEÇÃO".
+Quando perguntarem sobre crescimento de uma marca (ex: MYROCK), busca os valores de FAT_LIQ
+de cada coleção nessa secção e calcula: ((col_nova - col_anterior) / ABS(col_anterior) * 100)%.
+NUNCA digas que não tens dados de marcas — eles estão sempre presentes nos dados.
+
+MARCAS DISPONÍVEIS: MYROCK, CHARPEY, AMC, ROMITEX, PRINCIPESSA, BV
 
 DADOS COMPLETOS:
 ${buildContext()}`;
