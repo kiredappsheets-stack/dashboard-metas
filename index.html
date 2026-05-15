@@ -566,25 +566,21 @@ CALCULATETABLE(
 ORDER BY METAS[COLECAO] DESC
 `;
 
-// Query para pedidos da coleção atual
+// Query para pedidos — TODAS as coleções (para o chat)
 const DAX_PEDIDOS = `
 EVALUATE
-CALCULATETABLE(
-  SUMMARIZECOLUMNS(
-    PEDIDO[REP],
-    PEDIDO[CLIENTE],
-    PEDIDO[ESTADO],
-    PEDIDO[MUNICIPIO],
-    PEDIDO[COLECAO],
-    PEDIDO[DATA],
-    "FAT_LIQ",    SUM(PEDIDO[FAT_LIQ]),
-    "FAT_BRUTO",  SUM(PEDIDO[FAT_TOTAL_BRUTO]),
-    "QTDE",       SUM(PEDIDO[QTDE_FAT]),
-    "DESCONTO",   SUM(PEDIDO[DESCONTO])
-  ),
-  FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")
+SUMMARIZECOLUMNS(
+  PEDIDO[REP],
+  PEDIDO[CLIENTE],
+  PEDIDO[ESTADO],
+  PEDIDO[MUNICIPIO],
+  PEDIDO[COLECAO],
+  "FAT_LIQ",    SUM(PEDIDO[FAT_LIQ]),
+  "FAT_BRUTO",  SUM(PEDIDO[FAT_TOTAL_BRUTO]),
+  "QTDE",       SUM(PEDIDO[QTDE_FAT]),
+  "DESCONTO",   SUM(PEDIDO[DESCONTO])
 )
-ORDER BY PEDIDO[DATA] DESC
+ORDER BY PEDIDO[COLECAO] DESC
 `;
 
 // Query para clientes ativos
@@ -612,26 +608,21 @@ SUMMARIZECOLUMNS(
 ORDER BY REPRESENTANTE[REPRESENTANTE] ASC
 `;
 
-// Query para vendas por pedido (coleção atual)
+// Query para vendas — TODAS as coleções (para o chat)
 const DAX_VENDAS = `
 EVALUATE
-CALCULATETABLE(
-  SUMMARIZECOLUMNS(
-    PEDIDO[REP],
-    PEDIDO[CLIENTE],
-    PEDIDO[ESTADO],
-    PEDIDO[MUNICIPIO],
-    PEDIDO[COLECAO],
-    PEDIDO[DATA],
-    PEDIDO[PEDIDO],
-    "FAT_LIQ",   SUM(PEDIDO[FAT_LIQ]),
-    "FAT_BRUTO", SUM(PEDIDO[FAT_TOTAL_BRUTO]),
-    "QTDE",      SUM(PEDIDO[QTDE_FAT]),
-    "DESCONTO",  SUM(PEDIDO[DESCONTO])
-  ),
-  FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")
+SUMMARIZECOLUMNS(
+  PEDIDO[REP],
+  PEDIDO[CLIENTE],
+  PEDIDO[ESTADO],
+  PEDIDO[MUNICIPIO],
+  PEDIDO[COLECAO],
+  "FAT_LIQ",   SUM(PEDIDO[FAT_LIQ]),
+  "FAT_BRUTO", SUM(PEDIDO[FAT_TOTAL_BRUTO]),
+  "QTDE",      SUM(PEDIDO[QTDE_FAT]),
+  "DESCONTO",  SUM(PEDIDO[DESCONTO])
 )
-ORDER BY PEDIDO[DATA] DESC
+ORDER BY PEDIDO[COLECAO] DESC
 `;
 
 // ════════════════════════════════════════════
@@ -1017,8 +1008,8 @@ function buildContext() {
 
   // ── VENDAS / PEDIDOS ──
   if (cachedVendas && cachedVendas.length > 0) {
-    ctx += "=== VENDAS POR PEDIDO (coleções atuais) ===\n";
-    ctx += "Estes são os pedidos reais faturados. CLIENTE é quem comprou. REPRESENTANTE é quem vendeu.\n\n";
+    ctx += "=== VENDAS POR PEDIDO (todas as coleções) ===\n";
+    ctx += "Estes são os pedidos reais faturados de TODAS as coleções. CLIENTE é quem comprou. REPRESENTANTE é quem vendeu.\n\n";
     const repsV = [...new Set(cachedVendas.map(p => gP(p,'REP')))].filter(Boolean);
     repsV.forEach(rep => {
       const linhas = cachedVendas.filter(p => gP(p,'REP') === rep);
