@@ -612,7 +612,7 @@ async function getToken() {
 // ════════════════════════════════════════════
 //  API Power BI — executa DAX
 // ════════════════════════════════════════════
-async function runDaxQuery(token, query) {
+async function runDaxQuery(token, query, raw=false) {
   const url = `https://api.powerbi.com/v1.0/myorg/datasets/${CONFIG.datasetId}/executeQueries`;
   const body = { queries: [{ query: query }], serializerSettings: { includeNulls: true } };
 
@@ -629,6 +629,8 @@ async function runDaxQuery(token, query) {
 
   const json = await res.json();
   const rows = json.results[0].tables[0].rows;
+
+  if (raw) return rows; // retorna dados brutos para pedidos e clientes
 
   return rows.map(r => ({
     col:   r["METAS[COLECAO]"] || r["COLECAO"] || Object.values(r)[0],
@@ -817,9 +819,9 @@ async function loadDashboard() {
   try {
     const token = await getToken();
     const [data, pedidos, clientes] = await Promise.all([
-      runDaxQuery(token, DAX_QUERY),
-      runDaxQuery(token, DAX_PEDIDOS),
-      runDaxQuery(token, DAX_CLIENTES),
+      runDaxQuery(token, DAX_QUERY, false),
+      runDaxQuery(token, DAX_PEDIDOS, true),
+      runDaxQuery(token, DAX_CLIENTES, true),
     ]);
     cachedData = data;
     cachedPedidos = pedidos;
