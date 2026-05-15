@@ -567,20 +567,31 @@ ORDER BY METAS[COLECAO] DESC
 `;
 
 // Query para pedidos — TODAS as coleções (para o chat)
+// Vendas por REP e COLECAO — todas as coleções
 const DAX_PEDIDOS = `
 EVALUATE
 SUMMARIZECOLUMNS(
-  PEDIDO[REP],
-  PEDIDO[CLIENTE],
-  PEDIDO[ESTADO],
-  PEDIDO[MUNICIPIO],
   PEDIDO[COLECAO],
-  "FAT_LIQ",    SUM(PEDIDO[FAT_LIQ]),
-  "FAT_BRUTO",  SUM(PEDIDO[FAT_TOTAL_BRUTO]),
-  "QTDE",       SUM(PEDIDO[QTDE_FAT]),
-  "DESCONTO",   SUM(PEDIDO[DESCONTO])
+  PEDIDO[REP],
+  "FAT_LIQ",   SUM(PEDIDO[FAT_LIQ]),
+  "FAT_BRUTO", SUM(PEDIDO[FAT_TOTAL_BRUTO]),
+  "QTDE",      SUM(PEDIDO[QTDE_FAT]),
+  "DESCONTO",  SUM(PEDIDO[DESCONTO])
 )
 ORDER BY PEDIDO[COLECAO] DESC
+`;
+
+// Metas de TODAS as coleções (histórico)
+const DAX_METAS_HIST = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  METAS[COLECAO],
+  METAS[NOME],
+  "META",  SUM(METAS[META]),
+  "VENDA", SUMX(METAS, METAS[VENDA]),
+  "PCT",   CALCULATE(AVERAGE(METAS[%META]))
+)
+ORDER BY METAS[COLECAO] DESC
 `;
 
 // Query para clientes ativos
@@ -612,15 +623,13 @@ ORDER BY REPRESENTANTE[REPRESENTANTE] ASC
 const DAX_VENDAS = `
 EVALUATE
 SUMMARIZECOLUMNS(
+  PEDIDO[COLECAO],
   PEDIDO[REP],
   PEDIDO[CLIENTE],
   PEDIDO[ESTADO],
   PEDIDO[MUNICIPIO],
-  PEDIDO[COLECAO],
-  "FAT_LIQ",   SUM(PEDIDO[FAT_LIQ]),
-  "FAT_BRUTO", SUM(PEDIDO[FAT_TOTAL_BRUTO]),
-  "QTDE",      SUM(PEDIDO[QTDE_FAT]),
-  "DESCONTO",  SUM(PEDIDO[DESCONTO])
+  "FAT_LIQ", SUM(PEDIDO[FAT_LIQ]),
+  "QTDE",    SUM(PEDIDO[QTDE_FAT])
 )
 ORDER BY PEDIDO[COLECAO] DESC
 `;
@@ -878,18 +887,20 @@ async function loadDashboard() {
   renderLoading();
   try {
     const token = await getToken();
-    const [data, pedidos, clientes, reps, vendas] = await Promise.all([
+    const [data, pedidos, clientes, reps, vendas, metasHist] = await Promise.all([
       runDaxQuery(token, DAX_QUERY, false),
       runDaxQuery(token, DAX_PEDIDOS, true),
       runDaxQuery(token, DAX_CLIENTES, true),
       runDaxQuery(token, DAX_REPRESENTANTES, true),
       runDaxQuery(token, DAX_VENDAS, true),
+      runDaxQuery(token, DAX_METAS_HIST, true),
     ]);
     cachedData = data;
     cachedPedidos = pedidos;
     cachedClientes = clientes;
     cachedReps = reps;
     cachedVendas = vendas;
+    cachedMetasHist = metasHist;
     renderDashboard(data);
   } catch(e) {
     renderError(e.message);
@@ -920,6 +931,7 @@ let cachedPedidos = null;
 let cachedClientes = null;
 let cachedReps = null;
 let cachedVendas = null;
+let cachedMetasHist = null;
 let chatHistory = [];
 
 function toggleChat() {
@@ -972,66 +984,86 @@ function buildContext() {
     return "Ainda não há dados carregados.";
   }
 
-  const gP  = (row, col) => row['PEDIDO['+col+']']       || row[col] || '';
-  const gC  = (row, col) => row['CLIENTES['+col+']']     || row[col] || '';
-  const gR  = (row, col) => row['REPRESENTANTE['+col+']']|| row[col] || '';
-  const gM  = (row, col) => parseFloat(row['['+col+']']  || row[col] || 0) || 0;
+  const gP = (row,col) => row['PEDIDO['+col+']']        || row[col] || '';
+  const gC = (row,col) => row['CLIENTES['+col+']']      || row[col] || '';
+  const gR = (row,col) => row['REPRESENTANTE['+col+']'] || row[col] || '';
+  const gMt= (row,col) => row['METAS['+col+']']         || row[col] || '';
+  const gM = (row,col) => parseFloat(row['['+col+']']   || row[col] || 0) || 0;
 
   let ctx = '';
 
   // ── REPRESENTANTES ──
   if (cachedReps && cachedReps.length > 0) {
-    ctx += "=== REPRESENTANTES ===\n";
-    ctx += "São os vendedores/agentes comerciais da empresa. NÃO são clientes.\n";
+    ctx += "=== REPRESENTANTES (agentes comerciais — NÃO são clientes) ===\n";
     cachedReps.forEach(r => {
-      ctx += `  REP: ${gR(r,'REPRESENTANTE')} (cód: ${gR(r,'CODREP')})\n`;
+      ctx += `  REP: ${gR(r,'REPRESENTANTE')} | Cód: ${gR(r,'CODREP')}\n`;
     });
     ctx += '\n';
   }
 
-  // ── METAS POR REPRESENTANTE ──
-  const colecoes = [...new Set(cachedData.map(d => d.col))];
-  ctx += "=== METAS DOS REPRESENTANTES (coleções atuais) ===\n";
-  ctx += "Estes são os objetivos de venda de cada representante.\n\n";
-  colecoes.forEach(col => {
-    const items = cachedData.filter(d => d.col === col);
-    const tMeta  = items.reduce((a,d) => a + d.meta, 0);
-    const tVenda = items.reduce((a,d) => a + d.venda, 0);
-    const pct    = tMeta > 0 ? (tVenda/tMeta*100).toFixed(1) : '0';
-    ctx += `COLEÇÃO: ${col} | Meta total: R$${Math.round(tMeta).toLocaleString('pt-BR')} | Vendido: R$${Math.round(tVenda).toLocaleString('pt-BR')} | % meta: ${pct}%\n`;
-    items.sort((a,b)=>(b.pct||0)-(a.pct||0)).forEach(d => {
-      const p = d.pct!==null&&!isNaN(d.pct)?(d.pct*100).toFixed(1)+'%':'0%';
-      ctx += `  REPRESENTANTE: ${d.rep} | Meta: R$${Math.round(d.meta).toLocaleString('pt-BR')} | Vendido: R$${Math.round(d.venda).toLocaleString('pt-BR')} | % meta: ${p}\n`;
+  // ── METAS — TODAS AS COLEÇÕES ──
+  if (cachedMetasHist && cachedMetasHist.length > 0) {
+    ctx += "=== METAS POR REPRESENTANTE — TODAS AS COLEÇÕES ===\n";
+    ctx += "Fonte: tabela METAS. Inclui coleções atuais e anteriores.\n\n";
+    const colsMeta = [...new Set(cachedMetasHist.map(r => gMt(r,'COLECAO')))];
+    colsMeta.forEach(col => {
+      const rows = cachedMetasHist.filter(r => gMt(r,'COLECAO') === col);
+      const tMeta  = rows.reduce((a,r) => a + gM(r,'META'), 0);
+      const tVenda = rows.reduce((a,r) => a + gM(r,'VENDA'), 0);
+      const pct    = tMeta > 0 ? (tVenda/tMeta*100).toFixed(1) : '0';
+      ctx += `COLEÇÃO: ${col} | Meta: R$${Math.round(tMeta).toLocaleString('pt-BR')} | Vendido: R$${Math.round(tVenda).toLocaleString('pt-BR')} | % meta: ${pct}%\n`;
+      rows.sort((a,b)=>gM(b,'PCT')-gM(a,'PCT')).forEach(r => {
+        const p = gM(r,'PCT') ? (gM(r,'PCT')*100).toFixed(1)+'%' : '0%';
+        ctx += `  REP: ${gMt(r,'NOME')} | Meta: R$${Math.round(gM(r,'META')).toLocaleString('pt-BR')} | Vendido: R$${Math.round(gM(r,'VENDA')).toLocaleString('pt-BR')} | %: ${p}\n`;
+      });
+      ctx += '\n';
     });
-    ctx += '\n';
-  });
+  }
 
-  // ── VENDAS / PEDIDOS ──
+  // ── VENDAS / PEDIDOS — POR COLEÇÃO E REPRESENTANTE ──
+  if (cachedPedidos && cachedPedidos.length > 0) {
+    ctx += "=== VENDAS REAIS POR COLEÇÃO E REPRESENTANTE (tabela PEDIDO) ===\n";
+    ctx += "Fonte: tabela PEDIDO. Inclui TODAS as coleções históricas.\n\n";
+    const colsPed = [...new Set(cachedPedidos.map(r => gP(r,'COLECAO')))];
+    colsPed.forEach(col => {
+      const rows = cachedPedidos.filter(r => gP(r,'COLECAO') === col);
+      const tFat = rows.reduce((a,r) => a + gM(r,'FAT_LIQ'), 0);
+      const tQtd = rows.reduce((a,r) => a + gM(r,'QTDE'), 0);
+      ctx += `COLEÇÃO: ${col} | Fat. líq. total: R$${Math.round(tFat).toLocaleString('pt-BR')} | Peças: ${Math.round(tQtd)}\n`;
+      rows.forEach(r => {
+        ctx += `  REP: ${gP(r,'REP')} | Fat. líq.: R$${Math.round(gM(r,'FAT_LIQ')).toLocaleString('pt-BR')} | Peças: ${Math.round(gM(r,'QTDE'))}\n`;
+      });
+      ctx += '\n';
+    });
+  }
+
+  // ── CLIENTES POR REP E COLEÇÃO ──
   if (cachedVendas && cachedVendas.length > 0) {
-    ctx += "=== VENDAS POR PEDIDO (todas as coleções) ===\n";
-    ctx += "Estes são os pedidos reais faturados de TODAS as coleções. CLIENTE é quem comprou. REPRESENTANTE é quem vendeu.\n\n";
-    const repsV = [...new Set(cachedVendas.map(p => gP(p,'REP')))].filter(Boolean);
-    repsV.forEach(rep => {
-      const linhas = cachedVendas.filter(p => gP(p,'REP') === rep);
-      const tFat   = linhas.reduce((a,p) => a + gM(p,'FAT_LIQ'), 0);
-      const tQtd   = linhas.reduce((a,p) => a + gM(p,'QTDE'), 0);
-      const estados = [...new Set(linhas.map(p=>gP(p,'ESTADO')).filter(Boolean))].join(', ');
-      const clis   = [...new Set(linhas.map(p=>gP(p,'CLIENTE')).filter(Boolean))];
-      ctx += `REPRESENTANTE: ${rep} | Fat. líq.: R$${Math.round(tFat).toLocaleString('pt-BR')} | Peças: ${Math.round(tQtd)} | Estados: ${estados}\n`;
-      ctx += `  CLIENTES que compraram (${clis.length}): ${clis.slice(0,10).join(' | ')}${clis.length>10?' +mais...':''}\n`;
+    ctx += "=== CLIENTES QUE COMPRARAM POR REP E COLEÇÃO ===\n";
+    ctx += "CLIENTE = loja/empresa que comprou. REP = representante que vendeu.\n\n";
+    const colsV = [...new Set(cachedVendas.map(r => gP(r,'COLECAO')))];
+    colsV.forEach(col => {
+      const rows = cachedVendas.filter(r => gP(r,'COLECAO') === col);
+      const repsV = [...new Set(rows.map(r => gP(r,'REP')).filter(Boolean))];
+      ctx += `COLEÇÃO: ${col}\n`;
+      repsV.forEach(rep => {
+        const cliRows = rows.filter(r => gP(r,'REP') === rep);
+        const clis = [...new Set(cliRows.map(r => gP(r,'CLIENTE')).filter(Boolean))];
+        const estados = [...new Set(cliRows.map(r => gP(r,'ESTADO')).filter(Boolean))].join(', ');
+        ctx += `  REP: ${rep} | Clientes (${clis.length}): ${clis.slice(0,8).join(', ')}${clis.length>8?' +':''}\n`;
+      });
+      ctx += '\n';
     });
-    ctx += '\n';
   }
 
-  // ── CLIENTES ──
+  // ── CADASTRO DE CLIENTES ──
   if (cachedClientes && cachedClientes.length > 0) {
     const ativos = cachedClientes.filter(c => gC(c,'ATIVO') === 'S');
     const estados = [...new Set(cachedClientes.map(c=>gC(c,'ESTADO')).filter(Boolean))];
     ctx += "=== CADASTRO DE CLIENTES ===\n";
-    ctx += "CLIENTES são as lojas/empresas que compram da empresa. Diferentes dos representantes.\n";
-    ctx += `Total cadastrados: ${cachedClientes.length} | Ativos: ${ativos.length} | Estados: ${estados.join(', ')}\n\n`;
-    ativos.slice(0, 150).forEach(c => {
-      ctx += `  CLIENTE: ${gC(c,'NOME')} | Cidade: ${gC(c,'CIDADE')}-${gC(c,'ESTADO')} | Atendido por REP: ${gC(c,'REP')} | Última coleção: ${gC(c,'ULTIMA_COLECAO')}\n`;
+    ctx += `Total: ${cachedClientes.length} | Ativos: ${ativos.length} | Estados: ${estados.join(', ')}\n\n`;
+    ativos.slice(0,200).forEach(c => {
+      ctx += `  CLIENTE: ${gC(c,'NOME')} | ${gC(c,'CIDADE')}-${gC(c,'ESTADO')} | REP: ${gC(c,'REP')} | Última col: ${gC(c,'ULTIMA_COLECAO')}\n`;
     });
   }
 
