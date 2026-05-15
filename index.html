@@ -880,22 +880,43 @@ ${buildContext()}`;
       })
     });
 
-    // Tratamento de limite de pedidos (429)
+    // Tratamento de limite de pedidos (429) com retry automático
     if (res.status === 429) {
       thinking.className = 'chat-msg bot';
-      let countdown = 60;
-      thinking.textContent = `⏳ Limite de pedidos atingido. Aguarda ${countdown}s...`;
-      if (wasVoice) speakResponse('Limite de pedidos atingido. Aguarda 60 segundos.');
-      const timer = setInterval(() => {
+      let countdown = 90;
+      if (wasVoice) speakResponse('Limite de pedidos atingido. Vou tentar novamente em 90 segundos.');
+      const timer = setInterval(async () => {
         countdown--;
         if (countdown <= 0) {
           clearInterval(timer);
-          thinking.textContent = '✅ Podes tentar novamente agora!';
+          thinking.textContent = '🔄 A tentar novamente...';
+          // Retry automático após espera
+          try {
+            const res2 = await fetch(GEMINI_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\nPergunta: ' + question }] }],
+                generationConfig: { temperature: 0.3, maxOutputTokens: 800 }
+              })
+            });
+            if (res2.ok) {
+              const json2 = await res2.json();
+              const answer2 = json2.candidates?.[0]?.content?.parts?.[0]?.text || 'Não consegui obter uma resposta.';
+              thinking.textContent = answer2;
+              chatHistory.push({ role: 'model', parts: [{ text: answer2 }] });
+              if (wasVoice) speakResponse(answer2);
+            } else {
+              thinking.textContent = '⚠️ Ainda sem resposta. Tenta novamente em alguns instantes.';
+            }
+          } catch(e2) {
+            thinking.textContent = '⚠️ Erro ao tentar novamente. Clica em Enviar para repetir.';
+          }
+          sendBtn.disabled = false;
         } else {
-          thinking.textContent = `⏳ Limite de pedidos atingido. Aguarda ${countdown}s...`;
+          thinking.textContent = `⏳ Muitos pedidos seguidos. A tentar automaticamente em ${countdown}s...`;
         }
       }, 1000);
-      sendBtn.disabled = false;
       return;
     }
 
