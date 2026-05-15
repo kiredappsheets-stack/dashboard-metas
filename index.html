@@ -565,6 +565,38 @@ SUMMARIZECOLUMNS(
 ORDER BY CLIENTES[NOME] ASC
 `;
 
+// Query para representantes
+const DAX_REPRESENTANTES = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  REPRESENTANTE[CODREP],
+  REPRESENTANTE[REPRESENTANTE]
+)
+ORDER BY REPRESENTANTE[REPRESENTANTE] ASC
+`;
+
+// Query para vendas por pedido (coleção atual)
+const DAX_VENDAS = `
+EVALUATE
+CALCULATETABLE(
+  SUMMARIZECOLUMNS(
+    PEDIDO[REP],
+    PEDIDO[CLIENTE],
+    PEDIDO[ESTADO],
+    PEDIDO[MUNICIPIO],
+    PEDIDO[COLECAO],
+    PEDIDO[DATA],
+    PEDIDO[PEDIDO],
+    "FAT_LIQ",   SUM(PEDIDO[FAT_LIQ]),
+    "FAT_BRUTO", SUM(PEDIDO[FAT_TOTAL_BRUTO]),
+    "QTDE",      SUM(PEDIDO[QTDE_FAT]),
+    "DESCONTO",  SUM(PEDIDO[DESCONTO])
+  ),
+  FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")
+)
+ORDER BY PEDIDO[DATA] DESC
+`;
+
 // ════════════════════════════════════════════
 //  MSAL — autenticação Microsoft
 // ════════════════════════════════════════════
@@ -818,14 +850,18 @@ async function loadDashboard() {
   renderLoading();
   try {
     const token = await getToken();
-    const [data, pedidos, clientes] = await Promise.all([
+    const [data, pedidos, clientes, reps, vendas] = await Promise.all([
       runDaxQuery(token, DAX_QUERY, false),
       runDaxQuery(token, DAX_PEDIDOS, true),
       runDaxQuery(token, DAX_CLIENTES, true),
+      runDaxQuery(token, DAX_REPRESENTANTES, true),
+      runDaxQuery(token, DAX_VENDAS, true),
     ]);
     cachedData = data;
     cachedPedidos = pedidos;
     cachedClientes = clientes;
+    cachedReps = reps;
+    cachedVendas = vendas;
     renderDashboard(data);
   } catch(e) {
     renderError(e.message);
@@ -854,6 +890,8 @@ let chatOpen = false;
 let cachedData = null;
 let cachedPedidos = null;
 let cachedClientes = null;
+let cachedReps = null;
+let cachedVendas = null;
 let chatHistory = [];
 
 function toggleChat() {
@@ -888,53 +926,69 @@ function addMsg(text, role) {
 
 function buildContext() {
   if (!cachedData || cachedData.length === 0) {
-    return "Ainda não há dados carregados. O utilizador precisa de fazer login primeiro.";
+    return "Ainda não há dados carregados.";
   }
 
-  const colecoes = [...new Set(cachedData.map(d => d.col))];
-  let ctx = "=== METAS POR REPRESENTANTE (coleções atuais) ===\n\n";
+  const gP  = (row, col) => row['PEDIDO['+col+']']       || row[col] || '';
+  const gC  = (row, col) => row['CLIENTES['+col+']']     || row[col] || '';
+  const gR  = (row, col) => row['REPRESENTANTE['+col+']']|| row[col] || '';
+  const gM  = (row, col) => parseFloat(row['['+col+']']  || row[col] || 0) || 0;
 
+  let ctx = '';
+
+  // ── REPRESENTANTES ──
+  if (cachedReps && cachedReps.length > 0) {
+    ctx += "=== REPRESENTANTES ===\n";
+    ctx += "São os vendedores/agentes comerciais da empresa. NÃO são clientes.\n";
+    cachedReps.forEach(r => {
+      ctx += `  REP: ${gR(r,'REPRESENTANTE')} (cód: ${gR(r,'CODREP')})\n`;
+    });
+    ctx += '\n';
+  }
+
+  // ── METAS POR REPRESENTANTE ──
+  const colecoes = [...new Set(cachedData.map(d => d.col))];
+  ctx += "=== METAS DOS REPRESENTANTES (coleções atuais) ===\n";
+  ctx += "Estes são os objetivos de venda de cada representante.\n\n";
   colecoes.forEach(col => {
     const items = cachedData.filter(d => d.col === col);
-    const totalMeta  = items.reduce((a, d) => a + d.meta, 0);
-    const totalVenda = items.reduce((a, d) => a + d.venda, 0);
-    const pct = totalMeta > 0 ? (totalVenda / totalMeta * 100).toFixed(1) : '0';
-    ctx += `COLEÇÃO: ${col} | Meta: R$${Math.round(totalMeta).toLocaleString('pt-BR')} | Venda: R$${Math.round(totalVenda).toLocaleString('pt-BR')} | % Meta: ${pct}%\n`;
-    items.sort((a,b) => (b.pct||0) - (a.pct||0)).forEach(d => {
-      const p = d.pct !== null && !isNaN(d.pct) ? (d.pct * 100).toFixed(1) + '%' : '0%';
-      ctx += `  - ${d.rep}: Meta R$${Math.round(d.meta).toLocaleString('pt-BR')} | Venda R$${Math.round(d.venda).toLocaleString('pt-BR')} | ${p} da meta\n`;
+    const tMeta  = items.reduce((a,d) => a + d.meta, 0);
+    const tVenda = items.reduce((a,d) => a + d.venda, 0);
+    const pct    = tMeta > 0 ? (tVenda/tMeta*100).toFixed(1) : '0';
+    ctx += `COLEÇÃO: ${col} | Meta total: R$${Math.round(tMeta).toLocaleString('pt-BR')} | Vendido: R$${Math.round(tVenda).toLocaleString('pt-BR')} | % meta: ${pct}%\n`;
+    items.sort((a,b)=>(b.pct||0)-(a.pct||0)).forEach(d => {
+      const p = d.pct!==null&&!isNaN(d.pct)?(d.pct*100).toFixed(1)+'%':'0%';
+      ctx += `  REPRESENTANTE: ${d.rep} | Meta: R$${Math.round(d.meta).toLocaleString('pt-BR')} | Vendido: R$${Math.round(d.venda).toLocaleString('pt-BR')} | % meta: ${p}\n`;
     });
     ctx += '\n';
   });
 
-  // Adicionar dados de pedidos — chaves com prefixo PEDIDO[XXX] e medidas [XXX]
-  if (cachedPedidos && cachedPedidos.length > 0) {
-    ctx += "\n=== PEDIDOS (coleções atuais) ===\n\n";
-    const getP = (row, col) => row['PEDIDO['+col+']'] || row[col] || '';
-    const getM = (row, col) => parseFloat(row['['+col+']'] || row[col] || 0) || 0;
-
-    const reps = [...new Set(cachedPedidos.map(p => getP(p,'REP')))].filter(Boolean);
-    reps.forEach(rep => {
-      const pedRep = cachedPedidos.filter(p => getP(p,'REP') === rep);
-      const totalFat = pedRep.reduce((a,p) => a + getM(p,'FAT_LIQ'), 0);
-      const totalQtd = pedRep.reduce((a,p) => a + getM(p,'QTDE'), 0);
-      const estados = [...new Set(pedRep.map(p => getP(p,'ESTADO')).filter(Boolean))].join(', ');
-      const clis = [...new Set(pedRep.map(p => getP(p,'CLIENTE')).filter(Boolean))];
-      ctx += `REP: ${rep} | Fat. líq.: R$${Math.round(totalFat).toLocaleString('pt-BR')} | Peças: ${Math.round(totalQtd)} | Estados: ${estados}\n`;
-      ctx += `  Clientes (${clis.length}): ${clis.slice(0,8).join(', ')}${clis.length>8?' ...':''}\n`;
+  // ── VENDAS / PEDIDOS ──
+  if (cachedVendas && cachedVendas.length > 0) {
+    ctx += "=== VENDAS POR PEDIDO (coleções atuais) ===\n";
+    ctx += "Estes são os pedidos reais faturados. CLIENTE é quem comprou. REPRESENTANTE é quem vendeu.\n\n";
+    const repsV = [...new Set(cachedVendas.map(p => gP(p,'REP')))].filter(Boolean);
+    repsV.forEach(rep => {
+      const linhas = cachedVendas.filter(p => gP(p,'REP') === rep);
+      const tFat   = linhas.reduce((a,p) => a + gM(p,'FAT_LIQ'), 0);
+      const tQtd   = linhas.reduce((a,p) => a + gM(p,'QTDE'), 0);
+      const estados = [...new Set(linhas.map(p=>gP(p,'ESTADO')).filter(Boolean))].join(', ');
+      const clis   = [...new Set(linhas.map(p=>gP(p,'CLIENTE')).filter(Boolean))];
+      ctx += `REPRESENTANTE: ${rep} | Fat. líq.: R$${Math.round(tFat).toLocaleString('pt-BR')} | Peças: ${Math.round(tQtd)} | Estados: ${estados}\n`;
+      ctx += `  CLIENTES que compraram (${clis.length}): ${clis.slice(0,10).join(' | ')}${clis.length>10?' +mais...':''}\n`;
     });
+    ctx += '\n';
   }
 
-  // Adicionar resumo de clientes — chaves com prefixo CLIENTES[XXX]
+  // ── CLIENTES ──
   if (cachedClientes && cachedClientes.length > 0) {
-    const getC = (row, col) => row['CLIENTES['+col+']'] || row[col] || '';
-    const ativos = cachedClientes.filter(c => getC(c,'ATIVO') === 'S');
-    const estados = [...new Set(cachedClientes.map(c => getC(c,'ESTADO')).filter(Boolean))];
-    ctx += `\n=== CLIENTES ===\n`;
-    ctx += `Total: ${cachedClientes.length} | Ativos: ${ativos.length} | Estados: ${estados.join(', ')}\n`;
-    // Lista clientes ativos com rep e cidade
-    ativos.slice(0, 100).forEach(c => {
-      ctx += `  - ${getC(c,'NOME')} | Cidade: ${getC(c,'CIDADE')} | Rep: ${getC(c,'REP')} | Última col: ${getC(c,'ULTIMA_COLECAO')}\n`;
+    const ativos = cachedClientes.filter(c => gC(c,'ATIVO') === 'S');
+    const estados = [...new Set(cachedClientes.map(c=>gC(c,'ESTADO')).filter(Boolean))];
+    ctx += "=== CADASTRO DE CLIENTES ===\n";
+    ctx += "CLIENTES são as lojas/empresas que compram da empresa. Diferentes dos representantes.\n";
+    ctx += `Total cadastrados: ${cachedClientes.length} | Ativos: ${ativos.length} | Estados: ${estados.join(', ')}\n\n`;
+    ativos.slice(0, 150).forEach(c => {
+      ctx += `  CLIENTE: ${gC(c,'NOME')} | Cidade: ${gC(c,'CIDADE')}-${gC(c,'ESTADO')} | Atendido por REP: ${gC(c,'REP')} | Última coleção: ${gC(c,'ULTIMA_COLECAO')}\n`;
     });
   }
 
