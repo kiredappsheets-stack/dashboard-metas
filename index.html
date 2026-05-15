@@ -1059,7 +1059,7 @@ async function sendChat() {
   sendBtn.disabled = true;
 
   addMsg(question, 'user');
-  chatHistory.push({ role: 'user', parts: [{ text: question }] });
+  // histórico gerido após resposta
 
   const thinking = addMsg('A analisar os dados...', 'bot thinking');
 
@@ -1108,7 +1108,10 @@ ${buildContext()}`;
         model: 'claude-sonnet-4-5',
         max_tokens: 300,
         system: systemPrompt,
-        messages: [{ role: 'user', content: question }]
+        messages: [
+          ...chatHistory,
+          { role: 'user', content: question }
+        ]
       })
     });
 
@@ -1122,7 +1125,10 @@ ${buildContext()}`;
 
     thinking.className = 'chat-msg bot';
     thinking.innerHTML = formatMsg(answer);
-    chatHistory.push({ role: 'model', parts: [{ text: answer }] });
+    chatHistory.push({ role: 'user', content: question });
+    chatHistory.push({ role: 'assistant', content: answer });
+    // Limitar histórico a 10 trocas para não sobrecarregar
+    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
     // Ler resposta em voz alta se a pergunta foi por voz
     if (wasVoice) speakResponse(answer);
 
