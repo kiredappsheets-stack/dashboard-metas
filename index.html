@@ -297,6 +297,153 @@
     .bar-name { width: 110px; font-size: 11px; }
     .summary-global { grid-template-columns: 1fr 1fr; }
   }
+
+  /* ── CHAT ── */
+  .chat-fab {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--text);
+    color: #fff;
+    border: none;
+    font-size: 22px;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .2s;
+  }
+  .chat-fab:hover { transform: scale(1.08); }
+  .chat-panel {
+    position: fixed;
+    bottom: 92px;
+    right: 28px;
+    width: 370px;
+    max-height: 520px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.14);
+    z-index: 200;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .chat-panel.open { display: flex; }
+  .chat-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .chat-header-left { display: flex; align-items: center; gap: 8px; }
+  .chat-header-left .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+  }
+  .chat-header h3 { font-size: 13px; font-weight: 600; }
+  .chat-header p { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .chat-close {
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 18px; line-height: 1;
+  }
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .chat-msg {
+    max-width: 88%;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 9px 12px;
+    border-radius: 10px;
+  }
+  .chat-msg.user {
+    align-self: flex-end;
+    background: var(--text);
+    color: #fff;
+    border-bottom-right-radius: 3px;
+  }
+  .chat-msg.bot {
+    align-self: flex-start;
+    background: var(--bg);
+    color: var(--text);
+    border-bottom-left-radius: 3px;
+  }
+  .chat-msg.bot.thinking {
+    color: var(--muted);
+    font-style: italic;
+  }
+  .chat-footer {
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  .chat-input {
+    flex: 1;
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    resize: none;
+    max-height: 80px;
+    line-height: 1.4;
+    outline: none;
+  }
+  .chat-input:focus { border-color: var(--text); }
+  .chat-send {
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 14px;
+    background: var(--text);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity .15s;
+  }
+  .chat-send:hover { opacity: .85; }
+  .chat-send:disabled { opacity: .4; cursor: default; }
+  .chat-suggestions {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 4px;
+  }
+  .chat-sug {
+    font-size: 12px;
+    padding: 6px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text);
+    text-align: left;
+    transition: background .15s;
+  }
+  .chat-sug:hover { background: var(--border); }
+  @media (max-width: 640px) {
+    .chat-panel { width: calc(100vw - 32px); right: 16px; bottom: 80px; }
+    .chat-fab { right: 16px; bottom: 16px; }
+  }
 </style>
 </head>
 <body>
@@ -613,6 +760,165 @@ async function loadDashboard() {
     loadDashboard();
   }
 })();
+
+
+// ════════════════════════════════════════════
+//  CHAT — Gemini API
+// ════════════════════════════════════════════
+const GEMINI_KEY = "AIzaSyA0aqDaDFNPOft3WviCzbY7AjBS9BGAeCo";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+
+let chatOpen = false;
+let cachedData = null;
+let chatHistory = [];
+
+function toggleChat() {
+  chatOpen = !chatOpen;
+  const panel = document.getElementById('chatPanel');
+  panel.classList.toggle('open', chatOpen);
+  if (chatOpen) document.getElementById('chatInput').focus();
+}
+
+function sendSuggestion(btn) {
+  document.getElementById('chatInput').value = btn.textContent;
+  sendChat();
+}
+
+function addMsg(text, role) {
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + role;
+  div.textContent = text;
+  const msgs = document.getElementById('chatMessages');
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+function buildContext() {
+  if (!cachedData || cachedData.length === 0) {
+    return "Ainda não há dados carregados. O utilizador precisa de fazer login primeiro.";
+  }
+
+  const colecoes = [...new Set(cachedData.map(d => d.col))];
+  let ctx = "Dados de vendas e metas por representante e coleção (apenas coleções atuais):\n\n";
+
+  colecoes.forEach(col => {
+    const items = cachedData.filter(d => d.col === col);
+    const totalMeta  = items.reduce((a, d) => a + d.meta, 0);
+    const totalVenda = items.reduce((a, d) => a + d.venda, 0);
+    const pct = totalMeta > 0 ? (totalVenda / totalMeta * 100).toFixed(1) : '0';
+    ctx += `COLEÇÃO: ${col} | Meta: R$${Math.round(totalMeta).toLocaleString('pt-BR')} | Venda: R$${Math.round(totalVenda).toLocaleString('pt-BR')} | % Meta: ${pct}%\n`;
+    items.sort((a,b) => (b.pct||0) - (a.pct||0)).forEach(d => {
+      const p = d.pct !== null && !isNaN(d.pct) ? (d.pct * 100).toFixed(1) + '%' : '0%';
+      ctx += `  - ${d.rep}: Meta R$${Math.round(d.meta).toLocaleString('pt-BR')} | Venda R$${Math.round(d.venda).toLocaleString('pt-BR')} | ${p} da meta\n`;
+    });
+    ctx += '\n';
+  });
+  return ctx;
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const sendBtn = document.getElementById('chatSend');
+  const question = input.value.trim();
+  if (!question) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  sendBtn.disabled = true;
+
+  addMsg(question, 'user');
+  chatHistory.push({ role: 'user', parts: [{ text: question }] });
+
+  const thinking = addMsg('A analisar os dados...', 'bot thinking');
+
+  const systemPrompt = `És um assistente especializado em análise de vendas e metas comerciais.
+Tens acesso aos dados reais de vendas da empresa, incluindo metas, vendas realizadas e percentuais atingidos por representante e coleção.
+Responde sempre em português do Brasil, de forma clara, objetiva e útil.
+Quando apresentares valores, usa o formato R$ com separadores brasileiros.
+Quando apresentares percentuais, usa o símbolo %.
+Se a pergunta não tiver relação com os dados de vendas, responde educadamente que só podes ajudar com questões sobre vendas e metas.
+
+DADOS ATUAIS:
+${buildContext()}`;
+
+  const messages = [
+    { role: 'user', parts: [{ text: systemPrompt + '\n\nPergunta do utilizador: ' + question }] }
+  ];
+
+  // Adicionar histórico (últimas 6 trocas)
+  if (chatHistory.length > 2) {
+    const hist = chatHistory.slice(-8, -1);
+    messages.push(...hist);
+    messages.push({ role: 'user', parts: [{ text: question }] });
+  }
+
+  try {
+    const res = await fetch(GEMINI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: messages,
+        generationConfig: { temperature: 0.3, maxOutputTokens: 800 }
+      })
+    });
+
+    const json = await res.json();
+    const answer = json.candidates?.[0]?.content?.parts?.[0]?.text || 'Não consegui obter uma resposta. Tenta novamente.';
+
+    thinking.className = 'chat-msg bot';
+    thinking.textContent = answer;
+    chatHistory.push({ role: 'model', parts: [{ text: answer }] });
+
+  } catch(e) {
+    thinking.className = 'chat-msg bot';
+    thinking.textContent = 'Erro ao contactar o assistente. Verifica a tua ligação e tenta novamente.';
+  }
+
+  sendBtn.disabled = false;
+  document.getElementById('chatMessages').scrollTop = 99999;
+  input.focus();
+}
+
+// Guarda os dados quando carregados para o chat usar
+const _origRenderDashboard = renderDashboard;
+function renderDashboard(data) {
+  cachedData = data;
+  _origRenderDashboard(data);
+}
+
 </script>
+
+<!-- CHAT -->
+<button class="chat-fab" onclick="toggleChat()" title="Chat com os dados" aria-label="Abrir chat">💬</button>
+
+<div class="chat-panel" id="chatPanel" role="dialog" aria-label="Chat sobre vendas">
+  <div class="chat-header">
+    <div class="chat-header-left">
+      <div class="dot"></div>
+      <div>
+        <h3>Assistente de Vendas</h3>
+        <p>Powered by Gemini · dados em tempo real</p>
+      </div>
+    </div>
+    <button class="chat-close" onclick="toggleChat()" aria-label="Fechar chat">×</button>
+  </div>
+  <div class="chat-messages" id="chatMessages">
+    <div class="chat-msg bot">
+      Olá! 👋 Podes perguntar qualquer coisa sobre as vendas, metas ou representantes. Por exemplo:
+      <div class="chat-suggestions" style="margin-top:8px;">
+        <button class="chat-sug" onclick="sendSuggestion(this)">Qual representante está mais longe da meta?</button>
+        <button class="chat-sug" onclick="sendSuggestion(this)">Qual a venda total da coleção atual?</button>
+        <button class="chat-sug" onclick="sendSuggestion(this)">Quem já atingiu 100% da meta?</button>
+      </div>
+    </div>
+  </div>
+  <div class="chat-footer">
+    <textarea class="chat-input" id="chatInput" placeholder="Escreve a tua pergunta..." rows="1"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+    <button class="chat-send" id="chatSend" onclick="sendChat()">Enviar</button>
+  </div>
+</div>
+
 </body>
 </html>
