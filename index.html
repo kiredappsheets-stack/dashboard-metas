@@ -619,6 +619,18 @@ SUMMARIZECOLUMNS(
 ORDER BY REPRESENTANTE[REPRESENTANTE] ASC
 `;
 
+// Vendas por MARCA e COLECAO
+const DAX_MARCAS = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  PEDIDO[MARCA],
+  PEDIDO[COLECAO],
+  "FAT_LIQ", SUM(PEDIDO[FAT_LIQ]),
+  "QTDE",    SUM(PEDIDO[QTDE_FAT])
+)
+ORDER BY PEDIDO[MARCA] ASC, PEDIDO[COLECAO] ASC
+`;
+
 // Query para vendas — TODAS as coleções (para o chat)
 const DAX_VENDAS = `
 EVALUATE
@@ -887,13 +899,14 @@ async function loadDashboard() {
   renderLoading();
   try {
     const token = await getToken();
-    const [data, pedidos, clientes, reps, vendas, metasHist] = await Promise.all([
+    const [data, pedidos, clientes, reps, vendas, metasHist, marcas] = await Promise.all([
       runDaxQuery(token, DAX_QUERY, false),
       runDaxQuery(token, DAX_PEDIDOS, true),
       runDaxQuery(token, DAX_CLIENTES, true),
       runDaxQuery(token, DAX_REPRESENTANTES, true),
       runDaxQuery(token, DAX_VENDAS, true),
       runDaxQuery(token, DAX_METAS_HIST, true),
+      runDaxQuery(token, DAX_MARCAS, true),
     ]);
     cachedData = data;
     cachedPedidos = pedidos;
@@ -901,6 +914,7 @@ async function loadDashboard() {
     cachedReps = reps;
     cachedVendas = vendas;
     cachedMetasHist = metasHist;
+    cachedMarcas = marcas;
     renderDashboard(data);
   } catch(e) {
     renderError(e.message);
@@ -932,6 +946,7 @@ let cachedClientes = null;
 let cachedReps = null;
 let cachedVendas = null;
 let cachedMetasHist = null;
+let cachedMarcas = null;
 let chatHistory = [];
 
 function toggleChat() {
@@ -1051,6 +1066,28 @@ function buildContext() {
         const clis = [...new Set(cliRows.map(r => gP(r,'CLIENTE')).filter(Boolean))];
         const estados = [...new Set(cliRows.map(r => gP(r,'ESTADO')).filter(Boolean))].join(', ');
         ctx += `  REP: ${rep} | Clientes (${clis.length}): ${clis.slice(0,8).join(', ')}${clis.length>8?' +':''}\n`;
+      });
+      ctx += '\n';
+    });
+  }
+
+  // ── VENDAS POR MARCA E COLEÇÃO ──
+  if (cachedMarcas && cachedMarcas.length > 0) {
+    ctx += "=== VENDAS POR MARCA E COLEÇÃO (tabela PEDIDO) ===\n";
+    ctx += "A empresa trabalha com várias marcas. Cada pedido tem uma marca associada.\n\n";
+    const gMa = (row,col) => row['PEDIDO['+col+']'] || row[col] || '';
+    const marcasList = [...new Set(cachedMarcas.map(r => gMa(r,'MARCA')).filter(Boolean))];
+    marcasList.forEach(marca => {
+      const rows = cachedMarcas.filter(r => gMa(r,'MARCA') === marca);
+      const totalFat = rows.reduce((a,r) => a + gM(r,'FAT_LIQ'), 0);
+      const totalQtd = rows.reduce((a,r) => a + gM(r,'QTDE'), 0);
+      ctx += `MARCA: ${marca} | Fat. total: R$${Math.round(totalFat).toLocaleString('pt-BR')} | Peças: ${Math.round(totalQtd)}\n`;
+      rows.forEach(r => {
+        const fat = gM(r,'FAT_LIQ');
+        const qtd = gM(r,'QTDE');
+        if (fat !== 0 || qtd !== 0) {
+          ctx += `  - Coleção ${gMa(r,'COLECAO')}: R$${Math.round(fat).toLocaleString('pt-BR')} | ${Math.round(qtd)} peças\n`;
+        }
       });
       ctx += '\n';
     });
