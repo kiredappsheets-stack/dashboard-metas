@@ -782,7 +782,7 @@ async function loadDashboard() {
 //  CHAT — Gemini API
 // ════════════════════════════════════════════
 const GEMINI_KEY = "AIzaSyA2F8mDe6svx36QyyyX6k08BYn-sg7h_Nw";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_KEY}`;
 
 let chatOpen = false;
 let cachedData = null;
@@ -879,6 +879,29 @@ ${buildContext()}`;
         generationConfig: { temperature: 0.3, maxOutputTokens: 800 }
       })
     });
+
+    // Tratamento de limite de pedidos (429)
+    if (res.status === 429) {
+      thinking.className = 'chat-msg bot';
+      let countdown = 60;
+      thinking.textContent = `⏳ Limite de pedidos atingido. Aguarda ${countdown}s...`;
+      if (wasVoice) speakResponse('Limite de pedidos atingido. Aguarda 60 segundos.');
+      const timer = setInterval(() => {
+        countdown--;
+        if (countdown <= 0) {
+          clearInterval(timer);
+          thinking.textContent = '✅ Podes tentar novamente agora!';
+        } else {
+          thinking.textContent = `⏳ Limite de pedidos atingido. Aguarda ${countdown}s...`;
+        }
+      }, 1000);
+      sendBtn.disabled = false;
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error('Erro ' + res.status);
+    }
 
     const json = await res.json();
     const answer = json.candidates?.[0]?.content?.parts?.[0]?.text || 'Não consegui obter uma resposta. Tenta novamente.';
