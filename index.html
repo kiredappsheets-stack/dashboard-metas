@@ -440,6 +440,21 @@
     transition: background .15s;
   }
   .chat-sug:hover { background: var(--border); }
+  .chat-footer { gap: 6px; }
+  .chat-mic {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    cursor: pointer;
+    font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: background .15s;
+  }
+  .chat-mic:hover { background: var(--border); }
+  .chat-mic.listening { background: var(--red-bg); border-color: var(--red); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
   @media (max-width: 640px) {
     .chat-panel { width: calc(100vw - 32px); right: 16px; bottom: 80px; }
     .chat-fab { right: 16px; bottom: 16px; }
@@ -766,8 +781,8 @@ async function loadDashboard() {
 // ════════════════════════════════════════════
 //  CHAT — Gemini API
 // ════════════════════════════════════════════
-const GEMINI_KEY = "AIzaSyA0aqDaDFNPOft3WviCzbY7AjBS9BGAeCo";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+const GEMINI_KEY = "AIzaSyA2F8mDe6svx36QyyyX6k08BYn-sg7h_Nw";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
 
 let chatOpen = false;
 let cachedData = null;
@@ -823,6 +838,7 @@ async function sendChat() {
   const sendBtn = document.getElementById('chatSend');
   const question = input.value.trim();
   if (!question) return;
+  const wasVoice = isListening || document.getElementById('chatMic').classList.contains('was-voice');
 
   input.value = '';
   input.style.height = 'auto';
@@ -859,7 +875,7 @@ ${buildContext()}`;
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: messages,
+        contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\nPergunta: ' + question }] }],
         generationConfig: { temperature: 0.3, maxOutputTokens: 800 }
       })
     });
@@ -870,6 +886,8 @@ ${buildContext()}`;
     thinking.className = 'chat-msg bot';
     thinking.textContent = answer;
     chatHistory.push({ role: 'model', parts: [{ text: answer }] });
+    // Ler resposta em voz alta se a pergunta foi por voz
+    if (wasVoice) speakResponse(answer);
 
   } catch(e) {
     thinking.className = 'chat-msg bot';
@@ -882,6 +900,74 @@ ${buildContext()}`;
 }
 
 // Dados guardados pelo loadDashboard para o chat usar
+
+
+// ════════════════════════════════════════════
+//  VOZ — Web Speech API
+// ════════════════════════════════════════════
+let recognition = null;
+let isListening = false;
+const synth = window.speechSynthesis;
+
+function initRecognition() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return null;
+  const r = new SpeechRecognition();
+  r.lang = 'pt-BR';
+  r.continuous = false;
+  r.interimResults = true;
+
+  r.onresult = (e) => {
+    const transcript = Array.from(e.results).map(r => r[0].transcript).join('');
+    document.getElementById('chatInput').value = transcript;
+    if (e.results[e.results.length-1].isFinal) {
+      stopListening();
+      setTimeout(() => sendChat(), 300);
+    }
+  };
+  r.onerror = () => stopListening();
+  r.onend = () => stopListening();
+  return r;
+}
+
+function toggleVoice() {
+  if (isListening) { stopListening(); return; }
+  if (!recognition) recognition = initRecognition();
+  if (!recognition) {
+    alert('O teu browser não suporta reconhecimento de voz. Usa o Chrome.');
+    return;
+  }
+  isListening = true;
+  document.getElementById('chatMic').classList.add('listening');
+  document.getElementById('chatMic').textContent = '🔴';
+  document.getElementById('chatInput').placeholder = 'A ouvir...';
+  recognition.start();
+}
+
+function stopListening() {
+  isListening = false;
+  const mic = document.getElementById('chatMic');
+  if (mic) { mic.classList.remove('listening'); mic.textContent = '🎤'; }
+  const input = document.getElementById('chatInput');
+  if (input) input.placeholder = 'Escreve ou fala a tua pergunta...';
+  try { recognition && recognition.stop(); } catch(e) {}
+}
+
+function speakResponse(text) {
+  if (!synth) return;
+  synth.cancel();
+  // Limitar texto para não ser muito longo
+  const shortText = text.length > 400 ? text.substring(0, 400) + '...' : text;
+  const utt = new SpeechSynthesisUtterance(shortText);
+  utt.lang = 'pt-BR';
+  utt.rate = 1.05;
+  utt.pitch = 1;
+  // Tentar usar voz portuguesa
+  const voices = synth.getVoices();
+  const ptVoice = voices.find(v => v.lang.startsWith('pt'));
+  if (ptVoice) utt.voice = ptVoice;
+  synth.speak(utt);
+}
 
 </script>
 
@@ -910,7 +996,8 @@ ${buildContext()}`;
     </div>
   </div>
   <div class="chat-footer">
-    <textarea class="chat-input" id="chatInput" placeholder="Escreve a tua pergunta..." rows="1"
+    <button class="chat-mic" id="chatMic" onclick="toggleVoice()" title="Falar" aria-label="Falar por voz">🎤</button>
+    <textarea class="chat-input" id="chatInput" placeholder="Escreve ou fala a tua pergunta..." rows="1"
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
     <button class="chat-send" id="chatSend" onclick="sendChat()">Enviar</button>
   </div>
