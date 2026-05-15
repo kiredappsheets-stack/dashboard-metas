@@ -782,7 +782,7 @@ async function loadDashboard() {
 //  CHAT — Gemini API
 // ════════════════════════════════════════════
 const CLAUDE_KEY = "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";
-const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
+const CLAUDE_URL = "https://ancient-frog-f410.kiredappsheets.workers.dev";
 
 let chatOpen = false;
 let cachedData = null;
@@ -875,9 +875,6 @@ ${buildContext()}`;
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': CLAUDE_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
