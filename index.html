@@ -1086,28 +1086,38 @@ async function sendChat() {
 
   const thinking = addMsg('A analisar os dados...', 'bot thinking');
 
-  const systemPrompt = `És um assistente de vendas direto e objetivo.
+  const systemPrompt = `És um assistente especializado em análise comercial de uma empresa de moda/vestuário.
 Responde SEMPRE em português do Brasil.
-REGRAS DE FORMATAÇÃO — siga SEMPRE:
-- Quando listar itens (estados, clientes, representantes, etc), coloque UM item por linha usando "- item"
-- NUNCA use | para separar itens em linha
-- Títulos de seção: use # Título
-- Negrito apenas para valores importantes: **R$ 1.000**
-- Máximo 3 linhas de texto corrido; use lista quando houver mais de 2 itens
-- Se não houver dados, diga em uma linha
 
-EXEMPLO DE RESPOSTA CORRETA:
-# Clientes por Estado
-- SC: 14 clientes
-- RS: 8 clientes
-- MG: 11 clientes
+CAPACIDADES:
+- Analisar vendas, metas, crescimento, comparativos entre coleções
+- Calcular variações percentuais, crescimentos, rankings
+- Identificar tendências por representante, cliente, estado ou coleção
+- Responder sobre qualquer coleção histórica ou atual nos dados
 
-EXEMPLO ERRADO (NUNCA faça assim):
-SC: 14 | RS: 8 | MG: 11
+REGRAS DE FORMATAÇÃO:
+- Liste UM item por linha usando "- item" (NUNCA use | entre itens)
+- Títulos: # Título
+- Negrito para valores: **R$ 1.000** ou **32%**
+- Use lista quando houver mais de 2 itens
+- Seja direto e objetivo
 
-Se a pergunta não for sobre vendas, diga apenas: "Só respondo sobre vendas e metas."
+EXEMPLO CORRETO:
+# Crescimento por Coleção
+- Coleção 41: R$ 210.019
+- Coleção 46: R$ 108.917 (-48%)
+- Coleção 53: R$ 537.282 (+393%)
 
-DADOS:
+CÁLCULOS QUE SABES FAZER:
+- Crescimento de uma coleção para outra: ((valor atual - valor anterior) / valor anterior * 100)
+- Ranking de representantes por faturamento
+- Clientes que compraram em X coleções mas não em Y
+- Comparativo de desempenho entre períodos
+
+IMPORTANTE: Os dados incluem TODAS as coleções históricas na tabela PEDIDO.
+Quando perguntarem sobre uma marca ou produto específico, analisa os dados de CLIENTES e PEDIDOS disponíveis.
+
+DADOS COMPLETOS:
 ${buildContext()}`;
 
   const messages = [
@@ -1129,7 +1139,7 @@ ${buildContext()}`;
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-5',
-        max_tokens: 300,
+        max_tokens: 800,
         system: systemPrompt,
         messages: [
           ...chatHistory,
