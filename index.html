@@ -1010,127 +1010,129 @@ function addMsg(text, role) {
   return div;
 }
 
-function buildContext() {
-  if (!cachedData || cachedData.length === 0) {
-    return "Ainda não há dados carregados.";
-  }
+function calcularCrescimento(anterior, atual) {
+  if (!anterior || anterior === 0) return null;
+  return ((atual - anterior) / Math.abs(anterior) * 100).toFixed(1);
+}
 
-  const gP = (row,col) => row['PEDIDO['+col+']']        || row[col] || '';
-  const gC = (row,col) => row['CLIENTES['+col+']']      || row[col] || '';
-  const gR = (row,col) => row['REPRESENTANTE['+col+']'] || row[col] || '';
-  const gMt= (row,col) => row['METAS['+col+']']         || row[col] || '';
-  const gM = (row,col) => parseFloat(row['['+col+']']   || row[col] || 0) || 0;
+function buildContext() {
+  if (!cachedData || cachedData.length === 0) return "Dados não carregados.";
+
+  const gP  = (r,c) => r['PEDIDO['+c+']']        || r[c] || '';
+  const gC  = (r,c) => r['CLIENTES['+c+']']       || r[c] || '';
+  const gR  = (r,c) => r['REPRESENTANTE['+c+']']  || r[c] || '';
+  const gCo = (r,c) => r['COLECOES['+c+']']       || r[c] || '';
+  const gMt = (r,c) => r['METAS['+c+']']          || r[c] || '';
+  const gM  = (r,c) => parseFloat(r['['+c+']']    || r[c] || 0) || 0;
 
   let ctx = '';
 
-  // ── COLEÇÕES COM DATAS (ordem cronológica) ──
+  // ══ 1. COLEÇÕES ORDENADAS COM DATAS ══
   if (cachedColecoes && cachedColecoes.length > 0) {
-    const gCo = (row,col) => row['COLECOES['+col+']'] || row[col] || '';
-    ctx += "=== COLEÇÕES (ordem cronológica com datas) ===\n";
-    ctx += "Use estas datas para calcular comparativos entre coleções. O código numérico indica a ordem (menor = mais antiga).\n\n";
-    const colsOrdenadas = cachedColecoes
+    const cols = cachedColecoes
       .filter(r => gCo(r,'COLECAO'))
       .sort((a,b) => gCo(a,'COLECAO').localeCompare(gCo(b,'COLECAO')));
-    colsOrdenadas.forEach(r => {
-      const atual = gCo(r,'COL_ATUAL') === 'COL ATUAL' ? ' ← COLEÇÃO ATUAL' : '';
-      const dtFim = gCo(r,'DT_FINAL') || '';
-      const dtFimFmt = dtFim ? dtFim.split(' ')[0] : '—';
-      ctx += `  ${gCo(r,'COLECAO')} | ${gCo(r,'DESCRICAO')} | Dt. final: ${dtFimFmt}${atual}\n`;
+    ctx += '=== COLEÇÕES (ordem cronológica) ===\n';
+    cols.forEach(r => {
+      const atual = gCo(r,'COL_ATUAL') === 'COL ATUAL' ? ' [ATUAL]' : '';
+      const dtFim = (gCo(r,'DT_FINAL')||'').split(' ')[0];
+      ctx += `${gCo(r,'COLECAO')} | ${gCo(r,'DESCRICAO')} | Dt.final: ${dtFim}${atual}\n`;
     });
     ctx += '\n';
   }
 
-  // ── REPRESENTANTES ──
+  // ══ 2. REPRESENTANTES ══
   if (cachedReps && cachedReps.length > 0) {
-    ctx += "=== REPRESENTANTES (agentes comerciais — NÃO são clientes) ===\n";
-    cachedReps.forEach(r => {
-      ctx += `  REP: ${gR(r,'REPRESENTANTE')} | Cód: ${gR(r,'CODREP')}\n`;
-    });
+    ctx += '=== REPRESENTANTES (agentes comerciais — NÃO são clientes) ===\n';
+    cachedReps.forEach(r => ctx += `  ${gR(r,'REPRESENTANTE')} | Cód: ${gR(r,'CODREP')}\n`);
     ctx += '\n';
   }
 
-  // ── METAS — TODAS AS COLEÇÕES ──
+  // ══ 3. METAS POR REPRESENTANTE E COLEÇÃO ══
   if (cachedMetasHist && cachedMetasHist.length > 0) {
-    ctx += "=== METAS POR REPRESENTANTE — TODAS AS COLEÇÕES ===\n";
-    ctx += "Fonte: tabela METAS. Inclui coleções atuais e anteriores.\n\n";
-    const colsMeta = [...new Set(cachedMetasHist.map(r => gMt(r,'COLECAO')))];
+    ctx += '=== METAS POR REPRESENTANTE — TODAS AS COLEÇÕES ===\n';
+    const colsMeta = [...new Set(cachedMetasHist.map(r => gMt(r,'COLECAO')))].sort();
     colsMeta.forEach(col => {
       const rows = cachedMetasHist.filter(r => gMt(r,'COLECAO') === col);
-      const tMeta  = rows.reduce((a,r) => a + gM(r,'META'), 0);
-      const tVenda = rows.reduce((a,r) => a + gM(r,'VENDA'), 0);
-      const pct    = tMeta > 0 ? (tVenda/tMeta*100).toFixed(1) : '0';
-      ctx += `COLEÇÃO: ${col} | Meta: R$${Math.round(tMeta).toLocaleString('pt-BR')} | Vendido: R$${Math.round(tVenda).toLocaleString('pt-BR')} | % meta: ${pct}%\n`;
-      rows.sort((a,b)=>gM(b,'PCT')-gM(a,'PCT')).forEach(r => {
+      const tM = rows.reduce((a,r) => a + gM(r,'META'), 0);
+      const tV = rows.reduce((a,r) => a + gM(r,'VENDA'), 0);
+      const pct = tM > 0 ? (tV/tM*100).toFixed(1) : '0';
+      ctx += `COLEÇÃO ${col} | Meta: R$${Math.round(tM).toLocaleString('pt-BR')} | Vendido: R$${Math.round(tV).toLocaleString('pt-BR')} | %meta: ${pct}%\n`;
+      rows.sort((a,b)=>gM(b,'VENDA')-gM(a,'VENDA')).forEach(r => {
         const p = gM(r,'PCT') ? (gM(r,'PCT')*100).toFixed(1)+'%' : '0%';
         ctx += `  REP: ${gMt(r,'NOME')} | Meta: R$${Math.round(gM(r,'META')).toLocaleString('pt-BR')} | Vendido: R$${Math.round(gM(r,'VENDA')).toLocaleString('pt-BR')} | %: ${p}\n`;
       });
+    });
+    ctx += '\n';
+  }
+
+  // ══ 4. VENDAS POR MARCA — COM CRESCIMENTO PRÉ-CALCULADO ══
+  if (cachedMarcas && cachedMarcas.length > 0) {
+    ctx += '=== VENDAS POR MARCA E COLEÇÃO — COM CRESCIMENTO CALCULADO ===\n';
+    ctx += 'Crescimento = ((fat_atual - fat_anterior) / |fat_anterior|) * 100\n\n';
+
+    const marcas = [...new Set(cachedMarcas.map(r => gP(r,'MARCA')).filter(Boolean))].sort();
+    marcas.forEach(marca => {
+      const rows = cachedMarcas
+        .filter(r => gP(r,'MARCA') === marca && gM(r,'FAT_LIQ') !== 0)
+        .sort((a,b) => gP(a,'COLECAO').localeCompare(gP(b,'COLECAO')));
+
+      const totalFat = rows.reduce((a,r) => a + gM(r,'FAT_LIQ'), 0);
+      const totalQtd = rows.reduce((a,r) => a + gM(r,'QTDE'), 0);
+      ctx += `MARCA: ${marca} | Total geral: R$${Math.round(totalFat).toLocaleString('pt-BR')} | ${Math.round(totalQtd)} peças\n`;
+
+      rows.forEach((r, i) => {
+        const fat = gM(r,'FAT_LIQ');
+        const qtd = gM(r,'QTDE');
+        const fatAnterior = i > 0 ? gM(rows[i-1],'FAT_LIQ') : null;
+        const cresc = fatAnterior !== null ? calcularCrescimento(fatAnterior, fat) : null;
+        const crescStr = cresc !== null ? ` | Cresc.: ${cresc > 0 ? '+' : ''}${cresc}%` : '';
+        ctx += `  - ${gP(r,'COLECAO')}: R$${Math.round(fat).toLocaleString('pt-BR')} | ${Math.round(qtd)} peças${crescStr}\n`;
+      });
       ctx += '\n';
     });
   }
 
-  // ── VENDAS / PEDIDOS — POR COLEÇÃO E REPRESENTANTE ──
+  // ══ 5. VENDAS POR REP E COLEÇÃO (tabela PEDIDO) ══
   if (cachedPedidos && cachedPedidos.length > 0) {
-    ctx += "=== VENDAS REAIS POR COLEÇÃO E REPRESENTANTE (tabela PEDIDO) ===\n";
-    ctx += "Fonte: tabela PEDIDO. Inclui TODAS as coleções históricas.\n\n";
-    const colsPed = [...new Set(cachedPedidos.map(r => gP(r,'COLECAO')))];
+    ctx += '=== VENDAS REAIS POR REPRESENTANTE E COLEÇÃO (tabela PEDIDO) ===\n';
+    const colsPed = [...new Set(cachedPedidos.map(r => gP(r,'COLECAO')))].sort().reverse();
     colsPed.forEach(col => {
       const rows = cachedPedidos.filter(r => gP(r,'COLECAO') === col);
       const tFat = rows.reduce((a,r) => a + gM(r,'FAT_LIQ'), 0);
-      const tQtd = rows.reduce((a,r) => a + gM(r,'QTDE'), 0);
-      ctx += `COLEÇÃO: ${col} | Fat. líq. total: R$${Math.round(tFat).toLocaleString('pt-BR')} | Peças: ${Math.round(tQtd)}\n`;
-      rows.forEach(r => {
-        ctx += `  REP: ${gP(r,'REP')} | Fat. líq.: R$${Math.round(gM(r,'FAT_LIQ')).toLocaleString('pt-BR')} | Peças: ${Math.round(gM(r,'QTDE'))}\n`;
+      ctx += `COLEÇÃO ${col} | Fat. total: R$${Math.round(tFat).toLocaleString('pt-BR')}\n`;
+      rows.sort((a,b)=>gM(b,'FAT_LIQ')-gM(a,'FAT_LIQ')).forEach(r => {
+        ctx += `  REP: ${gP(r,'REP')} | R$${Math.round(gM(r,'FAT_LIQ')).toLocaleString('pt-BR')} | ${Math.round(gM(r,'QTDE'))} peças\n`;
       });
-      ctx += '\n';
     });
+    ctx += '\n';
   }
 
-  // ── CLIENTES POR REP E COLEÇÃO ──
+  // ══ 6. CLIENTES POR REP E COLEÇÃO ══
   if (cachedVendas && cachedVendas.length > 0) {
-    ctx += "=== CLIENTES QUE COMPRARAM POR REP E COLEÇÃO ===\n";
-    ctx += "CLIENTE = loja/empresa que comprou. REP = representante que vendeu.\n\n";
-    const colsV = [...new Set(cachedVendas.map(r => gP(r,'COLECAO')))];
+    ctx += '=== CLIENTES QUE COMPRARAM POR REP E COLEÇÃO ===\n';
+    ctx += 'CLIENTE = loja/empresa que comprou. REP = representante que vendeu.\n';
+    const colsV = [...new Set(cachedVendas.map(r => gP(r,'COLECAO')))].sort().reverse();
     colsV.forEach(col => {
       const rows = cachedVendas.filter(r => gP(r,'COLECAO') === col);
       const repsV = [...new Set(rows.map(r => gP(r,'REP')).filter(Boolean))];
-      ctx += `COLEÇÃO: ${col}\n`;
+      ctx += `COLEÇÃO ${col}:\n`;
       repsV.forEach(rep => {
         const cliRows = rows.filter(r => gP(r,'REP') === rep);
         const clis = [...new Set(cliRows.map(r => gP(r,'CLIENTE')).filter(Boolean))];
-        const estados = [...new Set(cliRows.map(r => gP(r,'ESTADO')).filter(Boolean))].join(', ');
-        ctx += `  REP: ${rep} | Clientes (${clis.length}): ${clis.slice(0,8).join(', ')}${clis.length>8?' +':''}\n`;
+        const tFat = cliRows.reduce((a,r) => a + gM(r,'FAT_LIQ'), 0);
+        ctx += `  REP: ${rep} | ${clis.length} clientes | R$${Math.round(tFat).toLocaleString('pt-BR')}\n`;
+        ctx += `    Clientes: ${clis.slice(0,6).join(', ')}${clis.length>6?' +'+( clis.length-6)+' mais':''}\n`;
       });
-      ctx += '\n';
     });
+    ctx += '\n';
   }
 
-  // ── VENDAS POR MARCA E COLEÇÃO ──
-  if (cachedMarcas && cachedMarcas.length > 0) {
-    ctx += "=== VENDAS POR MARCA E COLEÇÃO (tabela PEDIDO) ===\n";
-    ctx += "A empresa trabalha com várias marcas. Cada pedido tem uma marca associada.\n\n";
-    const gMa = (row,col) => row['PEDIDO['+col+']'] || row[col] || '';
-    const marcasList = [...new Set(cachedMarcas.map(r => gMa(r,'MARCA')).filter(Boolean))];
-    marcasList.forEach(marca => {
-      const rows = cachedMarcas.filter(r => gMa(r,'MARCA') === marca);
-      const totalFat = rows.reduce((a,r) => a + gM(r,'FAT_LIQ'), 0);
-      const totalQtd = rows.reduce((a,r) => a + gM(r,'QTDE'), 0);
-      ctx += `MARCA: ${marca} | Fat. total: R$${Math.round(totalFat).toLocaleString('pt-BR')} | Peças: ${Math.round(totalQtd)}\n`;
-      rows.forEach(r => {
-        const fat = gM(r,'FAT_LIQ');
-        const qtd = gM(r,'QTDE');
-        if (fat !== 0 || qtd !== 0) {
-          ctx += `  - Coleção ${gMa(r,'COLECAO')}: R$${Math.round(fat).toLocaleString('pt-BR')} | ${Math.round(qtd)} peças\n`;
-        }
-      });
-      ctx += '\n';
-    });
-  }
-
-  // ── CADASTRO DE CLIENTES ──
+  // ══ 7. CADASTRO DE CLIENTES ══
   if (cachedClientes && cachedClientes.length > 0) {
     const ativos = cachedClientes.filter(c => gC(c,'ATIVO') === 'S');
     const estados = [...new Set(cachedClientes.map(c=>gC(c,'ESTADO')).filter(Boolean))];
-    ctx += "=== CADASTRO DE CLIENTES ===\n";
+    ctx += '=== CADASTRO DE CLIENTES ===\n';
     ctx += `Total: ${cachedClientes.length} | Ativos: ${ativos.length} | Estados: ${estados.join(', ')}\n\n`;
     ativos.slice(0,200).forEach(c => {
       ctx += `  CLIENTE: ${gC(c,'NOME')} | ${gC(c,'CIDADE')}-${gC(c,'ESTADO')} | REP: ${gC(c,'REP')} | Última col: ${gC(c,'ULTIMA_COLECAO')}\n`;
