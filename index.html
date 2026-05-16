@@ -1200,30 +1200,36 @@ function buildContext() {
 
     // Resumo por mês
     const porMes = {};
-    // formato da data: "2026-05-15T00:00:00" (ISO)
-    function parseDt(str) {
+    // Parseia datas ISO "2026-05-15T00:00:00" ou "DD/MM/AAAA"
+    // Retorna {ano, mes, dia} como inteiros para evitar problemas de fuso horário
+    function parseDtParts(str) {
       if (!str) return null;
-      // suporta "2026-05-15T00:00:00" e "DD/MM/AAAA 00:00:00"
-      if (str.includes('T') || (str.indexOf('-') < str.indexOf('/'))) {
-        const d = str.split('T')[0].split('-');
-        if (d.length >= 3) return new Date(parseInt(d[0]), parseInt(d[1])-1, parseInt(d[2]));
+      if (str.includes('T') || /^\d{4}-/.test(str)) {
+        const p = str.split('T')[0].split('-');
+        if (p.length >= 3) return {ano:+p[0], mes:+p[1], dia:+p[2]};
       }
-      const d = str.split(' ')[0].split('/');
-      if (d.length >= 3) return new Date(parseInt(d[2]), parseInt(d[1])-1, parseInt(d[0]));
+      const p = str.split(' ')[0].split('/');
+      if (p.length >= 3) return {ano:+p[2], mes:+p[1], dia:+p[0]};
       return null;
     }
+    function parseDt(str) {
+      const p = parseDtParts(str);
+      return p ? new Date(p.ano, p.mes-1, p.dia) : null;
+    }
     function dtToChaveMes(str) {
-      const dt = parseDt(str); if (!dt) return null;
-      return dt.getFullYear() + '-' + (dt.getMonth()+1).toString().padStart(2,'0');
+      const p = parseDtParts(str); if (!p) return null;
+      return p.ano + '-' + p.mes.toString().padStart(2,'0');
     }
     function dtToChaveDia(str) {
-      const dt = parseDt(str); if (!dt) return null;
-      return dt.getFullYear() + '-' + (dt.getMonth()+1).toString().padStart(2,'0') + '-' + dt.getDate().toString().padStart(2,'0');
+      const p = parseDtParts(str); if (!p) return null;
+      return p.ano + '-' + p.mes.toString().padStart(2,'0') + '-' + p.dia.toString().padStart(2,'0');
     }
     function dtToDiaMes(str) {
-      const dt = parseDt(str); if (!dt) return null;
-      return dt.getDate().toString().padStart(2,'0') + '/' + (dt.getMonth()+1).toString().padStart(2,'0') + '/' + dt.getFullYear();
+      const p = parseDtParts(str); if (!p) return null;
+      return p.dia.toString().padStart(2,'0') + '/' + p.mes.toString().padStart(2,'0') + '/' + p.ano;
     }
+    // Chave de hoje para comparação directa
+    const hojeChave = _ano + '-' + _mes.toString().padStart(2,'0') + '-' + _dia.toString().padStart(2,'0');
     cachedPedidosDetalhe.forEach(r => {
       const data = gPd(r,'DATA') || '';
       const chave = dtToChaveMes(data);
@@ -1248,12 +1254,9 @@ function buildContext() {
     ctx += '\n';
 
     // Resumo por dia (últimos 30 dias)
-    const hoje = new Date();
-    hoje.setHours(0,0,0,0);
-    const hojeStr = hoje.getDate().toString().padStart(2,'0') + '/' +
-                    (hoje.getMonth()+1).toString().padStart(2,'0') + '/' +
-                    hoje.getFullYear();
-    const limite = new Date(hoje); limite.setDate(hoje.getDate() - 30);
+    const hoje = new Date(_ano, _mes-1, _dia);
+    const hojeStr = _dia.toString().padStart(2,'0') + '/' + _mes.toString().padStart(2,'0') + '/' + _ano;
+    const limite = new Date(_ano, _mes-1, _dia - 30);
     const porDia = {};
     cachedPedidosDetalhe.forEach(r => {
       const data = gPd(r,'DATA') || '';
@@ -1277,7 +1280,7 @@ function buildContext() {
       const d = porDia[dia];
       const [ano,mes,diaNum] = dia.split('-');
       const dtFmt = diaNum.padStart(2,'0')+'/'+mes.padStart(2,'0')+'/'+ano;
-      const ehHoje = dtFmt === hojeStr ? ' ← HOJE' : '';
+      const ehHoje = dia === hojeChave ? ' ← HOJE' : '';
       ctx += dtFmt + ehHoje + ': Fat.líq R$' + Math.round(d.fat).toLocaleString('pt-BR') + ' | Fat.bruto R$' + Math.round(d.bruto).toLocaleString('pt-BR') + ' | Desconto R$' + Math.round(d.desconto).toLocaleString('pt-BR') + ' | ' + Math.round(d.qtde) + ' peças | ' + d.pedidos + ' pedidos | ' + d.reps.size + ' reps | ' + d.clientes.size + ' clientes\n';
     });
     ctx += '\n';
