@@ -935,16 +935,19 @@ async function loadDashboard() {
   renderLoading();
   try {
     const token = await getToken();
+    // Cada query é independente — se uma falhar não afecta as outras
+    const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
+
     const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes, pedidosDetalhe] = await Promise.all([
-      runDaxQuery(token, DAX_QUERY, false),
-      runDaxQuery(token, DAX_PEDIDOS, true),
-      runDaxQuery(token, DAX_CLIENTES, true),
-      runDaxQuery(token, DAX_REPRESENTANTES, true),
-      runDaxQuery(token, DAX_VENDAS, true),
-      runDaxQuery(token, DAX_METAS_HIST, true),
-      runDaxQuery(token, DAX_MARCAS, true),
-      runDaxQuery(token, DAX_COLECOES, true),
-      runDaxQuery(token, DAX_PEDIDOS_DETALHE, true),
+      safe(() => runDaxQuery(token, DAX_QUERY, false)),
+      safe(() => runDaxQuery(token, DAX_PEDIDOS, true)),
+      safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
+      safe(() => runDaxQuery(token, DAX_REPRESENTANTES, true)),
+      safe(() => runDaxQuery(token, DAX_VENDAS, true)),
+      safe(() => runDaxQuery(token, DAX_METAS_HIST, true)),
+      safe(() => runDaxQuery(token, DAX_MARCAS, true)),
+      safe(() => runDaxQuery(token, DAX_COLECOES, true)),
+      safe(() => runDaxQuery(token, DAX_PEDIDOS_DETALHE, true)),
     ]);
     cachedData = data;
     cachedPedidos = pedidos;
@@ -955,6 +958,17 @@ async function loadDashboard() {
     cachedMarcas = marcas;
     cachedColecoes = colecoes;
     cachedPedidosDetalhe = pedidosDetalhe;
+    console.log('Dados carregados:', {
+      metas: data.length,
+      pedidos: pedidos.length,
+      clientes: clientes.length,
+      reps: reps.length,
+      vendas: vendas.length,
+      metasHist: metasHist.length,
+      marcas: marcas.length,
+      colecoes: colecoes.length,
+      pedidosDetalhe: pedidosDetalhe.length
+    });
     renderDashboard(data);
   } catch(e) {
     renderError(e.message);
