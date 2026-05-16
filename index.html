@@ -543,6 +543,34 @@
 // ════════════════════════════════════════════
 //  ⚙️  CONFIGURAÇÃO — preenche estes valores
 // ════════════════════════════════════════════
+// ── Funções globais de data ──
+function parseDtParts(str) {
+  if (!str) return null;
+  if (str.includes('T') || /^\d{4}-/.test(str)) {
+    const p = str.split('T')[0].split('-');
+    if (p.length >= 3) return {ano:+p[0], mes:+p[1], dia:+p[2]};
+  }
+  const p = str.split(' ')[0].split('/');
+  if (p.length >= 3) return {ano:+p[2], mes:+p[1], dia:+p[0]};
+  return null;
+}
+function parseDt(str) {
+  const p = parseDtParts(str);
+  return p ? new Date(p.ano, p.mes-1, p.dia) : null;
+}
+function dtToChaveMes(str) {
+  const p = parseDtParts(str); if (!p) return null;
+  return p.ano + '-' + p.mes.toString().padStart(2,'0');
+}
+function dtToChaveDia(str) {
+  const p = parseDtParts(str); if (!p) return null;
+  return p.ano + '-' + p.mes.toString().padStart(2,'0') + '-' + p.dia.toString().padStart(2,'0');
+}
+function dtToDiaMes(str) {
+  const p = parseDtParts(str); if (!p) return null;
+  return p.dia.toString().padStart(2,'0') + '/' + p.mes.toString().padStart(2,'0') + '/' + p.ano;
+}
+
 const CONFIG = {
   clientId:    "24250610-689c-409d-92d7-4f5db4e53731",
   tenantId:    "f6b9f0df-2577-4b82-9dc8-7673ebf160f2",
@@ -1069,34 +1097,6 @@ function addMsg(text, role) {
   msgs.appendChild(wrap);
   msgs.scrollTop = msgs.scrollHeight;
   return div;
-}
-
-// ── Funções globais de data ──
-function parseDtParts(str) {
-  if (!str) return null;
-  if (str.includes('T') || /^\d{4}-/.test(str)) {
-    const p = str.split('T')[0].split('-');
-    if (p.length >= 3) return {ano:+p[0], mes:+p[1], dia:+p[2]};
-  }
-  const p = str.split(' ')[0].split('/');
-  if (p.length >= 3) return {ano:+p[2], mes:+p[1], dia:+p[0]};
-  return null;
-}
-function parseDt(str) {
-  const p = parseDtParts(str);
-  return p ? new Date(p.ano, p.mes-1, p.dia) : null;
-}
-function dtToChaveMes(str) {
-  const p = parseDtParts(str); if (!p) return null;
-  return p.ano + '-' + p.mes.toString().padStart(2,'0');
-}
-function dtToChaveDia(str) {
-  const p = parseDtParts(str); if (!p) return null;
-  return p.ano + '-' + p.mes.toString().padStart(2,'0') + '-' + p.dia.toString().padStart(2,'0');
-}
-function dtToDiaMes(str) {
-  const p = parseDtParts(str); if (!p) return null;
-  return p.dia.toString().padStart(2,'0') + '/' + p.mes.toString().padStart(2,'0') + '/' + p.ano;
 }
 
 function calcularCrescimento(anterior, atual) {
