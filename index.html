@@ -1071,6 +1071,34 @@ function addMsg(text, role) {
   return div;
 }
 
+// ── Funções globais de data ──
+function parseDtParts(str) {
+  if (!str) return null;
+  if (str.includes('T') || /^\d{4}-/.test(str)) {
+    const p = str.split('T')[0].split('-');
+    if (p.length >= 3) return {ano:+p[0], mes:+p[1], dia:+p[2]};
+  }
+  const p = str.split(' ')[0].split('/');
+  if (p.length >= 3) return {ano:+p[2], mes:+p[1], dia:+p[0]};
+  return null;
+}
+function parseDt(str) {
+  const p = parseDtParts(str);
+  return p ? new Date(p.ano, p.mes-1, p.dia) : null;
+}
+function dtToChaveMes(str) {
+  const p = parseDtParts(str); if (!p) return null;
+  return p.ano + '-' + p.mes.toString().padStart(2,'0');
+}
+function dtToChaveDia(str) {
+  const p = parseDtParts(str); if (!p) return null;
+  return p.ano + '-' + p.mes.toString().padStart(2,'0') + '-' + p.dia.toString().padStart(2,'0');
+}
+function dtToDiaMes(str) {
+  const p = parseDtParts(str); if (!p) return null;
+  return p.dia.toString().padStart(2,'0') + '/' + p.mes.toString().padStart(2,'0') + '/' + p.ano;
+}
+
 function calcularCrescimento(anterior, atual) {
   if (!anterior || anterior === 0) return null;
   return ((atual - anterior) / Math.abs(anterior) * 100).toFixed(1);
@@ -1200,34 +1228,6 @@ function buildContext() {
 
     // Resumo por mês
     const porMes = {};
-    // Parseia datas ISO "2026-05-15T00:00:00" ou "DD/MM/AAAA"
-    // Retorna {ano, mes, dia} como inteiros para evitar problemas de fuso horário
-    function parseDtParts(str) {
-      if (!str) return null;
-      if (str.includes('T') || /^\d{4}-/.test(str)) {
-        const p = str.split('T')[0].split('-');
-        if (p.length >= 3) return {ano:+p[0], mes:+p[1], dia:+p[2]};
-      }
-      const p = str.split(' ')[0].split('/');
-      if (p.length >= 3) return {ano:+p[2], mes:+p[1], dia:+p[0]};
-      return null;
-    }
-    function parseDt(str) {
-      const p = parseDtParts(str);
-      return p ? new Date(p.ano, p.mes-1, p.dia) : null;
-    }
-    function dtToChaveMes(str) {
-      const p = parseDtParts(str); if (!p) return null;
-      return p.ano + '-' + p.mes.toString().padStart(2,'0');
-    }
-    function dtToChaveDia(str) {
-      const p = parseDtParts(str); if (!p) return null;
-      return p.ano + '-' + p.mes.toString().padStart(2,'0') + '-' + p.dia.toString().padStart(2,'0');
-    }
-    function dtToDiaMes(str) {
-      const p = parseDtParts(str); if (!p) return null;
-      return p.dia.toString().padStart(2,'0') + '/' + p.mes.toString().padStart(2,'0') + '/' + p.ano;
-    }
     // Chave de hoje para comparação directa
     const hojeChave = _ano + '-' + _mes.toString().padStart(2,'0') + '-' + _dia.toString().padStart(2,'0');
     cachedPedidosDetalhe.forEach(r => {
