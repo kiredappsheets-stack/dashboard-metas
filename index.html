@@ -644,6 +644,29 @@ SUMMARIZECOLUMNS(
 ORDER BY COLECOES[COLECAO] ASC
 `;
 
+// Pedidos detalhados últimos 90 dias — para perguntas sobre períodos, hoje, semana, mês
+const DAX_PEDIDOS_DETALHE = `
+EVALUATE
+CALCULATETABLE(
+  SUMMARIZECOLUMNS(
+    PEDIDO[DATA],
+    PEDIDO[PEDIDO],
+    PEDIDO[REP],
+    PEDIDO[CLIENTE],
+    PEDIDO[MARCA],
+    PEDIDO[COLECAO],
+    PEDIDO[ESTADO],
+    PEDIDO[MUNICIPIO],
+    "FAT_LIQ",   SUM(PEDIDO[FAT_LIQ]),
+    "FAT_BRUTO", SUM(PEDIDO[FAT_TOTAL_BRUTO]),
+    "QTDE",      SUM(PEDIDO[QTDE_FAT]),
+    "DESCONTO",  SUM(PEDIDO[DESCONTO])
+  ),
+  PEDIDO[DATA] >= DATE(2024,1,1)
+)
+ORDER BY PEDIDO[DATA] DESC
+`;
+
 // Query para vendas — TODAS as coleções (para o chat)
 const DAX_VENDAS = `
 EVALUATE
@@ -912,7 +935,7 @@ async function loadDashboard() {
   renderLoading();
   try {
     const token = await getToken();
-    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes] = await Promise.all([
+    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes, pedidosDetalhe] = await Promise.all([
       runDaxQuery(token, DAX_QUERY, false),
       runDaxQuery(token, DAX_PEDIDOS, true),
       runDaxQuery(token, DAX_CLIENTES, true),
@@ -921,6 +944,7 @@ async function loadDashboard() {
       runDaxQuery(token, DAX_METAS_HIST, true),
       runDaxQuery(token, DAX_MARCAS, true),
       runDaxQuery(token, DAX_COLECOES, true),
+      runDaxQuery(token, DAX_PEDIDOS_DETALHE, true),
     ]);
     cachedData = data;
     cachedPedidos = pedidos;
@@ -930,6 +954,7 @@ async function loadDashboard() {
     cachedMetasHist = metasHist;
     cachedMarcas = marcas;
     cachedColecoes = colecoes;
+    cachedPedidosDetalhe = pedidosDetalhe;
     renderDashboard(data);
   } catch(e) {
     renderError(e.message);
@@ -963,6 +988,7 @@ let cachedVendas = null;
 let cachedMetasHist = null;
 let cachedMarcas = null;
 let cachedColecoes = null;
+let cachedPedidosDetalhe = null;
 let chatHistory = [];
 
 function toggleChat() {
@@ -1128,7 +1154,89 @@ function buildContext() {
     ctx += '\n';
   }
 
-  // ══ 7. CADASTRO DE CLIENTES ══
+  // ══ 7. PEDIDOS DETALHADOS (desde 2024) ══
+  if (cachedPedidosDetalhe && cachedPedidosDetalhe.length > 0) {
+    const gPd = (r,c) => r['PEDIDO['+c+']'] || r[c] || '';
+    const gMd = (r,c) => parseFloat(r['['+c+']'] || r[c] || 0) || 0;
+
+    ctx += '=== PEDIDOS DETALHADOS (desde Jan/2024) ===\n';
+    ctx += 'Use estes dados para responder perguntas sobre períodos específicos (hoje, semana, mês, ano).\n';
+    ctx += 'DATA está no formato DD/MM/AAAA. HOJE = ' + new Date().toLocaleDateString('pt-BR') + '\n\n';
+
+    // Resumo por mês
+    const porMes = {};
+    cachedPedidosDetalhe.forEach(r => {
+      const data = gPd(r,'DATA') || '';
+      const partes = data.split(' ')[0].split('/');
+      if (partes.length < 3) return;
+      const chave = partes[2] + '-' + partes[1]; // AAAA-MM
+      if (!porMes[chave]) porMes[chave] = { fat: 0, qtde: 0, pedidos: 0, bruto: 0, desconto: 0 };
+      porMes[chave].fat     += gMd(r,'FAT_LIQ');
+      porMes[chave].bruto   += gMd(r,'FAT_BRUTO');
+      porMes[chave].qtde    += gMd(r,'QTDE');
+      porMes[chave].desconto+= gMd(r,'DESCONTO');
+      porMes[chave].pedidos++;
+    });
+
+    ctx += '-- RESUMO MENSAL --\n';
+    Object.keys(porMes).sort().reverse().forEach(mes => {
+      const m = porMes[mes];
+      const [ano, mesNum] = mes.split('-');
+      const nomeMes = new Date(ano, mesNum-1).toLocaleString('pt-BR',{month:'long',year:'numeric'});
+      ctx += `${nomeMes}: Fat.líq R$${Math.round(m.fat).toLocaleString('pt-BR')} | Fat.bruto R$${Math.round(m.bruto).toLocaleString('pt-BR')} | Desconto R$${Math.round(m.desconto).toLocaleString('pt-BR')} | ${Math.round(m.qtde)} peças | ${m.pedidos} pedidos\n`;
+    });
+    ctx += '\n';
+
+    // Resumo por dia (últimos 30 dias)
+    const hoje = new Date();
+    const limite = new Date(hoje); limite.setDate(hoje.getDate() - 30);
+    const porDia = {};
+    cachedPedidosDetalhe.forEach(r => {
+      const data = gPd(r,'DATA') || '';
+      const partes = data.split(' ')[0].split('/');
+      if (partes.length < 3) return;
+      const dt = new Date(partes[2], partes[1]-1, partes[0]);
+      if (dt < limite) return;
+      const chave = partes[2]+'-'+partes[1]+'-'+partes[0];
+      if (!porDia[chave]) porDia[chave] = { fat:0, qtde:0, pedidos:0, bruto:0, reps:new Set(), clientes:new Set() };
+      porDia[chave].fat     += gMd(r,'FAT_LIQ');
+      porDia[chave].bruto   += gMd(r,'FAT_BRUTO');
+      porDia[chave].qtde    += gMd(r,'QTDE');
+      porDia[chave].pedidos++;
+      if (gPd(r,'REP'))     porDia[chave].reps.add(gPd(r,'REP'));
+      if (gPd(r,'CLIENTE')) porDia[chave].clientes.add(gPd(r,'CLIENTE'));
+    });
+
+    ctx += '-- PEDIDOS POR DIA (últimos 30 dias) --\n';
+    Object.keys(porDia).sort().reverse().forEach(dia => {
+      const d = porDia[dia];
+      const [ano,mes,diaNum] = dia.split('-');
+      const dtFmt = diaNum+'/'+mes+'/'+ano;
+      const ehHoje = dtFmt === hoje.toLocaleDateString('pt-BR') ? ' ← HOJE' : '';
+      ctx += `${dtFmt}${ehHoje}: Fat.líq R$${Math.round(d.fat).toLocaleString('pt-BR')} | Fat.bruto R$${Math.round(d.bruto).toLocaleString('pt-BR')} | ${Math.round(d.qtde)} peças | ${d.pedidos} pedidos | ${d.reps.size} reps | ${d.clientes.size} clientes\n`;
+    });
+    ctx += '\n';
+
+    // Pedidos individuais dos últimos 7 dias
+    const limite7 = new Date(hoje); limite7.setDate(hoje.getDate() - 7);
+    const recentes = cachedPedidosDetalhe.filter(r => {
+      const data = gPd(r,'DATA') || '';
+      const partes = data.split(' ')[0].split('/');
+      if (partes.length < 3) return false;
+      return new Date(partes[2], partes[1]-1, partes[0]) >= limite7;
+    });
+
+    if (recentes.length > 0) {
+      ctx += '-- PEDIDOS INDIVIDUAIS (últimos 7 dias) --\n';
+      recentes.forEach(r => {
+        const data = (gPd(r,'DATA')||'').split(' ')[0];
+        ctx += `${data} | Ped: ${gPd(r,'PEDIDO')} | REP: ${gPd(r,'REP')} | CLIENTE: ${gPd(r,'CLIENTE')} | MARCA: ${gPd(r,'MARCA')} | ${gPd(r,'COLECAO')} | Fat.líq: R$${Math.round(gMd(r,'FAT_LIQ')).toLocaleString('pt-BR')} | Fat.bruto: R$${Math.round(gMd(r,'FAT_BRUTO')).toLocaleString('pt-BR')} | Desconto: R$${Math.round(gMd(r,'DESCONTO')).toLocaleString('pt-BR')} | ${Math.round(gMd(r,'QTDE'))} peças | ${gPd(r,'MUNICIPIO')}-${gPd(r,'ESTADO')}\n`;
+      });
+      ctx += '\n';
+    }
+  }
+
+  // ══ 8. CADASTRO DE CLIENTES ══
   if (cachedClientes && cachedClientes.length > 0) {
     const ativos = cachedClientes.filter(c => gC(c,'ATIVO') === 'S');
     const estados = [...new Set(cachedClientes.map(c=>gC(c,'ESTADO')).filter(Boolean))];
