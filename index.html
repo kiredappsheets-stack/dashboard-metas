@@ -1188,23 +1188,42 @@ function buildContext() {
 
     // Resumo por mês
     const porMes = {};
-    // formato da data: "DD/MM/AAAA 00:00:00"
+    // formato da data: "2026-05-15T00:00:00" (ISO)
     function parseDt(str) {
-      const p = (str||'').split(' ')[0].split('/');
-      if (p.length < 3) return null;
-      return new Date(parseInt(p[2]), parseInt(p[1])-1, parseInt(p[0]));
+      if (!str) return null;
+      // suporta "2026-05-15T00:00:00" e "DD/MM/AAAA 00:00:00"
+      if (str.includes('T') || (str.indexOf('-') < str.indexOf('/'))) {
+        const d = str.split('T')[0].split('-');
+        if (d.length >= 3) return new Date(parseInt(d[0]), parseInt(d[1])-1, parseInt(d[2]));
+      }
+      const d = str.split(' ')[0].split('/');
+      if (d.length >= 3) return new Date(parseInt(d[2]), parseInt(d[1])-1, parseInt(d[0]));
+      return null;
+    }
+    function dtToChaveMes(str) {
+      const dt = parseDt(str); if (!dt) return null;
+      return dt.getFullYear() + '-' + (dt.getMonth()+1).toString().padStart(2,'0');
+    }
+    function dtToChaveDia(str) {
+      const dt = parseDt(str); if (!dt) return null;
+      return dt.getFullYear() + '-' + (dt.getMonth()+1).toString().padStart(2,'0') + '-' + dt.getDate().toString().padStart(2,'0');
+    }
+    function dtToDiaMes(str) {
+      const dt = parseDt(str); if (!dt) return null;
+      return dt.getDate().toString().padStart(2,'0') + '/' + (dt.getMonth()+1).toString().padStart(2,'0') + '/' + dt.getFullYear();
     }
     cachedPedidosDetalhe.forEach(r => {
       const data = gPd(r,'DATA') || '';
-      const partes = data.split(' ')[0].split('/');
-      if (partes.length < 3) return;
-      const chave = partes[2] + '-' + partes[1]; // AAAA-MM
-      if (!porMes[chave]) porMes[chave] = { fat: 0, qtde: 0, pedidos: 0, bruto: 0, desconto: 0 };
-      porMes[chave].fat     += gMd(r,'FAT_LIQ');
-      porMes[chave].bruto   += gMd(r,'FAT_BRUTO');
-      porMes[chave].qtde    += gMd(r,'QTDE');
-      porMes[chave].desconto+= gMd(r,'DESCONTO');
-      porMes[chave].pedidos++;
+      const chave = dtToChaveMes(data);
+      if (!chave) return;
+      const [ano, mes] = chave.split('-');
+      const chaveMes = chave; // AAAA-MM
+      if (!porMes[chaveMes]) porMes[chaveMes] = { fat: 0, qtde: 0, pedidos: 0, bruto: 0, desconto: 0 };
+      porMes[chaveMes].fat     += gMd(r,'FAT_LIQ');
+      porMes[chaveMes].bruto   += gMd(r,'FAT_BRUTO');
+      porMes[chaveMes].qtde    += gMd(r,'QTDE');
+      porMes[chaveMes].desconto+= gMd(r,'DESCONTO');
+      porMes[chaveMes].pedidos++;
     });
 
     ctx += '-- RESUMO MENSAL (desde Jan/2024) --\n';
@@ -1226,11 +1245,10 @@ function buildContext() {
     const porDia = {};
     cachedPedidosDetalhe.forEach(r => {
       const data = gPd(r,'DATA') || '';
-      const partes = data.split(' ')[0].split('/');
-      if (partes.length < 3) return;
-      const dt = new Date(parseInt(partes[2]), parseInt(partes[1])-1, parseInt(partes[0]));
-      if (dt < limite) return;
-      const chave = partes[2]+'-'+partes[1]+'-'+partes[0];
+      const dt = parseDt(data);
+      if (!dt || dt < limite) return;
+      const chave = dtToChaveDia(data);
+      if (!chave) return;
       if (!porDia[chave]) porDia[chave] = { fat:0, qtde:0, pedidos:0, bruto:0, desconto:0, reps:new Set(), clientes:new Set() };
       porDia[chave].fat     += gMd(r,'FAT_LIQ');
       porDia[chave].bruto   += gMd(r,'FAT_BRUTO');
@@ -1246,7 +1264,7 @@ function buildContext() {
     Object.keys(porDia).sort().reverse().forEach(dia => {
       const d = porDia[dia];
       const [ano,mes,diaNum] = dia.split('-');
-      const dtFmt = diaNum+'/'+mes+'/'+ano;
+      const dtFmt = diaNum.padStart(2,'0')+'/'+mes.padStart(2,'0')+'/'+ano;
       const ehHoje = dtFmt === hojeStr ? ' ← HOJE' : '';
       ctx += dtFmt + ehHoje + ': Fat.líq R$' + Math.round(d.fat).toLocaleString('pt-BR') + ' | Fat.bruto R$' + Math.round(d.bruto).toLocaleString('pt-BR') + ' | Desconto R$' + Math.round(d.desconto).toLocaleString('pt-BR') + ' | ' + Math.round(d.qtde) + ' peças | ' + d.pedidos + ' pedidos | ' + d.reps.size + ' reps | ' + d.clientes.size + ' clientes\n';
     });
@@ -1255,17 +1273,15 @@ function buildContext() {
     // Pedidos individuais dos últimos 7 dias
     const limite7 = new Date(hoje); limite7.setDate(hoje.getDate() - 7);
     const recentes = cachedPedidosDetalhe.filter(r => {
-      const partes = (gPd(r,'DATA')||'').split(' ')[0].split('/');
-      if (partes.length < 3) return false;
-      const dt = new Date(parseInt(partes[2]), parseInt(partes[1])-1, parseInt(partes[0]));
-      return dt >= limite7;
+      const dt = parseDt(gPd(r,'DATA'));
+      return dt && dt >= limite7;
     });
 
     if (recentes.length > 0) {
       ctx += '-- PEDIDOS INDIVIDUAIS (últimos 7 dias) --\n';
       recentes.forEach(r => {
-        const data = (gPd(r,'DATA')||'').split(' ')[0];
-        ctx += `${data} | Ped: ${gPd(r,'PEDIDO')} | REP: ${gPd(r,'REP')} | CLIENTE: ${gPd(r,'CLIENTE')} | MARCA: ${gPd(r,'MARCA')} | ${gPd(r,'COLECAO')} | Fat.líq: R$${Math.round(gMd(r,'FAT_LIQ')).toLocaleString('pt-BR')} | Fat.bruto: R$${Math.round(gMd(r,'FAT_BRUTO')).toLocaleString('pt-BR')} | Desconto: R$${Math.round(gMd(r,'DESCONTO')).toLocaleString('pt-BR')} | ${Math.round(gMd(r,'QTDE'))} peças | ${gPd(r,'MUNICIPIO')}-${gPd(r,'ESTADO')}\n`;
+        const dtFmt = dtToDiaMes(gPd(r,'DATA')) || gPd(r,'DATA');
+        ctx += dtFmt + ' | Ped: ' + gPd(r,'PEDIDO') + ' | REP: ' + gPd(r,'REP') + ' | CLIENTE: ' + gPd(r,'CLIENTE') + ' | MARCA: ' + gPd(r,'MARCA') + ' | ' + gPd(r,'COLECAO') + ' | Fat.líq: R$' + Math.round(gMd(r,'FAT_LIQ')).toLocaleString('pt-BR') + ' | Fat.bruto: R$' + Math.round(gMd(r,'FAT_BRUTO')).toLocaleString('pt-BR') + ' | Desconto: R$' + Math.round(gMd(r,'DESCONTO')).toLocaleString('pt-BR') + ' | ' + Math.round(gMd(r,'QTDE')) + ' peças | ' + gPd(r,'MUNICIPIO') + '-' + gPd(r,'ESTADO') + '\n';
       });
       ctx += '\n';
     }
