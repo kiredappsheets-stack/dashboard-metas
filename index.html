@@ -959,16 +959,15 @@ async function loadDashboard() {
     cachedColecoes = colecoes;
     cachedPedidosDetalhe = pedidosDetalhe;
     console.log('Dados carregados:', {
-      metas: data.length,
-      pedidos: pedidos.length,
-      clientes: clientes.length,
-      reps: reps.length,
-      vendas: vendas.length,
-      metasHist: metasHist.length,
-      marcas: marcas.length,
-      colecoes: colecoes.length,
-      pedidosDetalhe: pedidosDetalhe.length
+      metas: data.length, pedidos: pedidos.length, clientes: clientes.length,
+      reps: reps.length, vendas: vendas.length, metasHist: metasHist.length,
+      marcas: marcas.length, colecoes: colecoes.length, pedidosDetalhe: pedidosDetalhe.length
     });
+    // Debug: mostrar primeiras 3 datas dos pedidos detalhados
+    if (pedidosDetalhe.length > 0) {
+      const sample = pedidosDetalhe.slice(0,3).map(r => r['PEDIDO[DATA]'] || r['DATA'] || JSON.stringify(r).substring(0,80));
+      console.log('Primeiras datas pedidosDetalhe:', sample);
+    }
     renderDashboard(data);
   } catch(e) {
     renderError(e.message);
