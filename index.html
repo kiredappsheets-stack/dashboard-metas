@@ -644,7 +644,13 @@ SUMMARIZECOLUMNS(
 ORDER BY COLECOES[COLECAO] ASC
 `;
 
-// Pedidos detalhados últimos 90 dias — para perguntas sobre períodos, hoje, semana, mês
+// Pedidos detalhados — data dinâmica calculada em JS
+const _hoje = new Date();
+const _ano = _hoje.getFullYear();
+const _mes = _hoje.getMonth() + 1;
+const _dia = _hoje.getDate();
+const _anoInicio = _ano - 2; // 2 anos atrás
+
 const DAX_PEDIDOS_DETALHE = `
 EVALUATE
 CALCULATETABLE(
@@ -662,7 +668,7 @@ CALCULATETABLE(
     "QTDE",      SUM(PEDIDO[QTDE_FAT]),
     "DESCONTO",  SUM(PEDIDO[DESCONTO])
   ),
-  PEDIDO[DATA] >= DATE(2024,1,1)
+  PEDIDO[DATA] >= DATE(${_anoInicio},1,1)
 )
 ORDER BY PEDIDO[DATA] DESC
 `;
@@ -963,10 +969,14 @@ async function loadDashboard() {
       reps: reps.length, vendas: vendas.length, metasHist: metasHist.length,
       marcas: marcas.length, colecoes: colecoes.length, pedidosDetalhe: pedidosDetalhe.length
     });
-    // Debug: mostrar primeiras 3 datas dos pedidos detalhados
+    // Debug: mostrar primeiras 3 e últimas 3 datas
     if (pedidosDetalhe.length > 0) {
-      const sample = pedidosDetalhe.slice(0,3).map(r => r['PEDIDO[DATA]'] || r['DATA'] || JSON.stringify(r).substring(0,80));
-      console.log('Primeiras datas pedidosDetalhe:', sample);
+      const keys = Object.keys(pedidosDetalhe[0]);
+      console.log('Chaves do pedidosDetalhe[0]:', keys);
+      const dataKey = keys.find(k => k.includes('DATA')) || keys[0];
+      const sample = pedidosDetalhe.slice(0,3).map(r => r[dataKey]);
+      console.log('Primeiras datas:', sample);
+      console.log('Data de hoje calculada:', _dia+'/'+_mes+'/'+_ano);
     }
     renderDashboard(data);
   } catch(e) {
