@@ -1165,6 +1165,12 @@ function buildContext() {
 
     // Resumo por mês
     const porMes = {};
+    // formato da data: "DD/MM/AAAA 00:00:00"
+    function parseDt(str) {
+      const p = (str||'').split(' ')[0].split('/');
+      if (p.length < 3) return null;
+      return new Date(parseInt(p[2]), parseInt(p[1])-1, parseInt(p[0]));
+    }
     cachedPedidosDetalhe.forEach(r => {
       const data = gPd(r,'DATA') || '';
       const partes = data.split(' ')[0].split('/');
@@ -1178,52 +1184,58 @@ function buildContext() {
       porMes[chave].pedidos++;
     });
 
-    ctx += '-- RESUMO MENSAL --\n';
+    ctx += '-- RESUMO MENSAL (desde Jan/2024) --\n';
     Object.keys(porMes).sort().reverse().forEach(mes => {
       const m = porMes[mes];
       const [ano, mesNum] = mes.split('-');
-      const nomeMes = new Date(ano, mesNum-1).toLocaleString('pt-BR',{month:'long',year:'numeric'});
+      const nomeMes = new Date(parseInt(ano), parseInt(mesNum)-1).toLocaleString('pt-BR',{month:'long',year:'numeric'});
       ctx += `${nomeMes}: Fat.líq R$${Math.round(m.fat).toLocaleString('pt-BR')} | Fat.bruto R$${Math.round(m.bruto).toLocaleString('pt-BR')} | Desconto R$${Math.round(m.desconto).toLocaleString('pt-BR')} | ${Math.round(m.qtde)} peças | ${m.pedidos} pedidos\n`;
     });
     ctx += '\n';
 
     // Resumo por dia (últimos 30 dias)
     const hoje = new Date();
+    hoje.setHours(0,0,0,0);
+    const hojeStr = hoje.getDate().toString().padStart(2,'0') + '/' +
+                    (hoje.getMonth()+1).toString().padStart(2,'0') + '/' +
+                    hoje.getFullYear();
     const limite = new Date(hoje); limite.setDate(hoje.getDate() - 30);
     const porDia = {};
     cachedPedidosDetalhe.forEach(r => {
       const data = gPd(r,'DATA') || '';
       const partes = data.split(' ')[0].split('/');
       if (partes.length < 3) return;
-      const dt = new Date(partes[2], partes[1]-1, partes[0]);
+      const dt = new Date(parseInt(partes[2]), parseInt(partes[1])-1, parseInt(partes[0]));
       if (dt < limite) return;
       const chave = partes[2]+'-'+partes[1]+'-'+partes[0];
-      if (!porDia[chave]) porDia[chave] = { fat:0, qtde:0, pedidos:0, bruto:0, reps:new Set(), clientes:new Set() };
+      if (!porDia[chave]) porDia[chave] = { fat:0, qtde:0, pedidos:0, bruto:0, desconto:0, reps:new Set(), clientes:new Set() };
       porDia[chave].fat     += gMd(r,'FAT_LIQ');
       porDia[chave].bruto   += gMd(r,'FAT_BRUTO');
       porDia[chave].qtde    += gMd(r,'QTDE');
+      porDia[chave].desconto+= gMd(r,'DESCONTO');
       porDia[chave].pedidos++;
       if (gPd(r,'REP'))     porDia[chave].reps.add(gPd(r,'REP'));
       if (gPd(r,'CLIENTE')) porDia[chave].clientes.add(gPd(r,'CLIENTE'));
     });
 
     ctx += '-- PEDIDOS POR DIA (últimos 30 dias) --\n';
+    ctx += 'HOJE É: ' + hojeStr + '\n';
     Object.keys(porDia).sort().reverse().forEach(dia => {
       const d = porDia[dia];
       const [ano,mes,diaNum] = dia.split('-');
       const dtFmt = diaNum+'/'+mes+'/'+ano;
-      const ehHoje = dtFmt === hoje.toLocaleDateString('pt-BR') ? ' ← HOJE' : '';
-      ctx += `${dtFmt}${ehHoje}: Fat.líq R$${Math.round(d.fat).toLocaleString('pt-BR')} | Fat.bruto R$${Math.round(d.bruto).toLocaleString('pt-BR')} | ${Math.round(d.qtde)} peças | ${d.pedidos} pedidos | ${d.reps.size} reps | ${d.clientes.size} clientes\n`;
+      const ehHoje = dtFmt === hojeStr ? ' ← HOJE' : '';
+      ctx += dtFmt + ehHoje + ': Fat.líq R$' + Math.round(d.fat).toLocaleString('pt-BR') + ' | Fat.bruto R$' + Math.round(d.bruto).toLocaleString('pt-BR') + ' | Desconto R$' + Math.round(d.desconto).toLocaleString('pt-BR') + ' | ' + Math.round(d.qtde) + ' peças | ' + d.pedidos + ' pedidos | ' + d.reps.size + ' reps | ' + d.clientes.size + ' clientes\n';
     });
     ctx += '\n';
 
     // Pedidos individuais dos últimos 7 dias
     const limite7 = new Date(hoje); limite7.setDate(hoje.getDate() - 7);
     const recentes = cachedPedidosDetalhe.filter(r => {
-      const data = gPd(r,'DATA') || '';
-      const partes = data.split(' ')[0].split('/');
+      const partes = (gPd(r,'DATA')||'').split(' ')[0].split('/');
       if (partes.length < 3) return false;
-      return new Date(partes[2], partes[1]-1, partes[0]) >= limite7;
+      const dt = new Date(parseInt(partes[2]), parseInt(partes[1])-1, parseInt(partes[0]));
+      return dt >= limite7;
     });
 
     if (recentes.length > 0) {
