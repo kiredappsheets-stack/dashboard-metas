@@ -969,14 +969,26 @@ async function loadDashboard() {
       reps: reps.length, vendas: vendas.length, metasHist: metasHist.length,
       marcas: marcas.length, colecoes: colecoes.length, pedidosDetalhe: pedidosDetalhe.length
     });
-    // Debug: mostrar primeiras 3 e últimas 3 datas
+    // Debug completo
     if (pedidosDetalhe.length > 0) {
       const keys = Object.keys(pedidosDetalhe[0]);
-      console.log('Chaves do pedidosDetalhe[0]:', keys);
       const dataKey = keys.find(k => k.includes('DATA')) || keys[0];
-      const sample = pedidosDetalhe.slice(0,3).map(r => r[dataKey]);
-      console.log('Primeiras datas:', sample);
-      console.log('Data de hoje calculada:', _dia+'/'+_mes+'/'+_ano);
+      const primeiras = pedidosDetalhe.slice(0,3).map(r => r[dataKey]);
+      console.log('Formato das datas:', primeiras);
+      console.log('Hoje calculado:', _dia+'/'+(_mes).toString().padStart(2,'0')+'/'+_ano);
+      // Testar parseDt
+      const testDt = parseDt ? parseDt(primeiras[0]) : 'parseDt não disponível';
+      console.log('parseDt teste:', testDt);
+      // Contar pedidos de hoje
+      const hojeTest = new Date(_ano, _mes-1, _dia);
+      hojeTest.setHours(0,0,0,0);
+      const pedHoje = pedidosDetalhe.filter(r => {
+        const dt = parseDt ? parseDt(r[dataKey]) : null;
+        if (!dt) return false;
+        dt.setHours(0,0,0,0);
+        return dt.getTime() === hojeTest.getTime();
+      });
+      console.log('Pedidos de hoje encontrados:', pedHoje.length, pedHoje.slice(0,2).map(r => r[dataKey]));
     }
     renderDashboard(data);
   } catch(e) {
