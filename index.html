@@ -415,25 +415,27 @@
   .chat-share-row {
     display: flex !important;
     align-items: center;
-    justify-content: flex-end;
-    margin-top: 2px;
-    padding: 0 2px;
+    justify-content: space-between;
+    margin-top: 4px;
+    padding: 0 4px;
   }
   .chat-share-btn {
     display: inline-flex !important;
     align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: none;
+    gap: 5px;
+    background: #25D366;
     border: none;
     cursor: pointer;
-    color: #8696A0;
-    border-radius: 50%;
-    transition: background .15s, color .15s;
-    padding: 0;
+    color: #fff;
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font);
+    transition: background .15s;
+    box-shadow: 0 1px 4px rgba(37,211,102,.4);
   }
-  .chat-share-btn:hover { background: rgba(0,0,0,.08); color: #25D366; }
+  .chat-share-btn:hover { background: #1da851; }
   .chat-share-btn:hover { background: rgba(37,211,102,.2); }
   .chat-share-btn svg { flex-shrink: 0; }
   .msg-title {
@@ -1359,7 +1361,7 @@ function addMsg(text, role) {
     const shareBtn = document.createElement('button');
     shareBtn.className = 'chat-share-btn';
     shareBtn.title = 'Encaminhar no WhatsApp';
-    shareBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg>';
+    shareBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="white"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg> Encaminhar';
     shareBtn.addEventListener('click', () => shareOnWhatsApp(text));
     shareRow.appendChild(timeSpan);
     shareRow.appendChild(shareBtn);
