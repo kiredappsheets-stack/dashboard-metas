@@ -601,10 +601,13 @@ EVALUATE
 SUMMARIZECOLUMNS(
   PEDIDO[COLECAO],
   PEDIDO[REP],
-  "FAT_LIQ",   SUM(PEDIDO[FAT_LIQ]),
-  "FAT_BRUTO", SUM(PEDIDO[FAT_TOTAL_BRUTO]),
-  "QTDE",      SUM(PEDIDO[QTDE_FAT]),
-  "DESCONTO",  SUM(PEDIDO[DESCONTO])
+  "VAL_VENDA",     SUM(PEDIDO[VAL_DESC_EMPENHO]),
+  "FAT_LIQ",       SUM(PEDIDO[FAT_LIQ]),
+  "FAT_BRUTO",     SUM(PEDIDO[FAT_TOTAL_BRUTO]),
+  "QTDE_PEDIDA",   SUM(PEDIDO[QTDE_ORIG]),
+  "QTDE_FATURADA", SUM(PEDIDO[QTDE_FAT]),
+  "QTDE_CANC",     SUM(PEDIDO[QTDE_CANC]),
+  "DESCONTO",      SUM(PEDIDO[DESCONTO])
 )
 ORDER BY PEDIDO[COLECAO] DESC
 `;
@@ -637,6 +640,28 @@ SUMMARIZECOLUMNS(
 ORDER BY CLIENTES[NOME] ASC
 `;
 
+// Produtos/SKU por cliente e coleção
+const DAX_PRODUTOS = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  PEDIDO[COLECAO],
+  PEDIDO[CLIENTE],
+  PEDIDO[REP],
+  PEDIDO[MARCA],
+  PEDIDO[PRODUTO],
+  PEDIDO[CODIGO],
+  "VAL_VENDA",     SUM(PEDIDO[VAL_DESC_EMPENHO]),
+  "FAT_LIQ",       SUM(PEDIDO[FAT_LIQ]),
+  "QTDE_PEDIDA",   SUM(PEDIDO[QTDE_ORIG]),
+  "QTDE_FATURADA", SUM(PEDIDO[QTDE_FAT]),
+  "QTDE_CANC",     SUM(PEDIDO[QTDE_CANC]),
+  "PRECO_UNIT",    AVERAGE(PEDIDO[PRECO]),
+  "VAL_DESC",      SUM(PEDIDO[DESC]),
+  "PERC_DESC",     AVERAGE(PEDIDO[DESCONTO])
+)
+ORDER BY PEDIDO[COLECAO] DESC, PEDIDO[CLIENTE] ASC
+`;
+
 // Query para representantes
 const DAX_REPRESENTANTES = `
 EVALUATE
@@ -653,10 +678,41 @@ EVALUATE
 SUMMARIZECOLUMNS(
   PEDIDO[MARCA],
   PEDIDO[COLECAO],
-  "FAT_LIQ", SUM(PEDIDO[FAT_LIQ]),
-  "QTDE",    SUM(PEDIDO[QTDE_FAT])
+  "VAL_VENDA",     SUM(PEDIDO[VAL_DESC_EMPENHO]),
+  "FAT_LIQ",       SUM(PEDIDO[FAT_LIQ]),
+  "QTDE_PEDIDA",   SUM(PEDIDO[QTDE_ORIG]),
+  "QTDE_FATURADA", SUM(PEDIDO[QTDE_FAT]),
+  "QTDE_CANC",     SUM(PEDIDO[QTDE_CANC])
 )
 ORDER BY PEDIDO[MARCA] ASC, PEDIDO[COLECAO] ASC
+`;
+
+// KPIs das coleções atuais para cards do dashboard
+const DAX_KPIS_COL_ATUAL = `
+EVALUATE
+ROW(
+  "ClientesColAtual",
+    CALCULATE(DISTINCTCOUNT(PEDIDO[CLIENTE]),
+      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")),
+  "PecasVendidas",
+    CALCULATE(SUM(PEDIDO[QTDE_ORIG]),
+      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")),
+  "PecasFaturadas",
+    CALCULATE(SUM(PEDIDO[QTDE_FAT]),
+      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")),
+  "FatLiq",
+    CALCULATE(SUM(PEDIDO[FAT_LIQ]),
+      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")),
+  "ValVenda",
+    CALCULATE(SUM(PEDIDO[VAL_DESC_EMPENHO]),
+      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")),
+  "ClientesSemCompraColAtual",
+    VAR colsAtuais = CALCULATETABLE(VALUES(PEDIDO[CLIENTE]),
+      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL"))
+    VAR clientesUltimoAno = CALCULATETABLE(VALUES(PEDIDO[CLIENTE]),
+      PEDIDO[DATA] >= DATE(2025,1,1))
+    RETURN COUNTROWS(EXCEPT(clientesUltimoAno, colsAtuais))
+)
 `;
 
 // Coleções com datas — ordem cronológica
@@ -691,10 +747,14 @@ CALCULATETABLE(
     PEDIDO[COLECAO],
     PEDIDO[ESTADO],
     PEDIDO[MUNICIPIO],
-    "FAT_LIQ",   SUM(PEDIDO[FAT_LIQ]),
-    "FAT_BRUTO", SUM(PEDIDO[FAT_TOTAL_BRUTO]),
-    "QTDE",      SUM(PEDIDO[QTDE_FAT]),
-    "DESCONTO",  SUM(PEDIDO[DESCONTO])
+    "VAL_VENDA",     SUM(PEDIDO[VAL_DESC_EMPENHO]),
+    "FAT_LIQ",       SUM(PEDIDO[FAT_LIQ]),
+    "FAT_BRUTO",     SUM(PEDIDO[FAT_TOTAL_BRUTO]),
+    "QTDE_PEDIDA",   SUM(PEDIDO[QTDE_ORIG]),
+    "QTDE_FATURADA", SUM(PEDIDO[QTDE_FAT]),
+    "QTDE_CANC",     SUM(PEDIDO[QTDE_CANC]),
+    "VAL_DESC",      SUM(PEDIDO[DESC]),
+    "PERC_DESC",     AVERAGE(PEDIDO[DESCONTO])
   ),
   PEDIDO[DATA] >= DATE(${_anoInicio},1,1)
 )
@@ -710,8 +770,11 @@ SUMMARIZECOLUMNS(
   PEDIDO[CLIENTE],
   PEDIDO[ESTADO],
   PEDIDO[MUNICIPIO],
-  "FAT_LIQ", SUM(PEDIDO[FAT_LIQ]),
-  "QTDE",    SUM(PEDIDO[QTDE_FAT])
+  "VAL_VENDA",     SUM(PEDIDO[VAL_DESC_EMPENHO]),
+  "FAT_LIQ",       SUM(PEDIDO[FAT_LIQ]),
+  "QTDE_PEDIDA",   SUM(PEDIDO[QTDE_ORIG]),
+  "QTDE_FATURADA", SUM(PEDIDO[QTDE_FAT]),
+  "QTDE_CANC",     SUM(PEDIDO[QTDE_CANC])
 )
 ORDER BY PEDIDO[COLECAO] DESC
 `;
@@ -862,8 +925,17 @@ function renderDashboard(data) {
   const pctGeral   = totalMeta > 0 ? totalVenda / totalMeta : 0;
   const atingiram  = data.filter(d => d.pct !== null && !isNaN(d.pct) && d.pct >= 1).length;
 
+  // KPIs coleções atuais
+  const kg = (col) => cachedKpis ? (parseFloat(cachedKpis['['+col+']'] || cachedKpis[col] || 0) || 0) : 0;
+  const kClisAtual   = kg('ClientesColAtual');
+  const kPecasVend   = kg('PecasVendidas');
+  const kPecasFat    = kg('PecasFaturadas');
+  const kValVenda    = kg('ValVenda');
+  const kFatLiq      = kg('FatLiq');
+  const kClisSemComp = kg('ClientesSemCompraColAtual');
+
   let html = `
-    <div class="section-label">Resumo geral</div>
+    <div class="section-label">Resumo geral — metas</div>
     <div class="summary-global">
       <div class="kpi-card">
         <div class="lbl">Meta total</div>
@@ -871,12 +943,12 @@ function renderDashboard(data) {
         <div class="sub">${data.length} representantes</div>
       </div>
       <div class="kpi-card">
-        <div class="lbl">Venda total</div>
-        <div class="val">${fmtR(totalVenda)}</div>
-        <div class="sub">realizada</div>
+        <div class="lbl">Vendido coleções atuais</div>
+        <div class="val">${fmtR(kValVenda || totalVenda)}</div>
+        <div class="sub">com desconto aplicado</div>
       </div>
       <div class="kpi-card">
-        <div class="lbl">% geral</div>
+        <div class="lbl">% meta geral</div>
         <div class="val" style="color:${barColor(pctGeral)}">${(pctGeral * 100).toFixed(1)}%</div>
         <div class="sub">da meta</div>
       </div>
@@ -886,9 +958,38 @@ function renderDashboard(data) {
         <div class="sub">representantes</div>
       </div>
       <div class="kpi-card">
-        <div class="lbl">Coleções</div>
+        <div class="lbl">Coleções ativas</div>
         <div class="val">${colecoes.length}</div>
-        <div class="sub">ativas</div>
+        <div class="sub">no dashboard</div>
+      </div>
+    </div>
+
+    <div class="section-label">Coleções atuais — operacional</div>
+    <div class="summary-global">
+      <div class="kpi-card" style="border-left:3px solid #378ADD;">
+        <div class="lbl">👥 Clientes atendidos</div>
+        <div class="val" style="color:#378ADD">${Math.round(kClisAtual).toLocaleString('pt-BR')}</div>
+        <div class="sub">compraram nas coleções atuais</div>
+      </div>
+      <div class="kpi-card" style="border-left:3px solid #E24B4A;">
+        <div class="lbl">⚠️ Clientes inativos</div>
+        <div class="val" style="color:#E24B4A">${Math.round(kClisSemComp).toLocaleString('pt-BR')}</div>
+        <div class="sub">compraram em 2025 mas não nas atuais</div>
+      </div>
+      <div class="kpi-card" style="border-left:3px solid #EF9F27;">
+        <div class="lbl">📦 Peças vendidas</div>
+        <div class="val" style="color:#EF9F27">${Math.round(kPecasVend).toLocaleString('pt-BR')}</div>
+        <div class="sub">pedidas nas coleções atuais</div>
+      </div>
+      <div class="kpi-card" style="border-left:3px solid #1D9E75;">
+        <div class="lbl">✅ Peças faturadas</div>
+        <div class="val" style="color:#1D9E75">${Math.round(kPecasFat).toLocaleString('pt-BR')}</div>
+        <div class="sub">expedidas nas coleções atuais</div>
+      </div>
+      <div class="kpi-card" style="border-left:3px solid #1D9E75;">
+        <div class="lbl">💰 Faturado líquido</div>
+        <div class="val" style="color:#1D9E75">${fmtR(kFatLiq)}</div>
+        <div class="sub">coleções atuais</div>
       </div>
     </div>
 
@@ -972,7 +1073,7 @@ async function loadDashboard() {
     // Cada query é independente — se uma falhar não afecta as outras
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes, pedidosDetalhe] = await Promise.all([
+    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes, pedidosDetalhe, produtos, kpis] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_PEDIDOS, true)),
       safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
@@ -982,6 +1083,8 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_MARCAS, true)),
       safe(() => runDaxQuery(token, DAX_COLECOES, true)),
       safe(() => runDaxQuery(token, DAX_PEDIDOS_DETALHE, true)),
+      safe(() => runDaxQuery(token, DAX_PRODUTOS, true)),
+      safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
     ]);
     cachedData = data;
     cachedPedidos = pedidos;
@@ -992,10 +1095,13 @@ async function loadDashboard() {
     cachedMarcas = marcas;
     cachedColecoes = colecoes;
     cachedPedidosDetalhe = pedidosDetalhe;
+    cachedProdutos = produtos;
+    cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     console.log('Dados carregados:', {
       metas: data.length, pedidos: pedidos.length, clientes: clientes.length,
       reps: reps.length, vendas: vendas.length, metasHist: metasHist.length,
-      marcas: marcas.length, colecoes: colecoes.length, pedidosDetalhe: pedidosDetalhe.length
+      marcas: marcas.length, colecoes: colecoes.length,
+      pedidosDetalhe: pedidosDetalhe.length, produtos: produtos.length
     });
     // Debug completo
     if (pedidosDetalhe.length > 0) {
@@ -1052,6 +1158,8 @@ let cachedMetasHist = null;
 let cachedMarcas = null;
 let cachedColecoes = null;
 let cachedPedidosDetalhe = null;
+let cachedProdutos = null;
+let cachedKpis = null;
 let chatHistory = [];
 
 function toggleChat() {
@@ -1176,7 +1284,8 @@ function buildContext() {
         const fatAnterior = i > 0 ? gM(rows[i-1],'FAT_LIQ') : null;
         const cresc = fatAnterior !== null ? calcularCrescimento(fatAnterior, fat) : null;
         const crescStr = cresc !== null ? ` | Cresc.: ${cresc > 0 ? '+' : ''}${cresc}%` : '';
-        ctx += `  - ${gP(r,'COLECAO')}: R$${Math.round(fat).toLocaleString('pt-BR')} | ${Math.round(qtd)} peças${crescStr}\n`;
+        const qtdPed = gM(r,'QTDE_PEDIDA'); const qtdFat = gM(r,'QTDE_FATURADA'); const qtdCanc = gM(r,'QTDE_CANC');
+        ctx += `  - ${gP(r,'COLECAO')}: R$${Math.round(fat).toLocaleString('pt-BR')} | Ped.: ${Math.round(qtdPed)} pç | Fat.: ${Math.round(qtdFat)} pç | Canc.: ${Math.round(qtdCanc)} pç${crescStr}\n`;
       });
       ctx += '\n';
     });
@@ -1236,11 +1345,14 @@ function buildContext() {
       if (!chave) return;
       const [ano, mes] = chave.split('-');
       const chaveMes = chave; // AAAA-MM
-      if (!porMes[chaveMes]) porMes[chaveMes] = { fat: 0, qtde: 0, pedidos: 0, bruto: 0, desconto: 0 };
-      porMes[chaveMes].fat     += gMd(r,'FAT_LIQ');
-      porMes[chaveMes].bruto   += gMd(r,'FAT_BRUTO');
-      porMes[chaveMes].qtde    += gMd(r,'QTDE');
-      porMes[chaveMes].desconto+= gMd(r,'DESCONTO');
+      if (!porMes[chaveMes]) porMes[chaveMes] = { venda:0, fat:0, bruto:0, qtdePed:0, qtdeFat:0, qtdeCanc:0, desconto:0, pedidos:0 };
+      porMes[chaveMes].venda    += gMd(r,'VAL_VENDA');
+      porMes[chaveMes].fat      += gMd(r,'FAT_LIQ');
+      porMes[chaveMes].bruto    += gMd(r,'FAT_BRUTO');
+      porMes[chaveMes].qtdePed  += gMd(r,'QTDE_PEDIDA');
+      porMes[chaveMes].qtdeFat  += gMd(r,'QTDE_FATURADA');
+      porMes[chaveMes].qtdeCanc += gMd(r,'QTDE_CANC');
+      porMes[chaveMes].desconto += gMd(r,'DESCONTO');
       porMes[chaveMes].pedidos++;
     });
 
@@ -1249,7 +1361,7 @@ function buildContext() {
       const m = porMes[mes];
       const [ano, mesNum] = mes.split('-');
       const nomeMes = new Date(parseInt(ano), parseInt(mesNum)-1).toLocaleString('pt-BR',{month:'long',year:'numeric'});
-      ctx += `${nomeMes}: Fat.líq R$${Math.round(m.fat).toLocaleString('pt-BR')} | Fat.bruto R$${Math.round(m.bruto).toLocaleString('pt-BR')} | Desconto R$${Math.round(m.desconto).toLocaleString('pt-BR')} | ${Math.round(m.qtde)} peças | ${m.pedidos} pedidos\n`;
+      ctx += nomeMes + ': VENDIDO R$' + Math.round(m.venda).toLocaleString('pt-BR') + ' | FATURADO R$' + Math.round(m.fat).toLocaleString('pt-BR') + ' | Fat.bruto R$' + Math.round(m.bruto).toLocaleString('pt-BR') + ' | Desconto R$' + Math.round(m.desconto).toLocaleString('pt-BR') + ' | Peças pedidas: ' + Math.round(m.qtdePed) + ' | Peças faturadas: ' + Math.round(m.qtdeFat) + ' | Peças canceladas: ' + Math.round(m.qtdeCanc) + ' | ' + m.pedidos + ' pedidos\n';
     });
     ctx += '\n';
 
@@ -1264,11 +1376,14 @@ function buildContext() {
       if (!dt || dt < limite) return;
       const chave = dtToChaveDia(data);
       if (!chave) return;
-      if (!porDia[chave]) porDia[chave] = { fat:0, qtde:0, pedidos:0, bruto:0, desconto:0, reps:new Set(), clientes:new Set() };
-      porDia[chave].fat     += gMd(r,'FAT_LIQ');
-      porDia[chave].bruto   += gMd(r,'FAT_BRUTO');
-      porDia[chave].qtde    += gMd(r,'QTDE');
-      porDia[chave].desconto+= gMd(r,'DESCONTO');
+      if (!porDia[chave]) porDia[chave] = { venda:0, fat:0, bruto:0, qtdePed:0, qtdeFat:0, qtdeCanc:0, desconto:0, pedidos:0, reps:new Set(), clientes:new Set() };
+      porDia[chave].venda    += gMd(r,'VAL_VENDA');
+      porDia[chave].fat      += gMd(r,'FAT_LIQ');
+      porDia[chave].bruto    += gMd(r,'FAT_BRUTO');
+      porDia[chave].qtdePed  += gMd(r,'QTDE_PEDIDA');
+      porDia[chave].qtdeFat  += gMd(r,'QTDE_FATURADA');
+      porDia[chave].qtdeCanc += gMd(r,'QTDE_CANC');
+      porDia[chave].desconto += gMd(r,'DESCONTO');
       porDia[chave].pedidos++;
       if (gPd(r,'REP'))     porDia[chave].reps.add(gPd(r,'REP'));
       if (gPd(r,'CLIENTE')) porDia[chave].clientes.add(gPd(r,'CLIENTE'));
@@ -1281,7 +1396,7 @@ function buildContext() {
       const [ano,mes,diaNum] = dia.split('-');
       const dtFmt = diaNum.padStart(2,'0')+'/'+mes.padStart(2,'0')+'/'+ano;
       const ehHoje = dia === hojeChave ? ' ← HOJE' : '';
-      ctx += dtFmt + ehHoje + ': Fat.líq R$' + Math.round(d.fat).toLocaleString('pt-BR') + ' | Fat.bruto R$' + Math.round(d.bruto).toLocaleString('pt-BR') + ' | Desconto R$' + Math.round(d.desconto).toLocaleString('pt-BR') + ' | ' + Math.round(d.qtde) + ' peças | ' + d.pedidos + ' pedidos | ' + d.reps.size + ' reps | ' + d.clientes.size + ' clientes\n';
+      ctx += dtFmt + ehHoje + ': VENDIDO R$' + Math.round(d.venda).toLocaleString('pt-BR') + ' | FATURADO R$' + Math.round(d.fat).toLocaleString('pt-BR') + ' | Desconto R$' + Math.round(d.desconto).toLocaleString('pt-BR') + ' | Peças pedidas: ' + Math.round(d.qtdePed) + ' | Peças faturadas: ' + Math.round(d.qtdeFat) + ' | Peças canceladas: ' + Math.round(d.qtdeCanc) + ' | ' + d.pedidos + ' pedidos | ' + d.reps.size + ' reps | ' + d.clientes.size + ' clientes\n';
     });
     ctx += '\n';
 
@@ -1296,13 +1411,41 @@ function buildContext() {
       ctx += '-- PEDIDOS INDIVIDUAIS (últimos 7 dias) --\n';
       recentes.forEach(r => {
         const dtFmt = dtToDiaMes(gPd(r,'DATA')) || gPd(r,'DATA');
-        ctx += dtFmt + ' | Ped: ' + gPd(r,'PEDIDO') + ' | REP: ' + gPd(r,'REP') + ' | CLIENTE: ' + gPd(r,'CLIENTE') + ' | MARCA: ' + gPd(r,'MARCA') + ' | ' + gPd(r,'COLECAO') + ' | Fat.líq: R$' + Math.round(gMd(r,'FAT_LIQ')).toLocaleString('pt-BR') + ' | Fat.bruto: R$' + Math.round(gMd(r,'FAT_BRUTO')).toLocaleString('pt-BR') + ' | Desconto: R$' + Math.round(gMd(r,'DESCONTO')).toLocaleString('pt-BR') + ' | ' + Math.round(gMd(r,'QTDE')) + ' peças | ' + gPd(r,'MUNICIPIO') + '-' + gPd(r,'ESTADO') + '\n';
+        ctx += dtFmt + ' | Ped: ' + gPd(r,'PEDIDO') + ' | REP: ' + gPd(r,'REP') + ' | CLIENTE: ' + gPd(r,'CLIENTE') + ' | MARCA: ' + gPd(r,'MARCA') + ' | ' + gPd(r,'COLECAO') + ' | VENDIDO: R$' + Math.round(gMd(r,'VAL_VENDA')).toLocaleString('pt-BR') + ' | FATURADO: R$' + Math.round(gMd(r,'FAT_LIQ')).toLocaleString('pt-BR') + ' | Desconto: R$' + Math.round(gMd(r,'DESCONTO')).toLocaleString('pt-BR') + ' | Peças pedidas: ' + Math.round(gMd(r,'QTDE_PEDIDA')) + ' | Peças faturadas: ' + Math.round(gMd(r,'QTDE_FATURADA')) + ' | Peças canceladas: ' + Math.round(gMd(r,'QTDE_CANC')) + ' | ' + gPd(r,'MUNICIPIO') + '-' + gPd(r,'ESTADO') + '\n';
       });
       ctx += '\n';
     }
   }
 
-  // ══ 8. CADASTRO DE CLIENTES ══
+  // ══ 8. PRODUTOS/SKU POR CLIENTE E COLEÇÃO ══
+  if (cachedProdutos && cachedProdutos.length > 0) {
+    const gPr = (r,c) => r['PEDIDO['+c+']'] || r[c] || '';
+    const gMr = (r,c) => parseFloat(r['['+c+']'] || r[c] || 0) || 0;
+    ctx += '=== PRODUTOS/SKU POR CLIENTE E COLEÇÃO ===\n';
+    ctx += 'PRODUTO = código SKU. Permite detalhar o que cada cliente comprou.\n\n';
+    const colsProd = [...new Set(cachedProdutos.map(r => gPr(r,'COLECAO')))].sort().reverse();
+    colsProd.slice(0,6).forEach(col => {
+      const rowsCol = cachedProdutos.filter(r => gPr(r,'COLECAO') === col);
+      const totalVenda = rowsCol.reduce((a,r) => a + gMr(r,'VAL_VENDA'), 0);
+      const totalQtd = rowsCol.reduce((a,r) => a + gMr(r,'QTDE_PEDIDA'), 0);
+      const clis = [...new Set(rowsCol.map(r => gPr(r,'CLIENTE')).filter(Boolean))];
+      const skus = [...new Set(rowsCol.map(r => gPr(r,'PRODUTO')).filter(Boolean))];
+      ctx += `COLEÇÃO ${col}: R$${Math.round(totalVenda).toLocaleString('pt-BR')} | ${Math.round(totalQtd)} pç | ${clis.length} clientes | ${skus.length} SKUs\n`;
+      clis.slice(0,30).forEach(cli => {
+        const rowsCli = rowsCol.filter(r => gPr(r,'CLIENTE') === cli);
+        const vCli = rowsCli.reduce((a,r) => a + gMr(r,'VAL_VENDA'), 0);
+        const qCli = rowsCli.reduce((a,r) => a + gMr(r,'QTDE_PEDIDA'), 0);
+        const descCli = rowsCli.reduce((a,r) => a + gMr(r,'VAL_DESC'), 0);
+        const percDesc = rowsCli.length > 0 ? gMr(rowsCli[0],'PERC_DESC') : 0;
+        const prodsCli = rowsCli.map(r => gPr(r,'PRODUTO') + '(' + Math.round(gMr(r,'QTDE_PEDIDA')) + 'pç R$' + Math.round(gMr(r,'VAL_VENDA')).toLocaleString('pt-BR') + ')').join(', ');
+        ctx += `  CLIENTE: ${cli} | R$${Math.round(vCli).toLocaleString('pt-BR')} | ${Math.round(qCli)}pç | Desc: R$${Math.round(descCli).toLocaleString('pt-BR')} (${(percDesc*100).toFixed(1)}%)\n`;
+        ctx += `    SKUs: ${prodsCli}\n`;
+      });
+      ctx += '\n';
+    });
+  }
+
+  // ══ 9. CADASTRO DE CLIENTES ══
   if (cachedClientes && cachedClientes.length > 0) {
     const ativos = cachedClientes.filter(c => gC(c,'ATIVO') === 'S');
     const estados = [...new Set(cachedClientes.map(c=>gC(c,'ESTADO')).filter(Boolean))];
@@ -1367,6 +1510,20 @@ de cada coleção nessa secção e calcula: ((col_nova - col_anterior) / ABS(col
 NUNCA digas que não tens dados de marcas — eles estão sempre presentes nos dados.
 
 MARCAS DISPONÍVEIS: MYROCK, CHARPEY, AMC, ROMITEX, PRINCIPESSA, BV
+
+QUANTIDADES NOS PEDIDOS:
+- VAL_VENDA (VENDIDO): valor vendido com desconto já aplicado — representa o valor do pedido
+- FAT_LIQ (FATURADO): faturamento líquido após o pedido ser expedido/faturado
+- FAT_TOTAL_BRUTO: faturamento bruto antes dos descontos
+- QTDE_PEDIDA: quantidade de peças pedidas pelo cliente
+- QTDE_FATURADA: quantidade de peças efectivamente faturadas/expedidas
+- QTDE_CANC: quantidade de peças canceladas
+- "Quanto vendemos?" = VAL_VENDA (com desconto) + QTDE_PEDIDA
+- "Quanto faturamos?" = FAT_LIQ + QTDE_FATURADA
+- "Qual o desconto?" = VAL_DESC (valor R$) ou PERC_DESC (percentual %)
+- "Qual o produto/SKU?" = campo PRODUTO (código do item)
+- Pedidos recentes podem ter QTDE_FATURADA=0 pois ainda estão em processamento
+- Para detalhar por produto/SKU, cliente ou coleção usa a secção PRODUTOS/SKU
 
 DADOS COMPLETOS:
 ${buildContext()}`;
@@ -1532,11 +1689,8 @@ function speakResponse(text) {
         Olá! 👋 Podes perguntar qualquer coisa sobre as vendas, metas ou representantes. Por exemplo:
         <div class="chat-suggestions">
           <button class="chat-sug" onclick="sendSuggestion(this)">Qual representante está mais longe da meta?</button>
-          <button class="chat-sug" onclick="sendSuggestion(this)">Qual a venda total da coleção atual?</button>
-          <button class="chat-sug" onclick="sendSuggestion(this)">Quem já atingiu 100% da meta?</button>
-          <button class="chat-sug" onclick="sendSuggestion(this)">Quais clientes compraram na coleção atual?</button>
-          <button class="chat-sug" onclick="sendSuggestion(this)">Quais clientes ainda não compraram?</button>
-          <button class="chat-sug" onclick="sendSuggestion(this)">Quantos clientes ativos temos por estado?</button>
+          <button class="chat-sug" onclick="sendSuggestion(this)">Quais clientes ainda não compraram nas coleções atuais?</button>
+          <button class="chat-sug" onclick="sendSuggestion(this)">Qual o crescimento da MYROCK por coleção?</button>
         </div>
       </div>
       <div class="chat-time">Assistente</div>
