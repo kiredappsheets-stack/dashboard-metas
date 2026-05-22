@@ -687,6 +687,22 @@ SUMMARIZECOLUMNS(
 ORDER BY PEDIDO[MARCA] ASC, PEDIDO[COLECAO] ASC
 `;
 
+// Clientes atendidos e a atender por coleção
+const DAX_CLIENTES_COL = `
+EVALUATE
+UNION(
+  SELECTCOLUMNS(
+    SUMMARIZECOLUMNS(
+      PEDIDO[COLECAO],
+      "CLIENTES_ATENDIDOS", DISTINCTCOUNT(PEDIDO[CLIENTE])
+    ),
+    "COLECAO", PEDIDO[COLECAO],
+    "CLIENTES_ATENDIDOS", [CLIENTES_ATENDIDOS],
+    "TIPO", "ATENDIDOS"
+  )
+)
+`;
+
 // KPIs das coleções atuais para cards do dashboard
 const DAX_KPIS_COL_ATUAL = `
 EVALUATE
@@ -972,9 +988,9 @@ function renderDashboard(data) {
         <div class="sub">compraram nas coleções atuais</div>
       </div>
       <div class="kpi-card" style="border-left:3px solid #E24B4A;">
-        <div class="lbl">⚠️ Clientes inativos</div>
+        <div class="lbl">⚠️ Clientes a atender</div>
         <div class="val" style="color:#E24B4A">${Math.round(kClisSemComp).toLocaleString('pt-BR')}</div>
-        <div class="sub">compraram em 2025 mas não nas atuais</div>
+        <div class="sub">compraram em 2025, ainda sem pedido nas atuais</div>
       </div>
       <div class="kpi-card" style="border-left:3px solid #EF9F27;">
         <div class="lbl">📦 Peças vendidas</div>
@@ -1001,6 +1017,29 @@ function renderDashboard(data) {
     </div>
   `;
 
+  // Pré-calcular clientes por coleção a partir de cachedVendas
+  const clientesPorColecao = {};
+  if (cachedVendas && cachedVendas.length > 0) {
+    const gPv = (r,c) => r['PEDIDO['+c+']'] || r[c] || '';
+    cachedVendas.forEach(r => {
+      const col = gPv(r,'COLECAO');
+      const cli = gPv(r,'CLIENTE');
+      if (!col || !cli) return;
+      if (!clientesPorColecao[col]) clientesPorColecao[col] = new Set();
+      clientesPorColecao[col].add(cli);
+    });
+  }
+
+  // Clientes que compraram em 2025 (base para "a atender")
+  const clientesBase2025 = new Set();
+  if (cachedVendas && cachedVendas.length > 0) {
+    const gPv = (r,c) => r['PEDIDO['+c+']'] || r[c] || '';
+    cachedVendas.forEach(r => {
+      const cli = gPv(r,'CLIENTE');
+      if (cli) clientesBase2025.add(cli);
+    });
+  }
+
   colecoes.forEach(col => {
     const items    = data.filter(d => d.col === col).sort((a, b) => (b.pct || 0) - (a.pct || 0));
     const cMeta    = items.reduce((a, d) => a + d.meta, 0);
@@ -1009,6 +1048,12 @@ function renderDashboard(data) {
     const cAting   = items.filter(d => d.pct !== null && !isNaN(d.pct) && d.pct >= 1).length;
     const fillW    = Math.min(Math.max(cPct, 0), 1.5) / 1.5 * 100;
     const maxPct   = Math.max(...items.map(d => d.pct || 0), 1.4);
+
+    // Clientes atendidos e a atender nesta coleção
+    const clisAtendidos = clientesPorColecao[col] ? clientesPorColecao[col].size : 0;
+    const clisAtender = col && clientesPorColecao[col]
+      ? [...clientesBase2025].filter(c => !clientesPorColecao[col].has(c)).length
+      : clientesBase2025.size;
 
     const rows = items.map(d => {
       const pct   = (d.pct !== null && !isNaN(d.pct)) ? d.pct : 0;
@@ -1047,6 +1092,8 @@ function renderDashboard(data) {
             <div class="col-stat"><div class="lbl">Meta</div><div class="val">${fmtR(cMeta)}</div></div>
             <div class="col-stat"><div class="lbl">Venda</div><div class="val">${fmtR(cVenda)}</div></div>
             <div class="col-stat"><div class="lbl">% meta</div><div class="val" style="color:${barColor(cPct)}">${(cPct * 100).toFixed(1)}%</div></div>
+            <div class="col-stat"><div class="lbl" style="color:#378ADD">👥 Atendidos</div><div class="val" style="color:#378ADD">${clisAtendidos}</div></div>
+            <div class="col-stat"><div class="lbl" style="color:#E24B4A">⚠️ A atender</div><div class="val" style="color:#E24B4A">${clisAtender}</div></div>
             <span class="badge ${badgeClass(cPct)}">${badgeLabel(cPct)}</span>
           </div>
         </div>
