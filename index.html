@@ -1081,6 +1081,13 @@ function renderDashboard(data) {
     });
   }
   console.log('clientesPorMarcaUltimoAno keys:', Object.keys(clientesPorMarcaUltimoAno));
+  console.log('marcasPorColecao:', Object.fromEntries(Object.entries(marcasPorColecao).map(([k,v])=>[k,[...v]])));
+  console.log('clientesPorColecao size:', Object.fromEntries(Object.entries(clientesPorColecao).map(([k,v])=>[k,v.size])));
+  // Verificar primeiro registo de cachedVendas
+  if (cachedVendas && cachedVendas.length > 0) {
+    console.log('cachedVendas[0] keys:', Object.keys(cachedVendas[0]));
+    console.log('cachedVendas[0] sample:', JSON.stringify(cachedVendas[0]).substring(0,200));
+  }
 
   colecoes.forEach(col => {
     const items    = data.filter(d => d.col === col).sort((a, b) => (b.pct || 0) - (a.pct || 0));
