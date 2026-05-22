@@ -726,9 +726,12 @@ ROW(
   "ClientesSemCompraColAtual",
     VAR colsAtuais = CALCULATETABLE(VALUES(PEDIDO[CLIENTE]),
       FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL"))
-    VAR clientesUltimoAno = CALCULATETABLE(VALUES(PEDIDO[CLIENTE]),
+    VAR marcasColAtual = CALCULATETABLE(VALUES(PEDIDO[MARCA]),
+      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL"))
+    VAR baseUltimoAno = CALCULATETABLE(VALUES(PEDIDO[CLIENTE]),
+      TREATAS(marcasColAtual, PEDIDO[MARCA]),
       PEDIDO[DATA] >= DATE(2025,1,1))
-    RETURN COUNTROWS(EXCEPT(clientesUltimoAno, colsAtuais))
+    RETURN COUNTROWS(EXCEPT(baseUltimoAno, colsAtuais))
 )
 `;
 
@@ -991,7 +994,7 @@ function renderDashboard(data) {
       <div class="kpi-card" style="border-left:3px solid #E24B4A;">
         <div class="lbl">⚠️ Clientes a atender</div>
         <div class="val" style="color:#E24B4A">${Math.round(kClisSemComp).toLocaleString('pt-BR')}</div>
-        <div class="sub">compraram em 2025, ainda sem pedido nas atuais</div>
+        <div class="sub">compraram as marcas no último ano, sem pedido nas atuais</div>
       </div>
       <div class="kpi-card" style="border-left:3px solid #EF9F27;">
         <div class="lbl">📦 Peças vendidas</div>
@@ -1018,26 +1021,44 @@ function renderDashboard(data) {
     </div>
   `;
 
-  // Pré-calcular clientes por coleção a partir de cachedVendas
-  const clientesPorColecao = {};
+  // Pré-calcular clientes e marcas por coleção a partir de cachedVendas
+  const gPv = (r,c) => r['PEDIDO['+c+']'] || r[c] || '';
+  const clientesPorColecao = {}; // col -> Set de clientes
+  const marcasPorColecao   = {}; // col -> Set de marcas
+  const clientesPorMarca   = {}; // marca -> Set de clientes (todas as coleções)
+
+  // Calcular ano limite para "último ano"
+  const anoLimite = new Date(); anoLimite.setFullYear(anoLimite.getFullYear() - 1);
+  const clientesPorMarcaUltimoAno = {}; // marca -> Set clientes último ano
+
   if (cachedVendas && cachedVendas.length > 0) {
-    const gPv = (r,c) => r['PEDIDO['+c+']'] || r[c] || '';
     cachedVendas.forEach(r => {
-      const col = gPv(r,'COLECAO');
-      const cli = gPv(r,'CLIENTE');
+      const col   = gPv(r,'COLECAO');
+      const cli   = gPv(r,'CLIENTE');
+      const marca = gPv(r,'MARCA');
       if (!col || !cli) return;
       if (!clientesPorColecao[col]) clientesPorColecao[col] = new Set();
       clientesPorColecao[col].add(cli);
+      if (marca) {
+        if (!marcasPorColecao[col]) marcasPorColecao[col] = new Set();
+        marcasPorColecao[col].add(marca);
+        if (!clientesPorMarca[marca]) clientesPorMarca[marca] = new Set();
+        clientesPorMarca[marca].add(cli);
+      }
     });
   }
 
-  // Clientes que compraram em 2025 (base para "a atender")
-  const clientesBase2025 = new Set();
-  if (cachedVendas && cachedVendas.length > 0) {
-    const gPv = (r,c) => r['PEDIDO['+c+']'] || r[c] || '';
-    cachedVendas.forEach(r => {
-      const cli = gPv(r,'CLIENTE');
-      if (cli) clientesBase2025.add(cli);
+  // Clientes por marca — apenas último ano (usando cachedPedidosDetalhe)
+  if (cachedPedidosDetalhe && cachedPedidosDetalhe.length > 0) {
+    cachedPedidosDetalhe.forEach(r => {
+      const cli   = r['PEDIDO[CLIENTE]'] || r['CLIENTE'] || '';
+      const marca = r['PEDIDO[MARCA]']   || r['MARCA']   || '';
+      const dtStr = r['PEDIDO[DATA]']    || r['DATA']    || '';
+      if (!cli || !marca || !dtStr) return;
+      const dt = parseDt(dtStr);
+      if (!dt || dt < anoLimite) return;
+      if (!clientesPorMarcaUltimoAno[marca]) clientesPorMarcaUltimoAno[marca] = new Set();
+      clientesPorMarcaUltimoAno[marca].add(cli);
     });
   }
 
@@ -1050,11 +1071,20 @@ function renderDashboard(data) {
     const fillW    = Math.min(Math.max(cPct, 0), 1.5) / 1.5 * 100;
     const maxPct   = Math.max(...items.map(d => d.pct || 0), 1.4);
 
-    // Clientes atendidos e a atender nesta coleção
+    // Clientes atendidos nesta coleção
     const clisAtendidos = clientesPorColecao[col] ? clientesPorColecao[col].size : 0;
-    const clisAtender = col && clientesPorColecao[col]
-      ? [...clientesBase2025].filter(c => !clientesPorColecao[col].has(c)).length
-      : clientesBase2025.size;
+
+    // Clientes a atender: compraram as marcas desta coleção no último ano
+    // mas ainda NÃO compraram nesta coleção
+    const marcasDestCol = marcasPorColecao[col] || new Set();
+    const clisDestCol   = clientesPorColecao[col] || new Set();
+    const clisBaseMarca = new Set();
+    marcasDestCol.forEach(marca => {
+      if (clientesPorMarcaUltimoAno[marca]) {
+        clientesPorMarcaUltimoAno[marca].forEach(c => clisBaseMarca.add(c));
+      }
+    });
+    const clisAtender = [...clisBaseMarca].filter(c => !clisDestCol.has(c)).length;
 
     const rows = items.map(d => {
       const pct   = (d.pct !== null && !isNaN(d.pct)) ? d.pct : 0;
