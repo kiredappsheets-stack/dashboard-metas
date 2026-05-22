@@ -1637,7 +1637,8 @@ async function sendChat() {
   const sendBtn = document.getElementById('chatSend');
   const question = input.value.trim();
   if (!question) return;
-  const wasVoice = isListening || document.getElementById('chatMic').classList.contains('was-voice');
+  const wasVoice = lastInputWasVoice;
+  lastInputWasVoice = false; // reset após usar
 
   input.value = '';
   input.style.height = 'auto';
@@ -1754,7 +1755,10 @@ ${buildContext()}`;
     // Limitar histórico a 10 trocas para não sobrecarregar
     if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
     // Ler resposta em voz alta se a pergunta foi por voz
-    if (wasVoice) speakResponse(answer);
+    if (wasVoice) {
+      // Pequeno delay para não sobrepor com o texto a renderizar
+      setTimeout(() => speakResponse(answer), 300);
+    }
 
   } catch(e) {
     thinking.className = 'chat-msg bot';
@@ -1774,6 +1778,7 @@ ${buildContext()}`;
 // ════════════════════════════════════════════
 let recognition = null;
 let isListening = false;
+let lastInputWasVoice = false;
 const synth = window.speechSynthesis;
 
 function initRecognition() {
@@ -1789,6 +1794,7 @@ function initRecognition() {
     document.getElementById('chatInput').value = transcript;
     onInputChange();
     if (e.results[e.results.length-1].isFinal) {
+      lastInputWasVoice = true;
       stopListening();
       setTimeout(() => sendChat(), 300);
     }
