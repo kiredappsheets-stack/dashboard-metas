@@ -353,7 +353,7 @@
     flex-shrink: 0;
   }
   .chat-header-info h3 { font-size: 14px; font-weight: 600; color: #fff; }
-  .chat-header-info p { font-size: 11px; color: #B2DFDB; margin-top: 1px; }
+  .chat-header-info p { font-size: 11px; color: #B2DFDB; margin-top: 1px; font-style: italic; }
   .chat-close {
     background: none; border: none; cursor: pointer;
     color: #B2DFDB; font-size: 20px; line-height: 1;
@@ -412,17 +412,18 @@
     margin-top: 2px;
     padding: 0 4px;
   }
+  .chat-share-row { display: flex !important; align-items: center; gap: 6px; margin-top: 3px; padding: 0 4px; }
   .chat-share-btn {
-    display: inline-flex;
+    display: inline-flex !important;
     align-items: center;
     gap: 4px;
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 600;
     color: #25D366;
-    background: rgba(37,211,102,.08);
-    border: 1px solid rgba(37,211,102,.25);
+    background: rgba(37,211,102,.1);
+    border: 1.5px solid #25D366;
     cursor: pointer;
-    padding: 3px 8px;
+    padding: 3px 10px;
     border-radius: 12px;
     transition: background .15s;
     font-family: var(--font);
@@ -972,6 +973,7 @@ function renderDashboard(data) {
 
   // KPIs coleções atuais
   const kg = (col) => cachedKpis ? (parseFloat(cachedKpis['['+col+']'] || cachedKpis[col] || 0) || 0) : 0;
+  if (cachedKpis) console.log('cachedKpis:', JSON.stringify(cachedKpis).substring(0,300));
   const kClisAtual   = kg('ClientesColAtual');
   const kPecasVend   = kg('PecasVendidas');
   const kPecasFat    = kg('PecasFaturadas');
@@ -989,7 +991,7 @@ function renderDashboard(data) {
       </div>
       <div class="kpi-card">
         <div class="lbl">Vendido coleções atuais</div>
-        <div class="val">${fmtR(kValVenda || totalVenda)}</div>
+        <div class="val">${fmtR(kValVenda)}</div>
         <div class="sub">com desconto aplicado</div>
       </div>
       <div class="kpi-card">
@@ -1866,16 +1868,16 @@ function speakResponse(text) {
 
 <!-- CHAT -->
 <button class="chat-fab" onclick="toggleChat()" title="Chat com os dados" aria-label="Abrir chat">
-  <span style="font-size:13px;font-weight:700;letter-spacing:-0.5px;color:#fff;line-height:1;">IA</span>
+  <span style="font-size:18px;font-weight:800;letter-spacing:-1px;color:#fff;line-height:1;">IA</span>
 </button>
 
 <div class="chat-panel" id="chatPanel" role="dialog" aria-label="Chat sobre vendas">
   <div class="chat-header">
     <div class="chat-header-left">
-      <div class="chat-avatar" style="font-size:14px;font-weight:700;letter-spacing:-0.5px;color:#fff;">IA</div>
+      <div class="chat-avatar" style="font-size:17px;font-weight:800;letter-spacing:-1px;color:#fff;">IA</div>
       <div class="chat-header-info">
         <h3>Assistente de Vendas IA</h3>
-        <p>● online · Pergunte sobre vendas, metas e clientes</p>
+        <p>● online · <em>Pergunte sobre vendas, metas e clientes</em></p>
       </div>
     </div>
     <button class="chat-close" onclick="toggleChat()" aria-label="Fechar chat">✕</button>
