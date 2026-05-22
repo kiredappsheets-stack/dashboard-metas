@@ -1048,19 +1048,39 @@ function renderDashboard(data) {
     });
   }
 
-  // Clientes por marca — apenas último ano (usando cachedPedidosDetalhe)
+  // Clientes por marca — apenas último ano (usando cachedVendas que tem MARCA e CLIENTE)
+  // cachedVendas vem de DAX_VENDAS que inclui todas as coleções
+  // Para filtrar último ano usamos cachedPedidosDetalhe que tem DATA
+  // Primeiro: coletar clientes+marca dos pedidos do último ano
+  const clientesMarcaRecente = new Set(); // "CLIENTE|MARCA"
   if (cachedPedidosDetalhe && cachedPedidosDetalhe.length > 0) {
     cachedPedidosDetalhe.forEach(r => {
+      // tentar todas as variantes de chave
       const cli   = r['PEDIDO[CLIENTE]'] || r['CLIENTE'] || '';
       const marca = r['PEDIDO[MARCA]']   || r['MARCA']   || '';
       const dtStr = r['PEDIDO[DATA]']    || r['DATA']    || '';
       if (!cli || !marca || !dtStr) return;
       const dt = parseDt(dtStr);
       if (!dt || dt < anoLimite) return;
+      clientesMarcaRecente.add(cli + '|||' + marca);
       if (!clientesPorMarcaUltimoAno[marca]) clientesPorMarcaUltimoAno[marca] = new Set();
       clientesPorMarcaUltimoAno[marca].add(cli);
     });
   }
+
+  // Fallback: se cachedPedidosDetalhe não tiver dados de MARCA, usar cachedVendas sem filtro de data
+  // (pois cachedVendas já tem desde 2024 que é recente o suficiente)
+  if (Object.keys(clientesPorMarcaUltimoAno).length === 0 && cachedVendas && cachedVendas.length > 0) {
+    console.log('Fallback: usando cachedVendas para clientes por marca');
+    cachedVendas.forEach(r => {
+      const cli   = gPv(r,'CLIENTE');
+      const marca = gPv(r,'MARCA');
+      if (!cli || !marca) return;
+      if (!clientesPorMarcaUltimoAno[marca]) clientesPorMarcaUltimoAno[marca] = new Set();
+      clientesPorMarcaUltimoAno[marca].add(cli);
+    });
+  }
+  console.log('clientesPorMarcaUltimoAno keys:', Object.keys(clientesPorMarcaUltimoAno));
 
   colecoes.forEach(col => {
     const items    = data.filter(d => d.col === col).sort((a, b) => (b.pct || 0) - (a.pct || 0));
