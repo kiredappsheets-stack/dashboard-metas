@@ -1351,7 +1351,7 @@ function addMsg(text, role) {
   const now = new Date();
   const hora = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
 
-  if (role === 'bot') {
+  if (role === 'bot' || role === 'bot thinking') {
     const shareRow = document.createElement('div');
     shareRow.className = 'chat-share-row';
     const timeSpan = document.createElement('span');
