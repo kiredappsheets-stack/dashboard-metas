@@ -735,28 +735,28 @@ EVALUATE
 ROW(
   "ClientesColAtual",
     CALCULATE(DISTINCTCOUNT(PEDIDO[CLIENTE]),
-      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")),
+      PEDIDO[COL_ATUAL] = "COL ATUAL"),
   "PecasVendidas",
     CALCULATE(SUM(PEDIDO[QTDE_ORIG]),
-      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")),
+      PEDIDO[COL_ATUAL] = "COL ATUAL"),
   "PecasFaturadas",
     CALCULATE(SUM(PEDIDO[QTDE_FAT]),
-      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")),
+      PEDIDO[COL_ATUAL] = "COL ATUAL"),
   "FatLiq",
     CALCULATE(SUM(PEDIDO[FAT_LIQ]),
-      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")),
+      PEDIDO[COL_ATUAL] = "COL ATUAL"),
   "ValVenda",
-    CALCULATE(SUMX(METAS, METAS[VENDA]),
-      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL")),
+    CALCULATE(SUM(PEDIDO[FAT_LIQ]),
+      PEDIDO[COL_ATUAL] = "COL ATUAL"),
   "ClientesSemCompraColAtual",
-    VAR colsAtuais = CALCULATETABLE(VALUES(PEDIDO[CLIENTE]),
-      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL"))
+    VAR clisColAtual = CALCULATETABLE(VALUES(PEDIDO[CLIENTE]),
+      PEDIDO[COL_ATUAL] = "COL ATUAL")
     VAR marcasColAtual = CALCULATETABLE(VALUES(PEDIDO[MARCA]),
-      FILTER(COLECOES, COLECOES[COL_ATUAL] = "COL ATUAL"))
+      PEDIDO[COL_ATUAL] = "COL ATUAL")
     VAR baseUltimoAno = CALCULATETABLE(VALUES(PEDIDO[CLIENTE]),
-      TREATAS(marcasColAtual, PEDIDO[MARCA]),
+      PEDIDO[MARCA] IN marcasColAtual,
       PEDIDO[DATA] >= DATE(2025,1,1))
-    RETURN COUNTROWS(EXCEPT(baseUltimoAno, colsAtuais))
+    RETURN COUNTROWS(EXCEPT(baseUltimoAno, clisColAtual))
 )
 `;
 
@@ -992,7 +992,7 @@ function renderDashboard(data) {
       <div class="kpi-card">
         <div class="lbl">Vendido coleções atuais</div>
         <div class="val">${fmtR(kValVenda)}</div>
-        <div class="sub">com desconto aplicado</div>
+        <div class="sub">líquido após desconto</div>
       </div>
       <div class="kpi-card">
         <div class="lbl">% meta geral</div>
