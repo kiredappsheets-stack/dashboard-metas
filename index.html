@@ -742,6 +742,7 @@ const DAX_FATURAMENTO = `
 EVALUATE
 SUMMARIZECOLUMNS(
   FATURAMENTO[COLECAO],
+  FATURAMENTO[COL_ATUAL],
   FATURAMENTO[PEDIDO],
   FATURAMENTO[CLIENTE_FORNECEDOR],
   FATURAMENTO[REPRESENTANTE],
@@ -785,21 +786,9 @@ ROW(
 // KPIs de faturamento real (tabela FATURAMENTO) separado para não quebrar o ROW()
 const DAX_KPIS_FAT = `
 EVALUATE
-SUMMARIZECOLUMNS(
-  "FatLiq",
-    CALCULATE(
-      SUM(FATURAMENTO[FAT TOTAL]),
-      FILTER(FATURAMENTO,
-        FATURAMENTO[PEDIDO] IN CALCULATETABLE(VALUES(PEDIDO[PEDIDO]), PEDIDO[COL_ATUAL] = "COL ATUAL")
-      )
-    ),
-  "FatQtd",
-    CALCULATE(
-      SUM(FATURAMENTO[QTD]),
-      FILTER(FATURAMENTO,
-        FATURAMENTO[PEDIDO] IN CALCULATETABLE(VALUES(PEDIDO[PEDIDO]), PEDIDO[COL_ATUAL] = "COL ATUAL")
-      )
-    )
+ROW(
+  "FatLiq", CALCULATE(SUM(FATURAMENTO[FAT TOTAL]), FATURAMENTO[COL_ATUAL] = "COL ATUAL"),
+  "FatQtd", CALCULATE(SUM(FATURAMENTO[QTD]),       FATURAMENTO[COL_ATUAL] = "COL ATUAL")
 )
 `;
 
@@ -1658,7 +1647,14 @@ function buildContext() {
     const gF = (r,c) => r['FATURAMENTO['+c+']'] || r[c] || '';
     const gFm = (r,c) => parseFloat(r['['+c+']'] || r[c] || 0) || 0;
     ctx += "=== FATURAMENTO REAL (tabela FATURAMENTO — por item expedido) ===\n";
-    ctx += "Use esta tabela para perguntas sobre FATURAMENTO. Relacionada com PEDIDO pela coluna PEDIDO.\n\n";
+    ctx += "Use esta tabela para perguntas sobre FATURAMENTO. COL_ATUAL='COL ATUAL' indica coleção atual.\n\n";
+    // Resumo coleções atuais
+    const fatAtual = cachedFaturamento.filter(r => gF(r,'COL_ATUAL') === 'COL ATUAL');
+    if (fatAtual.length > 0) {
+      const tFatAt = fatAtual.reduce((a,r) => a + gFm(r,'FAT_TOTAL'), 0);
+      const tQtdAt = fatAtual.reduce((a,r) => a + gFm(r,'QTD'), 0);
+      ctx += `COLEÇÕES ATUAIS: Fat. total R$${Math.round(tFatAt).toLocaleString('pt-BR')} | ${Math.round(tQtdAt)} peças expedidas\n\n`;
+    }
     const colsFat = [...new Set(cachedFaturamento.map(r => gF(r,'COLECAO')))].sort().reverse();
     colsFat.slice(0,8).forEach(col => {
       const rows = cachedFaturamento.filter(r => gF(r,'COLECAO') === col);
@@ -1748,7 +1744,7 @@ QUANTIDADES NOS PEDIDOS:
 - QTDE_PEDIDA: quantidade de peças pedidas pelo cliente
 - QTDE_FATURADA: quantidade de peças efectivamente faturadas/expedidas
 - QTDE_CANC: quantidade de peças canceladas
-- "Quanto faturamos/expedimos?" = tabela FATURAMENTO[FAT TOTAL] (use SEMPRE esta tabela para faturamento)
+- "Quanto faturamos/expedimos?" = tabela FATURAMENTO[FAT TOTAL] com FATURAMENTO[COL_ATUAL]="COL ATUAL" para coleções atuais
 - "Quanto vendemos?" = VAL_VENDA (com desconto) + QTDE_PEDIDA
 - "Quanto faturamos?" = FAT_LIQ + QTDE_FATURADA
 - "Qual o desconto?" = VAL_DESC (valor R$) ou PERC_DESC (percentual %)
