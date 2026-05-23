@@ -1269,9 +1269,11 @@ async function loadDashboard() {
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     cachedFaturamento = faturamento;
     // Mesclar kpisFat no cachedKpis
+    console.log('kpisFat raw:', JSON.stringify(kpisFat && kpisFat[0]));
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
+    console.log('cachedKpis merged:', JSON.stringify(cachedKpis).substring(0,300));
     console.log('Dados carregados:', {
       metas: data.length, pedidos: pedidos.length, clientes: clientes.length,
       reps: reps.length, vendas: vendas.length, metasHist: metasHist.length,
