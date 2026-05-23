@@ -1569,8 +1569,9 @@ function buildContext() {
       porMes[chaveMes].pedidos++;
     });
 
-    ctx += '-- RESUMO MENSAL (desde Jan/2024) --\n';
-    Object.keys(porMes).sort().reverse().forEach(mes => {
+    ctx += '-- RESUMO MENSAL (últimos 12 meses) --\n';
+    const chavesMes12 = Object.keys(porMes).sort().reverse().slice(0,12);
+    chavesMes12.forEach(mes => {
       const m = porMes[mes];
       const [ano, mesNum] = mes.split('-');
       const nomeMes = new Date(parseInt(ano), parseInt(mesNum)-1).toLocaleString('pt-BR',{month:'long',year:'numeric'});
@@ -1614,7 +1615,7 @@ function buildContext() {
     ctx += '\n';
 
     // Pedidos individuais dos últimos 7 dias
-    const limite7 = new Date(hoje); limite7.setDate(hoje.getDate() - 7);
+    const limite7 = new Date(hoje); limite7.setDate(hoje.getDate() - 5);
     const recentes = cachedPedidosDetalhe.filter(r => {
       const dt = parseDt(gPd(r,'DATA'));
       return dt && dt >= limite7;
@@ -1637,14 +1638,14 @@ function buildContext() {
     ctx += '=== PRODUTOS/SKU POR CLIENTE E COLEÇÃO ===\n';
     ctx += 'PRODUTO = código SKU. Permite detalhar o que cada cliente comprou.\n\n';
     const colsProd = [...new Set(cachedProdutos.map(r => gPr(r,'COLECAO')))].sort().reverse();
-    colsProd.slice(0,6).forEach(col => {
+    colsProd.slice(0,4).forEach(col => {
       const rowsCol = cachedProdutos.filter(r => gPr(r,'COLECAO') === col);
       const totalVenda = rowsCol.reduce((a,r) => a + gMr(r,'VAL_VENDA'), 0);
       const totalQtd = rowsCol.reduce((a,r) => a + gMr(r,'QTDE_PEDIDA'), 0);
       const clis = [...new Set(rowsCol.map(r => gPr(r,'CLIENTE')).filter(Boolean))];
       const skus = [...new Set(rowsCol.map(r => gPr(r,'PRODUTO')).filter(Boolean))];
       ctx += `COLEÇÃO ${col}: R$${Math.round(totalVenda).toLocaleString('pt-BR')} | ${Math.round(totalQtd)} pç | ${clis.length} clientes | ${skus.length} SKUs\n`;
-      clis.slice(0,30).forEach(cli => {
+      clis.slice(0,15).forEach(cli => {
         const rowsCli = rowsCol.filter(r => gPr(r,'CLIENTE') === cli);
         const vCli = rowsCli.reduce((a,r) => a + gMr(r,'VAL_VENDA'), 0);
         const qCli = rowsCli.reduce((a,r) => a + gMr(r,'QTDE_PEDIDA'), 0);
@@ -1707,7 +1708,7 @@ function buildContext() {
     const estados = [...new Set(cachedClientes.map(c=>gC(c,'ESTADO')).filter(Boolean))];
     ctx += '=== CADASTRO DE CLIENTES ===\n';
     ctx += `Total: ${cachedClientes.length} | Ativos: ${ativos.length} | Estados: ${estados.join(', ')}\n\n`;
-    ativos.slice(0,200).forEach(c => {
+    ativos.slice(0,80).forEach(c => {
       ctx += `  CLIENTE: ${gC(c,'NOME')} | ${gC(c,'CIDADE')}-${gC(c,'ESTADO')} | REP: ${gC(c,'REP')} | Última col: ${gC(c,'ULTIMA_COLECAO')}\n`;
     });
   }
@@ -1812,7 +1813,7 @@ ${buildContext()}`;
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-5',
-        max_tokens: 800,
+        max_tokens: 1000,
         system: systemPrompt,
         messages: [
           ...chatHistory,
@@ -1841,7 +1842,7 @@ ${buildContext()}`;
     chatHistory.push({ role: 'user', content: question });
     chatHistory.push({ role: 'assistant', content: answer });
     // Limitar histórico a 10 trocas para não sobrecarregar
-    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-10);
     // Ler resposta em voz alta se a pergunta foi por voz
     if (wasVoice) {
       // Pequeno delay para não sobrepor com o texto a renderizar
