@@ -712,13 +712,26 @@ EVALUATE
 SUMMARIZECOLUMNS(
   PEDIDO[MARCA],
   PEDIDO[COLECAO],
-  "VAL_VENDA",     SUM(PEDIDO[VAL_DESC_EMPENHO]),
-  "FAT_LIQ",       SUM(PEDIDO[FAT_LIQ]),
-  "QTDE_PEDIDA",   SUM(PEDIDO[QTDE_ORIG]),
-  "QTDE_FATURADA", SUM(PEDIDO[QTDE_FAT]),
-  "QTDE_CANC",     SUM(PEDIDO[QTDE_CANC])
+  "VAL_VENDA",       SUM(PEDIDO[VAL_DESC_EMPENHO]),
+  "FAT_LIQ",         SUM(PEDIDO[FAT_LIQ]),
+  "QTDE_PEDIDA",     SUM(PEDIDO[QTDE_ORIG]),
+  "QTDE_FAT_PEDIDO", SUM(PEDIDO[QTDE_FAT]),
+  "QTDE_CANC",       SUM(PEDIDO[QTDE_CANC])
 )
 ORDER BY PEDIDO[MARCA] ASC, PEDIDO[COLECAO] ASC
+`;
+
+// Faturamento real por coleção (tabela FATURAMENTO — fonte correcta para qtd/valor faturado)
+const DAX_FAT_COLECAO = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  FATURAMENTO[COLECAO],
+  FATURAMENTO[COL_ATUAL],
+  "FAT_TOTAL", SUM(FATURAMENTO[FAT TOTAL]),
+  "QTD_FAT",   SUM(FATURAMENTO[QTD]),
+  "GANHOS",    SUM(FATURAMENTO[GANHOS])
+)
+ORDER BY FATURAMENTO[COLECAO] DESC
 `;
 
 // Clientes atendidos e a atender por coleção
@@ -1230,7 +1243,7 @@ async function loadDashboard() {
     // Cada query é independente — se uma falhar não afecta as outras
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes, pedidosDetalhe, produtos, kpis, faturamento, kpisFat] = await Promise.all([
+    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes, pedidosDetalhe, produtos, kpis, faturamento, kpisFat, fatColecao] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_PEDIDOS, true)),
       safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
@@ -1244,6 +1257,7 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_FATURAMENTO, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
+      safe(() => runDaxQuery(token, DAX_FAT_COLECAO, true)),
     ]);
     cachedData = data;
     cachedPedidos = pedidos;
@@ -1257,6 +1271,7 @@ async function loadDashboard() {
     cachedProdutos = produtos;
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     cachedFaturamento = faturamento;
+    cachedFatColecao = fatColecao;
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
@@ -1324,6 +1339,7 @@ let cachedPedidosDetalhe = null;
 let cachedProdutos = null;
 let cachedKpis = null;
 let cachedFaturamento = null;
+let cachedFatColecao = null;
 let chatHistory = [];
 
 function toggleChat() {
@@ -1642,7 +1658,25 @@ function buildContext() {
     });
   }
 
-  // ══ 9. FATURAMENTO REAL (tabela FATURAMENTO) ══
+  // ══ 9. FATURAMENTO POR COLEÇÃO (tabela FATURAMENTO — fonte correcta) ══
+  if (cachedFatColecao && cachedFatColecao.length > 0) {
+    const gFc = (r,c) => r['FATURAMENTO['+c+']'] || r[c] || '';
+    const gFm = (r,c) => parseFloat(r['['+c+']'] || r[c] || 0) || 0;
+    ctx += "=== FATURAMENTO POR COLEÇÃO (tabela FATURAMENTO — fonte correcta para qtd e valor faturado) ===\n";
+    ctx += "IMPORTANTE: Para calcular QUEBRA use PEDIDO[QTDE_PEDIDA] vs FATURAMENTO[QTD_FAT]\n";
+    ctx += "Quebra% = (QTDE_PEDIDA - QTD_FAT) / QTDE_PEDIDA * 100\n\n";
+    cachedFatColecao.forEach(r => {
+      const col = gFc(r,'COLECAO');
+      const colAtual = gFc(r,'COL_ATUAL');
+      const fat = gFm(r,'FAT_TOTAL');
+      const qtd = gFm(r,'QTD_FAT');
+      const tag = colAtual === 'COL ATUAL' ? ' ← COLEÇÃO ATUAL' : '';
+      ctx += `${col}${tag}: Faturado R$${Math.round(fat).toLocaleString('pt-BR')} | ${Math.round(qtd)} peças expedidas\n`;
+    });
+    ctx += '\n';
+  }
+
+  // ══ 10. FATURAMENTO REAL (tabela FATURAMENTO) ══
   if (cachedFaturamento && cachedFaturamento.length > 0) {
     const gF = (r,c) => r['FATURAMENTO['+c+']'] || r[c] || '';
     const gFm = (r,c) => parseFloat(r['['+c+']'] || r[c] || 0) || 0;
@@ -1744,7 +1778,11 @@ QUANTIDADES NOS PEDIDOS:
 - QTDE_PEDIDA: quantidade de peças pedidas pelo cliente
 - QTDE_FATURADA: quantidade de peças efectivamente faturadas/expedidas
 - QTDE_CANC: quantidade de peças canceladas
-- "Quanto faturamos/expedimos?" = tabela FATURAMENTO[FAT TOTAL] com FATURAMENTO[COL_ATUAL]="COL ATUAL" para coleções atuais
+- "Quanto faturamos/expedimos?" = SEMPRE usar tabela FATURAMENTO[FAT TOTAL] e FATURAMENTO[QTD] — é a fonte correcta
+- "Quantas peças vendidas/pedidas?" = PEDIDO[QTDE_PEDIDA] (QTDE_ORIG)
+- "Quantas peças faturadas/expedidas?" = FATURAMENTO[QTD_FAT] — NÃO usar PEDIDO[QTDE_FAT_PEDIDO] para faturamento
+- "Quebra" = (QTDE_PEDIDA - QTD_FAT) / QTDE_PEDIDA — sempre usar FATURAMENTO para o faturado
+- Para análise de quebra por marca/coleção: cruzar PEDIDO[QTDE_PEDIDA] com FATURAMENTO[QTD_FAT]
 - "Quanto vendemos?" = VAL_VENDA (com desconto) + QTDE_PEDIDA
 - "Quanto faturamos?" = FAT_LIQ + QTDE_FATURADA
 - "Qual o desconto?" = VAL_DESC (valor R$) ou PERC_DESC (percentual %)
