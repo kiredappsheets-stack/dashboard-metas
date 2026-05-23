@@ -767,16 +767,6 @@ ROW(
   "PecasFaturadas",
     CALCULATE(SUM(PEDIDO[QTDE_FAT]),
       PEDIDO[COL_ATUAL] = "COL ATUAL"),
-  "FatLiq",
-    CALCULATE(
-      SUM(FATURAMENTO[FAT TOTAL]),
-      FATURAMENTO[PEDIDO] IN CALCULATETABLE(VALUES(PEDIDO[PEDIDO]), PEDIDO[COL_ATUAL] = "COL ATUAL")
-    ),
-  "FatQtd",
-    CALCULATE(
-      SUM(FATURAMENTO[QTD]),
-      FATURAMENTO[PEDIDO] IN CALCULATETABLE(VALUES(PEDIDO[PEDIDO]), PEDIDO[COL_ATUAL] = "COL ATUAL")
-    ),
   "ValVenda",
     CALCULATE(SUM(PEDIDO[FAT_LIQ]),
       PEDIDO[COL_ATUAL] = "COL ATUAL"),
@@ -789,6 +779,17 @@ ROW(
       PEDIDO[MARCA] IN marcasColAtual,
       PEDIDO[DATA] >= DATE(2025,1,1))
     RETURN COUNTROWS(EXCEPT(baseUltimoAno, clisColAtual))
+)
+`;
+
+// KPIs de faturamento real (tabela FATURAMENTO) separado para não quebrar o ROW()
+const DAX_KPIS_FAT = `
+EVALUATE
+VAR pedidosColAtual = CALCULATETABLE(VALUES(PEDIDO[PEDIDO]), PEDIDO[COL_ATUAL] = "COL ATUAL")
+RETURN
+ROW(
+  "FatLiq",  CALCULATE(SUM(FATURAMENTO[FAT TOTAL]), FATURAMENTO[PEDIDO] IN pedidosColAtual),
+  "FatQtd",  CALCULATE(SUM(FATURAMENTO[QTD]),       FATURAMENTO[PEDIDO] IN pedidosColAtual)
 )
 `;
 
@@ -1230,7 +1231,7 @@ async function loadDashboard() {
     // Cada query é independente — se uma falhar não afecta as outras
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes, pedidosDetalhe, produtos, kpis, faturamento] = await Promise.all([
+    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes, pedidosDetalhe, produtos, kpis, faturamento, kpisFat] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_PEDIDOS, true)),
       safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
@@ -1243,6 +1244,7 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_PRODUTOS, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_FATURAMENTO, true)),
+      safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
     ]);
     cachedData = data;
     cachedPedidos = pedidos;
@@ -1256,6 +1258,10 @@ async function loadDashboard() {
     cachedProdutos = produtos;
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     cachedFaturamento = faturamento;
+    // Mesclar kpisFat no cachedKpis
+    if (kpisFat && kpisFat.length > 0) {
+      cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
+    }
     console.log('Dados carregados:', {
       metas: data.length, pedidos: pedidos.length, clientes: clientes.length,
       reps: reps.length, vendas: vendas.length, metasHist: metasHist.length,
@@ -1892,7 +1898,17 @@ function stopListening() {
 function speakResponse(text) {
   if (!synth) return;
   synth.cancel();
-  const shortText = text.length > 300 ? text.substring(0, 300) + '.' : text;
+  // Limpar markdown antes de falar
+  const cleanText = text
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/^#{1,3}\s+/gm, '')
+    .replace(/^[-•]\s+/gm, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/
++/g, '. ')
+    .trim();
+  const shortText = cleanText.length > 300 ? cleanText.substring(0, 300) + '.' : cleanText;
   const utt = new SpeechSynthesisUtterance(shortText);
   utt.lang = 'pt-BR';
   utt.rate = 1.05;
