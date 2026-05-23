@@ -737,6 +737,23 @@ UNION(
 )
 `;
 
+// Faturamento real (tabela FATURAMENTO relacionada com PEDIDO via coluna PEDIDO)
+const DAX_FATURAMENTO = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  FATURAMENTO[COLECAO],
+  FATURAMENTO[PEDIDO],
+  FATURAMENTO[CLIENTE_FORNECEDOR],
+  FATURAMENTO[REPRESENTANTE],
+  FATURAMENTO[ESTADO],
+  FATURAMENTO[MUNICIPIO],
+  "FAT_TOTAL",  SUM(FATURAMENTO[FAT TOTAL]),
+  "GANHOS",     SUM(FATURAMENTO[GANHOS]),
+  "QTD",        SUM(FATURAMENTO[QTD])
+)
+ORDER BY FATURAMENTO[COLECAO] DESC
+`;
+
 // KPIs das coleções atuais para cards do dashboard
 const DAX_KPIS_COL_ATUAL = `
 EVALUATE
@@ -751,8 +768,15 @@ ROW(
     CALCULATE(SUM(PEDIDO[QTDE_FAT]),
       PEDIDO[COL_ATUAL] = "COL ATUAL"),
   "FatLiq",
-    CALCULATE(SUM(PEDIDO[FAT_LIQ]),
-      PEDIDO[COL_ATUAL] = "COL ATUAL"),
+    CALCULATE(
+      SUM(FATURAMENTO[FAT TOTAL]),
+      FATURAMENTO[PEDIDO] IN CALCULATETABLE(VALUES(PEDIDO[PEDIDO]), PEDIDO[COL_ATUAL] = "COL ATUAL")
+    ),
+  "FatQtd",
+    CALCULATE(
+      SUM(FATURAMENTO[QTD]),
+      FATURAMENTO[PEDIDO] IN CALCULATETABLE(VALUES(PEDIDO[PEDIDO]), PEDIDO[COL_ATUAL] = "COL ATUAL")
+    ),
   "ValVenda",
     CALCULATE(SUM(PEDIDO[FAT_LIQ]),
       PEDIDO[COL_ATUAL] = "COL ATUAL"),
@@ -984,7 +1008,7 @@ function renderDashboard(data) {
   if (cachedKpis) console.log('cachedKpis:', JSON.stringify(cachedKpis).substring(0,300));
   const kClisAtual   = kg('ClientesColAtual');
   const kPecasVend   = kg('PecasVendidas');
-  const kPecasFat    = kg('PecasFaturadas');
+  const kPecasFat    = kg('FatQtd');
   const kValVenda    = kg('ValVenda');
   const kFatLiq      = kg('FatLiq');
   const kClisSemComp = kg('ClientesSemCompraColAtual');
@@ -1213,7 +1237,7 @@ async function loadDashboard() {
     // Cada query é independente — se uma falhar não afecta as outras
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes, pedidosDetalhe, produtos, kpis] = await Promise.all([
+    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes, pedidosDetalhe, produtos, kpis, faturamento] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_PEDIDOS, true)),
       safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
@@ -1225,6 +1249,7 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_PEDIDOS_DETALHE, true)),
       safe(() => runDaxQuery(token, DAX_PRODUTOS, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
+      safe(() => runDaxQuery(token, DAX_FATURAMENTO, true)),
     ]);
     cachedData = data;
     cachedPedidos = pedidos;
@@ -1237,6 +1262,7 @@ async function loadDashboard() {
     cachedPedidosDetalhe = pedidosDetalhe;
     cachedProdutos = produtos;
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
+    cachedFaturamento = faturamento;
     console.log('Dados carregados:', {
       metas: data.length, pedidos: pedidos.length, clientes: clientes.length,
       reps: reps.length, vendas: vendas.length, metasHist: metasHist.length,
@@ -1300,6 +1326,7 @@ let cachedColecoes = null;
 let cachedPedidosDetalhe = null;
 let cachedProdutos = null;
 let cachedKpis = null;
+let cachedFaturamento = null;
 let chatHistory = [];
 
 function toggleChat() {
@@ -1618,7 +1645,25 @@ function buildContext() {
     });
   }
 
-  // ══ 9. CADASTRO DE CLIENTES ══
+  // ══ 9. FATURAMENTO REAL (tabela FATURAMENTO) ══
+  if (cachedFaturamento && cachedFaturamento.length > 0) {
+    const gF = (r,c) => r['FATURAMENTO['+c+']'] || r[c] || '';
+    const gFm = (r,c) => parseFloat(r['['+c+']'] || r[c] || 0) || 0;
+    ctx += "=== FATURAMENTO REAL (tabela FATURAMENTO — por item expedido) ===\n";
+    ctx += "Use esta tabela para perguntas sobre FATURAMENTO. Relacionada com PEDIDO pela coluna PEDIDO.\n\n";
+    const colsFat = [...new Set(cachedFaturamento.map(r => gF(r,'COLECAO')))].sort().reverse();
+    colsFat.slice(0,8).forEach(col => {
+      const rows = cachedFaturamento.filter(r => gF(r,'COLECAO') === col);
+      const tFat = rows.reduce((a,r) => a + gFm(r,'FAT_TOTAL'), 0);
+      const tQtd = rows.reduce((a,r) => a + gFm(r,'QTD'), 0);
+      const tGanhos = rows.reduce((a,r) => a + gFm(r,'GANHOS'), 0);
+      const clis = [...new Set(rows.map(r => gF(r,'CLIENTE_FORNECEDOR')).filter(Boolean))];
+      ctx += `COLEÇÃO ${col}: Fat. R$${Math.round(tFat).toLocaleString('pt-BR')} | ${Math.round(tQtd)} peças | Ganhos R$${Math.round(tGanhos).toLocaleString('pt-BR')} | ${clis.length} clientes\n`;
+    });
+    ctx += '\n';
+  }
+
+  // ══ 10. CADASTRO DE CLIENTES ══
   if (cachedClientes && cachedClientes.length > 0) {
     const ativos = cachedClientes.filter(c => gC(c,'ATIVO') === 'S');
     const estados = [...new Set(cachedClientes.map(c=>gC(c,'ESTADO')).filter(Boolean))];
@@ -1695,6 +1740,7 @@ QUANTIDADES NOS PEDIDOS:
 - QTDE_PEDIDA: quantidade de peças pedidas pelo cliente
 - QTDE_FATURADA: quantidade de peças efectivamente faturadas/expedidas
 - QTDE_CANC: quantidade de peças canceladas
+- "Quanto faturamos/expedimos?" = tabela FATURAMENTO[FAT TOTAL] (use SEMPRE esta tabela para faturamento)
 - "Quanto vendemos?" = VAL_VENDA (com desconto) + QTDE_PEDIDA
 - "Quanto faturamos?" = FAT_LIQ + QTDE_FATURADA
 - "Qual o desconto?" = VAL_DESC (valor R$) ou PERC_DESC (percentual %)
