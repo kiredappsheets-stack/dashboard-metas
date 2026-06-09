@@ -1235,7 +1235,7 @@ function renderDashboard(data) {
             <span class="badge ${badgeClass(cPct)}">${badgeLabel(cPct)}</span>
           </div>
         </div>
-        <div class="col-detail">${rows}</div>
+        <div class="col-detail">${col === '23-PRONTA ENTREGA' ? '' : rows}</div>
       </div>`;
   });
 
