@@ -800,17 +800,20 @@ ROW(
 const DAX_RESTRICOES = `
 EVALUATE
 CALCULATETABLE(
-  SUMMARIZECOLUMNS(
-    'PEDIDO CANCELADOS'[COLECAO],
-    'PEDIDO CANCELADOS'[CONCATREP],
-    'PEDIDO CANCELADOS'[CLIENTE],
-    'PEDIDO CANCELADOS'[PEDIDO],
-    'PEDIDO CANCELADOS'[DESCRICAO],
-    "FAT_LIQ", SUM('PEDIDO CANCELADOS'[FAT_LIQ])
+  ADDCOLUMNS(
+    SUMMARIZECOLUMNS(
+      'PEDIDO CANCELADOS'[COLECAO],
+      'PEDIDO CANCELADOS'[COD_REP],
+      'PEDIDO CANCELADOS'[CLIENTE],
+      'PEDIDO CANCELADOS'[PEDIDO],
+      'PEDIDO CANCELADOS'[DESCRICAO],
+      "FAT_LIQ", SUM('PEDIDO CANCELADOS'[FAT_LIQ])
+    ),
+    "NOME_REP", LOOKUPVALUE(REPRESENTANTE[REPRESENTANTE], REPRESENTANTE[CODREP], 'PEDIDO CANCELADOS'[COD_REP])
   ),
   'PEDIDO CANCELADOS'[COL_ATUAL] = "COL ATUAL"
 )
-ORDER BY 'PEDIDO CANCELADOS'[COLECAO] DESC, 'PEDIDO CANCELADOS'[CONCATREP] ASC, [FAT_LIQ] DESC
+ORDER BY 'PEDIDO CANCELADOS'[COLECAO] DESC, 'PEDIDO CANCELADOS'[COD_REP] ASC, [FAT_LIQ] DESC
 `;
 
 const DAX_KPIS_FAT = `
@@ -1293,8 +1296,7 @@ function renderDashboard(data) {
       rows.forEach((r,i) => {
         const bg = i % 2 === 0 ? '#fff' : '#fafaf8';
         // Extrair só o nome do rep (remover código do início)
-        const repRaw = gR(r,'CONCATREP');
-        const repNome = repRaw.replace(/^[\d\-]+/, '').trim();
+        const repNome = gR(r,'NOME_REP') || gR(r,'COD_REP') || '';
         html += `<tr style="background:${bg};border-bottom:1px solid var(--border);">
           <td style="padding:8px 14px;color:var(--muted)"></td>
           <td style="padding:8px 14px;">${repNome}</td>
