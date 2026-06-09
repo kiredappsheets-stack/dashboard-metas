@@ -1154,6 +1154,17 @@ function renderDashboard(data) {
   console.log('clientesPorMarcaUltimoAno keys:', Object.keys(clientesPorMarcaUltimoAno));
   // Verificar primeiro registo de cachedVendas
 
+  // Pré-calcular faturamento real por coleção (tabela FATURAMENTO)
+  const fatRealPorColecao = {};
+  if (cachedFatColecao && cachedFatColecao.length > 0) {
+    cachedFatColecao.forEach(r => {
+      const col = r['FATURAMENTO[COLECAO]'] || r['COLECAO'] || '';
+      const fat = parseFloat(r['[FAT_TOTAL]'] || r['FAT_TOTAL'] || 0) || 0;
+      const qtd = parseFloat(r['[QTD_FAT]'] || r['QTD_FAT'] || 0) || 0;
+      if (col) fatRealPorColecao[col] = { fat, qtd };
+    });
+  }
+
   colecoes.forEach(col => {
     const items    = data.filter(d => d.col === col).sort((a, b) => (b.pct || 0) - (a.pct || 0));
     const cMeta    = items.reduce((a, d) => a + d.meta, 0);
@@ -1165,6 +1176,9 @@ function renderDashboard(data) {
 
     // Clientes atendidos nesta coleção
     const clisAtendidos = clientesPorColecao[col] ? clientesPorColecao[col].size : 0;
+
+    // Faturamento real desta coleção (tabela FATURAMENTO)
+    const fatReal = fatRealPorColecao[col] || { fat: 0, qtd: 0 };
 
     // Clientes a atender: compraram as marcas desta coleção no último ano
     // mas ainda NÃO compraram nesta coleção
@@ -1217,6 +1231,7 @@ function renderDashboard(data) {
             <div class="col-stat"><div class="lbl">% meta</div><div class="val" style="color:${barColor(cPct)}">${(cPct * 100).toFixed(1)}%</div></div>
             <div class="col-stat"><div class="lbl" style="color:#378ADD">👥 Atendidos</div><div class="val" style="color:#378ADD">${clisAtendidos}</div></div>
             <div class="col-stat"><div class="lbl" style="color:#E24B4A">⚠️ A atender</div><div class="val" style="color:#E24B4A">${clisAtender}</div></div>
+            ${fatReal.fat > 0 ? `<div class="col-stat"><div class="lbl" style="color:#1D9E75">✅ Faturado</div><div class="val" style="color:#1D9E75">${fmtR(fatReal.fat)}</div></div><div class="col-stat"><div class="lbl" style="color:#1D9E75">📦 Exp.</div><div class="val" style="color:#1D9E75">${Math.round(fatReal.qtd)} pç</div></div>` : ''}
             <span class="badge ${badgeClass(cPct)}">${badgeLabel(cPct)}</span>
           </div>
         </div>
