@@ -580,7 +580,7 @@
 // ── Funções globais de data ──
 function parseDtParts(str) {
   if (!str) return null;
-  if (str.includes('T') || /^\d{4}-/.test(str)) {
+  if (str.includes('T') || /^[0-9]{4}-/.test(str)) {
     const p = str.split('T')[0].split('-');
     if (p.length >= 3) return {ano:+p[0], mes:+p[1], dia:+p[2]};
   }
@@ -1335,7 +1335,7 @@ function renderDashboard(data) {
         </tbody>
         <tfoot>
           <tr style="background:#f8f8f6;border-top:2px solid var(--border);">
-            <td colspan="5" style="padding:10px 14px;font-weight:700;">Total</td>
+            <td colspan="6" style="padding:10px 14px;font-weight:700;">Total</td>
             <td style="padding:10px 14px;text-align:right;font-weight:700;">${fmtR(totalGeral)}</td>
           </tr>
         </tfoot>
@@ -1354,6 +1354,9 @@ function renderDashboard(data) {
       if (!acc.has(key)) acc.set(key, true);
       return acc;
     }, new Map()).size;
+    const totalGlobalValor = cachedClientesAtender.reduce((a,r) => {
+      return a + (parseFloat(r['[VALOR_ULTIMA_COMPRA]']||r['VALOR_ULTIMA_COMPRA']||0)||0);
+    }, 0);
 
     html += `
     <div class="section-label" style="margin-top:32px;">Clientes a Atender — Coleções Atuais <span style="font-size:12px;color:var(--muted);font-weight:400;">(compraram as marcas em 2025 mas ainda não nas coleções atuais)</span></div>
@@ -1418,7 +1421,6 @@ function renderDashboard(data) {
         <td style="padding:8px 14px;"></td>
         <td style="padding:8px 14px;text-align:right;font-weight:700;color:#1D9E75;">${fmtR(totalColValor)}</td>
       </tr>`;
-      });
     });
 
     html += `
@@ -1427,7 +1429,7 @@ function renderDashboard(data) {
           <tr style="background:#e8f5e9;border-top:3px solid #1D9E75;">
             <td colspan="5" style="padding:10px 14px;font-weight:700;color:#333;">TOTAL GERAL: ${totalCA} clientes a atender</td>
             <td style="padding:10px 14px;"></td>
-            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#1D9E75;">${fmtR(cachedClientesAtender.reduce((a,r) => a + (parseFloat(r['[VALOR_ULTIMA_COMPRA]']||r['VALOR_ULTIMA_COMPRA']||0)||0), 0))}</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#1D9E75;">${fmtR(totalGlobalValor)}</td>
           </tr>
         </tfoot>
       </table>
