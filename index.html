@@ -803,6 +803,24 @@ ROW(
 `;
 
 // KPIs de faturamento real (tabela FATURAMENTO) separado para não quebrar o ROW()
+const DAX_CLIENTES_ATENDER = `
+EVALUATE
+CALCULATETABLE(
+  SUMMARIZECOLUMNS(
+    PEDIDO[COLECAO],
+    PEDIDO[REP],
+    PEDIDO[CLIENTE],
+    PEDIDO[ESTADO],
+    PEDIDO[MUNICIPIO],
+    PEDIDO[MARCA]
+  ),
+  PEDIDO[MARCA] IN CALCULATETABLE(VALUES(PEDIDO[MARCA]), PEDIDO[COL_ATUAL] = "COL ATUAL"),
+  PEDIDO[DATA] >= DATE(2025,1,1),
+  NOT(PEDIDO[CLIENTE] IN CALCULATETABLE(VALUES(PEDIDO[CLIENTE]), PEDIDO[COL_ATUAL] = "COL ATUAL"))
+)
+ORDER BY PEDIDO[COLECAO] DESC, PEDIDO[REP] ASC, PEDIDO[ESTADO] ASC, PEDIDO[MUNICIPIO] ASC
+`;
+
 const DAX_RESTRICOES = `
 EVALUATE
 CALCULATETABLE(
@@ -1323,6 +1341,78 @@ function renderDashboard(data) {
     </div>`;
   }
 
+  // ── Tabela Clientes a Atender ──
+  if (cachedClientesAtender && cachedClientesAtender.length > 0) {
+    const gCA = (r,c) => r['PEDIDO['+c+']'] || r[c] || '';
+
+    // Agrupar por coleção → rep → clientes
+    const colsCA = [...new Set(cachedClientesAtender.map(r => gCA(r,'COLECAO')))].sort().reverse();
+    const totalCA = cachedClientesAtender.reduce((acc, r) => {
+      const key = gCA(r,'CLIENTE') + '|' + gCA(r,'COLECAO');
+      if (!acc.has(key)) acc.set(key, true);
+      return acc;
+    }, new Map()).size;
+
+    html += `
+    <div class="section-label" style="margin-top:32px;">Clientes a Atender — Coleções Atuais <span style="font-size:12px;color:var(--muted);font-weight:400;">(compraram as marcas em 2025 mas ainda não nas coleções atuais)</span></div>
+    <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;margin-bottom:24px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:#f8f8f6;border-bottom:2px solid var(--border);">
+            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">COLEÇÃO / REPRESENTANTE</th>
+            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">CLIENTE</th>
+            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">MARCA</th>
+            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">ESTADO</th>
+            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">CIDADE</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    colsCA.forEach(col => {
+      const rowsCol = cachedClientesAtender.filter(r => gCA(r,'COLECAO') === col);
+      const reps = [...new Set(rowsCol.map(r => gCA(r,'REP')))].sort();
+      const totalColClis = new Set(rowsCol.map(r => gCA(r,'CLIENTE'))).size;
+
+      html += `<tr style="background:#f0f4ff;">
+        <td colspan="5" style="padding:8px 14px;font-weight:700;color:#333;">
+          ${col} <span style="font-weight:400;color:var(--muted);font-size:12px;">— ${totalColClis} clientes a atender</span>
+        </td>
+      </tr>`;
+
+      reps.forEach(rep => {
+        const rowsRep = rowsCol.filter(r => gCA(r,'REP') === rep);
+        const totalRepClis = new Set(rowsRep.map(r => gCA(r,'CLIENTE'))).size;
+
+        html += `<tr style="background:#f7f7f5;border-bottom:1px solid var(--border);">
+          <td colspan="5" style="padding:6px 14px 6px 28px;font-weight:600;color:#555;font-size:12px;">
+            👤 ${rep} <span style="font-weight:400;color:var(--muted);">(${totalRepClis} clientes)</span>
+          </td>
+        </tr>`;
+
+        rowsRep.forEach((r, i) => {
+          const bg = i % 2 === 0 ? '#fff' : '#fafaf8';
+          html += `<tr style="background:${bg};border-bottom:1px solid #f0f0ec;">
+            <td style="padding:7px 14px;color:var(--muted)"></td>
+            <td style="padding:7px 14px;">${gCA(r,'CLIENTE')}</td>
+            <td style="padding:7px 14px;color:#378ADD;font-weight:500;">${gCA(r,'MARCA')}</td>
+            <td style="padding:7px 14px;">${gCA(r,'ESTADO')}</td>
+            <td style="padding:7px 14px;">${gCA(r,'MUNICIPIO')}</td>
+          </tr>`;
+        });
+      });
+    });
+
+    html += `
+        </tbody>
+        <tfoot>
+          <tr style="background:#f8f8f6;border-top:2px solid var(--border);">
+            <td colspan="5" style="padding:10px 14px;font-weight:700;">Total: ${totalCA} clientes a atender</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>`;
+  }
+
   document.getElementById('mainContent').innerHTML = html;
 
   const now = new Date();
@@ -1342,7 +1432,7 @@ async function loadDashboard() {
     // Cada query é independente — se uma falhar não afecta as outras
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes, pedidosDetalhe, produtos, kpis, faturamento, kpisFat, fatColecao, restricoes] = await Promise.all([
+    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes, pedidosDetalhe, produtos, kpis, faturamento, kpisFat, fatColecao, restricoes, clientesAtender] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_PEDIDOS, true)),
       safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
@@ -1358,6 +1448,7 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
       safe(() => runDaxQuery(token, DAX_FAT_COLECAO, true)),
       safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
+      safe(() => runDaxQuery(token, DAX_CLIENTES_ATENDER, true)),
     ]);
     cachedData = data;
     cachedPedidos = pedidos;
@@ -1373,6 +1464,7 @@ async function loadDashboard() {
     cachedFaturamento = faturamento;
     cachedFatColecao = fatColecao;
     cachedRestricoes = restricoes;
+    cachedClientesAtender = clientesAtender;
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
@@ -1442,6 +1534,7 @@ let cachedKpis = null;
 let cachedFaturamento = null;
 let cachedFatColecao = null;
 let cachedRestricoes = null;
+let cachedClientesAtender = null;
 let chatHistory = [];
 
 function toggleChat() {
