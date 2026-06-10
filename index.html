@@ -1345,9 +1345,70 @@ function renderDashboard(data) {
   // ── Tabela Clientes a Atender ──
   if (cachedClientesAtender && cachedClientesAtender.length > 0) {
     const gCA = (r,c) => r['PEDIDO['+c+']'] || r[c] || '';
+    const gCAm = (r,c) => parseFloat(r['['+c+']'] || r[c] || 0) || 0;
 
     // Agrupar por marca → rep → clientes
     const colsCA = [...new Set(cachedClientesAtender.map(r => gCA(r,'MARCA')))].sort();
+
+    // Cards por marca — somar valor uma vez por cliente único
+    const marcasCA = {};
+    const clientesVistos = {}; // "MARCA|CLIENTE" -> valor
+    cachedClientesAtender.forEach(r => {
+      const marca = gCA(r,'MARCA');
+      const cli = gCA(r,'CLIENTE');
+      const val = gCAm(r,'VALOR_ULTIMA_COMPRA');
+      if (!marcasCA[marca]) marcasCA[marca] = { clientes: new Set(), valor: 0 };
+      marcasCA[marca].clientes.add(cli);
+      // Somar valor apenas uma vez por cliente+marca
+      const key = marca + '|' + cli;
+      if (!clientesVistos[key]) {
+        clientesVistos[key] = true;
+        marcasCA[marca].valor += val;
+      }
+    });
+    // Total: clientes únicos e valor sem duplicados
+    const clientesTotaisVistos = {};
+    let totalCliCA = 0;
+    let totalValCA = 0;
+    Object.keys(marcasCA).forEach(marca => {
+      marcasCA[marca].clientes.forEach(cli => {
+        const key = marca + '|' + cli;
+        if (!clientesTotaisVistos[key]) {
+          clientesTotaisVistos[key] = true;
+          totalCliCA++;
+        }
+      });
+      totalValCA += marcasCA[marca].valor;
+    });
+
+    // Cores por marca
+    const marcaCores = { MYROCK:'#378ADD', CHARPEY:'#E24B4A', AMC:'#EF9F27', ROMITEX:'#1D9E75', PRINCIPESSA:'#9B59B6', BV:'#E67E22' };
+
+    html += `<div class="section-label" style="margin-top:32px;">Clientes a Atender — Resumo por Marca</div>
+    <div class="summary-global" style="margin-bottom:8px;">`;
+
+    Object.keys(marcasCA).sort().forEach(marca => {
+      const m = marcasCA[marca];
+      const cor = marcaCores[marca] || '#555';
+      html += `<div class="kpi-card" style="border-left:3px solid ${cor};">
+        <div class="lbl" style="color:${cor};font-weight:600;">${marca}</div>
+        <div class="val" style="color:${cor};">${m.clientes.size}</div>
+        <div class="sub">clientes a atender</div>
+        <div style="margin-top:6px;font-size:13px;font-weight:600;color:#333;">${fmtR(m.valor)}</div>
+        <div class="sub">valor última compra</div>
+      </div>`;
+    });
+
+    // Card total
+    html += `<div class="kpi-card" style="border-left:3px solid #333;">
+      <div class="lbl" style="font-weight:600;">TOTAL</div>
+      <div class="val">${totalCliCA}</div>
+      <div class="sub">clientes a atender</div>
+      <div style="margin-top:6px;font-size:13px;font-weight:600;color:#333;">${fmtR(totalValCA)}</div>
+      <div class="sub">valor última compra</div>
+    </div>`;
+
+    html += `</div>`;
     const totalCA = cachedClientesAtender.reduce((acc, r) => {
       const key = gCA(r,'CLIENTE') + '|' + gCA(r,'COLECAO');
       if (!acc.has(key)) acc.set(key, true);
