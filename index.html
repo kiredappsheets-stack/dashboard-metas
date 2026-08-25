@@ -813,12 +813,12 @@ CALCULATETABLE(
       PEDIDO[CLIENTE],
       PEDIDO[ESTADO],
       PEDIDO[MUNICIPIO],
-      "CODCLI",               MAX(PEDIDO[CODIGO]),
+      "CODCLI",               MAX(PEDIDO[CODCLI_CRM]),
       "ULTIMA_COMPRA",        MAX(PEDIDO[DATA]),
       "VALOR_ULTIMA_COMPRA",  CALCULATE(SUM(PEDIDO[FAT_LIQ]), PEDIDO[DATA] = MAX(PEDIDO[DATA]))
     ),
-    "CRM_DATA", CALCULATE(MAX(CRM[DATA]),    CRM[CODCLI] = MAX(PEDIDO[CODIGO])),
-    "CRM_OBS",  CALCULATE(LASTNONBLANKVALUE(CRM[DATA], MAX(CRM[OBSERVACAO])), CRM[CODCLI] = MAX(PEDIDO[CODIGO]))
+    "CRM_DATA", MAXX(FILTER(CRM, CRM[CODCLI] = [CODCLI]), CRM[DATA]),
+    "CRM_OBS",  MAXX(TOPN(1, FILTER(CRM, CRM[CODCLI] = [CODCLI]), CRM[DATA], DESC), CRM[OBSERVACAO])
   ),
   PEDIDO[MARCA] IN CALCULATETABLE(VALUES(PEDIDO[MARCA]), PEDIDO[COL_ATUAL] = "COL ATUAL"),
   PEDIDO[DATA] >= DATE(2025,1,1),
@@ -923,7 +923,7 @@ const msalConfig = {
   auth: {
     clientId: CONFIG.clientId,
     authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
-    redirectUri: window.location.origin + window.location.pathname,
+    redirectUri: 'https://kiredappsheets-stack.github.io/dashboard-metas/',
   },
   cache: { cacheLocation: "sessionStorage" }
 };
@@ -1477,8 +1477,12 @@ function renderDashboard(data) {
             <td style="padding:7px 14px;text-align:center;color:var(--muted);font-size:12px;">${(gCA(r,'ULTIMA_COMPRA')||'').split('T')[0].split(' ')[0]}</td>
             <td style="padding:7px 14px;text-align:right;font-weight:600;color:#1D9E75;">${fmtR(parseFloat(r['[VALOR_ULTIMA_COMPRA]']||r['VALOR_ULTIMA_COMPRA']||0)||0)}</td>
             <td style="padding:7px 11px;font-size:11px;color:#555;max-width:200px;">${(function(){
-              var obs = r['[CRM_OBS]']||r['CRM_OBS']||'';
-              var dt = (r['[CRM_DATA]']||r['CRM_DATA']||'').split('T')[0].split(' ')[0];
+              // Tentar todas as variantes de chave possíveis
+              var keys = Object.keys(r);
+              var obsKey = keys.find(function(k){ return k.indexOf('CRM_OBS') > -1; }) || '';
+              var dtKey  = keys.find(function(k){ return k.indexOf('CRM_DATA') > -1; }) || '';
+              var obs = obsKey ? (r[obsKey]||'') : '';
+              var dt  = dtKey  ? ((r[dtKey]||'').split('T')[0].split(' ')[0]) : '';
               var txt = obs.replace(/[{][^}]*[}]/g,'').replace(/[\\][a-z]+[0-9]*/g,'').replace(/[{}]/g,'').replace(/\n/g,' ').trim().substring(0,80);
               return txt ? (dt ? '<span style="color:var(--muted);font-size:10px;">'+dt+'</span> '+txt+(txt.length>=80?'...':'') : txt) : '<span style="color:#ccc;">—</span>';
             })()}</td>
