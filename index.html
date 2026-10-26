@@ -583,6 +583,8 @@ async function handleAuth() {
     // Logout local — sem redirect para Microsoft
     account = null;
     localStorage.removeItem(CACHE_KEY);
+    sessionStorage.removeItem('pbi_token');
+    sessionStorage.removeItem('pbi_token_exp');
     const fab = document.querySelector('.chat-fab');
     if(fab) fab.classList.remove('visible');
     const lbl = document.getElementById('chatIaLabel');
@@ -597,21 +599,36 @@ async function handleAuth() {
 }
 
 async function getToken() {
-  // Garantir que temos a conta mais recente
+  // 1. Verificar token guardado no sessionStorage (válido por 50 min)
+  const saved = sessionStorage.getItem('pbi_token');
+  const savedExp = parseInt(sessionStorage.getItem('pbi_token_exp') || '0', 10);
+  if (saved && Date.now() < savedExp) return saved;
+
+  // 2. Buscar novo token via MSAL silent
   if (!account) {
     const accs = msalInstance.getAllAccounts();
     if (accs.length > 0) account = accs[0];
   }
-  const req = { scopes: SCOPES, account };
+  if (!account) {
+    // Sem conta — redirect para login
+    sessionStorage.setItem('msalLoginPending', '1');
+    await msalInstance.loginRedirect({ scopes: SCOPES });
+    throw new Error('Redirecionando para login...');
+  }
   try {
-    const result = await msalInstance.acquireTokenSilent(req);
+    const result = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account });
+    // Guardar token com validade de 50 minutos
+    sessionStorage.setItem('pbi_token', result.accessToken);
+    sessionStorage.setItem('pbi_token_exp', String(Date.now() + 50 * 60 * 1000));
     return result.accessToken;
   } catch(e) {
-    console.warn('Token silent falhou, redirecionando para login:', e.message);
-    account = null;
+    console.warn('Token silent falhou:', e.message);
+    // Limpar token expirado e ir para login
+    sessionStorage.removeItem('pbi_token');
+    sessionStorage.removeItem('pbi_token_exp');
     sessionStorage.setItem('msalLoginPending', '1');
-    await msalInstance.acquireTokenRedirect(req);
-    throw new Error('Redirecionando para login...');
+    await msalInstance.acquireTokenRedirect({ scopes: SCOPES, account });
+    throw new Error('Redirecionando para renovar token...');
   }
 }
 
@@ -1613,6 +1630,11 @@ async function loadDashboard() {
     if (redirectResult && redirectResult.account) {
       account = redirectResult.account;
       sessionStorage.removeItem('msalLoginPending');
+      // Guardar token imediatamente para evitar acquireTokenSilent depois
+      if (redirectResult.accessToken) {
+        sessionStorage.setItem('pbi_token', redirectResult.accessToken);
+        sessionStorage.setItem('pbi_token_exp', String(Date.now() + 50 * 60 * 1000));
+      }
       loadDashboard();
       return;
     }
