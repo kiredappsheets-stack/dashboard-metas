@@ -706,7 +706,6 @@ function renderDashboard(data) {
   const pctGeral   = totalMeta > 0 ? totalVenda / totalMeta : 0;
   const atingiram  = data.filter(d => d.pct !== null && !isNaN(d.pct) && d.pct >= 1).length;
 
-  // KPIs coleções atuais
   const kg = (col) => cachedKpis ? (parseFloat(cachedKpis['['+col+']'] || cachedKpis[col] || 0) || 0) : 0;
   const kClisAtual   = kg('ClientesColAtual');
   const kPecasVend   = kg('PecasVendidas');
@@ -715,448 +714,213 @@ function renderDashboard(data) {
   const kFatLiq      = kg('FatLiq');
   const kClisSemComp = kg('ClientesSemCompraColAtual');
 
-  let html = `
-    <div class="section-label">Resumo geral — metas</div>
-    <div class="summary-global">
-      <div class="kpi-card">
-        <div class="lbl">Meta total</div>
-        <div class="val">${fmtR(totalMeta)}</div>
-        <div class="sub">${data.length} representantes</div>
-      </div>
-      <div class="kpi-card">
-        <div class="lbl">Vendido coleções atuais</div>
-        <div class="val">${fmtR(kValVenda)}</div>
-        <div class="sub">líquido após desconto</div>
-      </div>
-      <div class="kpi-card">
-        <div class="lbl">% meta geral</div>
-        <div class="val" style="color:${barColor(pctGeral)}">${(pctGeral * 100).toFixed(1)}%</div>
-        <div class="sub">da meta</div>
-      </div>
-      <div class="kpi-card">
-        <div class="lbl">Bateram 100%</div>
-        <div class="val">${atingiram}</div>
-        <div class="sub">representantes</div>
-      </div>
-      <div class="kpi-card">
-        <div class="lbl">Coleções ativas</div>
-        <div class="val">${colecoes.length}</div>
-        <div class="sub">no dashboard</div>
-      </div>
-    </div>
-
-    <div class="section-label">Coleções atuais — operacional</div>
-    <div class="summary-global">
-      <div class="kpi-card" style="border-left:3px solid #378ADD;">
-        <div class="lbl">👥 Clientes atendidos</div>
-        <div class="val" style="color:#378ADD">${Math.round(kClisAtual).toLocaleString('pt-BR')}</div>
-        <div class="sub">compraram nas coleções atuais</div>
-      </div>
-      <div class="kpi-card" style="border-left:3px solid #E24B4A;">
-        <div class="lbl">⚠️ Clientes a atender</div>
-        <div class="val" style="color:#E24B4A">${Math.round(kClisSemComp).toLocaleString('pt-BR')}</div>
-        <div class="sub">compraram as marcas no último ano, sem pedido nas atuais</div>
-      </div>
-      <div class="kpi-card" style="border-left:3px solid #EF9F27;">
-        <div class="lbl">📦 Peças vendidas</div>
-        <div class="val" style="color:#EF9F27">${Math.round(kPecasVend).toLocaleString('pt-BR')}</div>
-        <div class="sub">pedidas nas coleções atuais</div>
-      </div>
-      <div class="kpi-card" style="border-left:3px solid #1D9E75;">
-        <div class="lbl">✅ Peças faturadas</div>
-        <div class="val" style="color:#1D9E75">${Math.round(kPecasFat).toLocaleString('pt-BR')}</div>
-        <div class="sub">expedidas nas coleções atuais</div>
-      </div>
-      <div class="kpi-card" style="border-left:3px solid #1D9E75;">
-        <div class="lbl">💰 Faturado líquido</div>
-        <div class="val" style="color:#1D9E75">${fmtR(kFatLiq)}</div>
-        <div class="sub">coleções atuais</div>
-      </div>
-    </div>
-
-    <div class="legend">
-      <span><span class="ldot" style="background:#E24B4A"></span>Sem vendas</span>
-      <span><span class="ldot" style="background:#EF9F27"></span>Abaixo de 50%</span>
-      <span><span class="ldot" style="background:#378ADD"></span>50% a 99%</span>
-      <span><span class="ldot" style="background:#1D9E75"></span>100% ou mais</span>
-    </div>
-  `;
-
-  // Pré-calcular clientes e marcas por coleção a partir de cachedVendas
   const gPv = (r,c) => r['PEDIDO['+c+']'] || r[c] || '';
-  const clientesPorColecao = {}; // col -> Set de clientes
-  const marcasPorColecao   = {}; // col -> Set de marcas
-  const clientesPorMarca   = {}; // marca -> Set de clientes (todas as coleções)
-
-  // Calcular ano limite para "último ano"
+  const clientesPorColecao = {}, marcasPorColecao = {}, clientesPorMarca = {};
   const anoLimite = new Date(); anoLimite.setFullYear(anoLimite.getFullYear() - 1);
-  const clientesPorMarcaUltimoAno = {}; // marca -> Set clientes último ano
+  const clientesPorMarcaUltimoAno = {};
 
-  if (cachedVendas && cachedVendas.length > 0) {
-    cachedVendas.forEach(r => {
-      const col   = gPv(r,'COLECAO');
-      const cli   = gPv(r,'CLIENTE');
-      const marca = gPv(r,'MARCA');
-      if (!col || !cli) return;
-      if (!clientesPorColecao[col]) clientesPorColecao[col] = new Set();
-      clientesPorColecao[col].add(cli);
-      if (marca) {
-        if (!marcasPorColecao[col]) marcasPorColecao[col] = new Set();
-        marcasPorColecao[col].add(marca);
-        if (!clientesPorMarca[marca]) clientesPorMarca[marca] = new Set();
-        clientesPorMarca[marca].add(cli);
-      }
-    });
-  }
+  if (cachedVendas) cachedVendas.forEach(r => {
+    const col=gPv(r,'COLECAO'),cli=gPv(r,'CLIENTE'),marca=gPv(r,'MARCA');
+    if(!col||!cli) return;
+    if(!clientesPorColecao[col]) clientesPorColecao[col]=new Set();
+    clientesPorColecao[col].add(cli);
+    if(marca){
+      if(!marcasPorColecao[col]) marcasPorColecao[col]=new Set();
+      marcasPorColecao[col].add(marca);
+      if(!clientesPorMarca[marca]) clientesPorMarca[marca]=new Set();
+      clientesPorMarca[marca].add(cli);
+    }
+  });
 
-  // Clientes por marca — apenas último ano (usando cachedVendas que tem MARCA e CLIENTE)
-  // cachedVendas vem de DAX_VENDAS que inclui todas as coleções
-  // Para filtrar último ano usamos cachedPedidosDetalhe que tem DATA
-  // Primeiro: coletar clientes+marca dos pedidos do último ano
-  const clientesMarcaRecente = new Set(); // "CLIENTE|MARCA"
-  if (cachedPedidosDetalhe && cachedPedidosDetalhe.length > 0) {
-    cachedPedidosDetalhe.forEach(r => {
-      // tentar todas as variantes de chave
-      const cli   = r['PEDIDO[CLIENTE]'] || r['CLIENTE'] || '';
-      const marca = r['PEDIDO[MARCA]']   || r['MARCA']   || '';
-      const dtStr = r['PEDIDO[DATA]']    || r['DATA']    || '';
-      if (!cli || !marca || !dtStr) return;
-      const dt = parseDt(dtStr);
-      if (!dt || dt < anoLimite) return;
-      clientesMarcaRecente.add(cli + '|||' + marca);
-      if (!clientesPorMarcaUltimoAno[marca]) clientesPorMarcaUltimoAno[marca] = new Set();
-      clientesPorMarcaUltimoAno[marca].add(cli);
-    });
-  }
+  if (cachedPedidosDetalhe) cachedPedidosDetalhe.forEach(r => {
+    const cli=r['PEDIDO[CLIENTE]']||r['CLIENTE']||'',marca=r['PEDIDO[MARCA]']||r['MARCA']||'',dtStr=r['PEDIDO[DATA]']||r['DATA']||'';
+    if(!cli||!marca||!dtStr) return;
+    const dt=parseDt(dtStr);
+    if(!dt||dt<anoLimite) return;
+    if(!clientesPorMarcaUltimoAno[marca]) clientesPorMarcaUltimoAno[marca]=new Set();
+    clientesPorMarcaUltimoAno[marca].add(cli);
+  });
+  if(Object.keys(clientesPorMarcaUltimoAno).length===0 && cachedVendas)
+    cachedVendas.forEach(r=>{ const cli=gPv(r,'CLIENTE'),marca=gPv(r,'MARCA'); if(!cli||!marca) return; if(!clientesPorMarcaUltimoAno[marca]) clientesPorMarcaUltimoAno[marca]=new Set(); clientesPorMarcaUltimoAno[marca].add(cli); });
 
-  // Fallback: se cachedPedidosDetalhe não tiver dados de MARCA, usar cachedVendas sem filtro de data
-  // (pois cachedVendas já tem desde 2024 que é recente o suficiente)
-  if (Object.keys(clientesPorMarcaUltimoAno).length === 0 && cachedVendas && cachedVendas.length > 0) {
-    console.log('Fallback: usando cachedVendas para clientes por marca');
-    cachedVendas.forEach(r => {
-      const cli   = gPv(r,'CLIENTE');
-      const marca = gPv(r,'MARCA');
-      if (!cli || !marca) return;
-      if (!clientesPorMarcaUltimoAno[marca]) clientesPorMarcaUltimoAno[marca] = new Set();
-      clientesPorMarcaUltimoAno[marca].add(cli);
-    });
-  }
-  console.log('clientesPorMarcaUltimoAno keys:', Object.keys(clientesPorMarcaUltimoAno));
-  // Verificar primeiro registo de cachedVendas
-
-  // Pré-calcular faturamento real por coleção (tabela FATURAMENTO)
   const fatRealPorColecao = {};
-  if (cachedFatColecao && cachedFatColecao.length > 0) {
-    cachedFatColecao.forEach(r => {
-      const col = r['FATURAMENTO[COLECAO]'] || r['COLECAO'] || '';
-      const fat = parseFloat(r['[FAT_TOTAL]'] || r['FAT_TOTAL'] || 0) || 0;
-      const qtd = parseFloat(r['[QTD_FAT]'] || r['QTD_FAT'] || 0) || 0;
-      if (col) fatRealPorColecao[col] = { fat, qtd };
-    });
+  if(cachedFatColecao) cachedFatColecao.forEach(r=>{
+    const col=r['FATURAMENTO[COLECAO]']||r['COLECAO']||'';
+    if(col) fatRealPorColecao[col]={ fat:parseFloat(r['[FAT_TOTAL]']||r['FAT_TOTAL']||0)||0, qtd:parseFloat(r['[QTD_FAT]']||r['QTD_FAT']||0)||0 };
+  });
+
+  function buildOverview() {
+    return `
+    <div class="kpi-row">
+      <div class="kpi"><div class="kpi-lbl">Meta total</div><div class="kpi-val">${fmtR(totalMeta)}</div><div class="kpi-sub">${data.length} representantes</div></div>
+      <div class="kpi"><div class="kpi-lbl">Vendido</div><div class="kpi-val" style="color:${barColor(pctGeral)}">${fmtR(kValVenda)}</div><div class="kpi-sub">líquido, coleções atuais</div></div>
+      <div class="kpi"><div class="kpi-lbl">% da meta</div><div class="kpi-val" style="color:${barColor(pctGeral)}">${(pctGeral*100).toFixed(1)}%</div><div class="kpi-sub">progresso geral</div></div>
+      <div class="kpi"><div class="kpi-lbl">100% atingidos</div><div class="kpi-val">${atingiram}</div><div class="kpi-sub">representantes</div></div>
+      <div class="kpi"><div class="kpi-lbl">Faturado líquido</div><div class="kpi-val" style="color:var(--green)">${fmtR(kFatLiq)}</div><div class="kpi-sub">coleções atuais</div></div>
+    </div>
+    <div class="kpi-row" style="margin-top:12px">
+      <div class="kpi" style="border-left:3px solid var(--blue)"><div class="kpi-lbl" style="color:var(--blue)">Clientes atendidos</div><div class="kpi-val" style="color:var(--blue)">${Math.round(kClisAtual).toLocaleString('pt-BR')}</div><div class="kpi-sub">compraram nas coleções atuais</div></div>
+      <div class="kpi" style="border-left:3px solid var(--red)"><div class="kpi-lbl" style="color:var(--red)">Clientes a atender</div><div class="kpi-val" style="color:var(--red)">${Math.round(kClisSemComp).toLocaleString('pt-BR')}</div><div class="kpi-sub">sem pedido nas coleções atuais</div></div>
+      <div class="kpi" style="border-left:3px solid var(--amber)"><div class="kpi-lbl" style="color:var(--amber)">Peças vendidas</div><div class="kpi-val" style="color:var(--amber)">${Math.round(kPecasVend).toLocaleString('pt-BR')}</div><div class="kpi-sub">pedidas nas coleções atuais</div></div>
+      <div class="kpi" style="border-left:3px solid var(--green)"><div class="kpi-lbl" style="color:var(--green)">Peças faturadas</div><div class="kpi-val" style="color:var(--green)">${Math.round(kPecasFat).toLocaleString('pt-BR')}</div><div class="kpi-sub">expedidas nas coleções atuais</div></div>
+      <div class="kpi"><div class="kpi-lbl">Coleções ativas</div><div class="kpi-val">${colecoes.length}</div><div class="kpi-sub">no dashboard</div></div>
+    </div>
+    <div class="legend-row">
+      <span class="leg"><span class="ldot" style="background:#E84A4A"></span>Sem vendas</span>
+      <span class="leg"><span class="ldot" style="background:#F5A623"></span>Abaixo de 50%</span>
+      <span class="leg"><span class="ldot" style="background:#4C9EF1"></span>50–99%</span>
+      <span class="leg"><span class="ldot" style="background:#00C896"></span>100% ou mais</span>
+    </div>`;
   }
 
-  colecoes.forEach(col => {
-    const items    = data.filter(d => d.col === col).sort((a, b) => (b.pct || 0) - (a.pct || 0));
-    const cMeta    = items.reduce((a, d) => a + d.meta, 0);
-    const cVenda   = items.reduce((a, d) => a + d.venda, 0);
-    const cPct     = cMeta > 0 ? cVenda / cMeta : 0;
-    const cAting   = items.filter(d => d.pct !== null && !isNaN(d.pct) && d.pct >= 1).length;
-    const fillW    = Math.min(Math.max(cPct, 0), 1.5) / 1.5 * 100;
-    const maxPct   = Math.max(...items.map(d => d.pct || 0), 1.4);
-
-    // Clientes atendidos nesta coleção
-    const clisAtendidos = clientesPorColecao[col] ? clientesPorColecao[col].size : 0;
-
-    // Faturamento real desta coleção (tabela FATURAMENTO)
-    const fatReal = fatRealPorColecao[col] || { fat: 0, qtd: 0 };
-
-    // Clientes a atender: compraram as marcas desta coleção no último ano
-    // mas ainda NÃO compraram nesta coleção
-    const marcasDestCol = marcasPorColecao[col] || new Set();
-    const clisDestCol   = clientesPorColecao[col] || new Set();
-    const clisBaseMarca = new Set();
-    marcasDestCol.forEach(marca => {
-      if (clientesPorMarcaUltimoAno[marca]) {
-        clientesPorMarcaUltimoAno[marca].forEach(c => clisBaseMarca.add(c));
-      }
-    });
-    const clisAtender = [...clisBaseMarca].filter(c => !clisDestCol.has(c)).length;
-
-    const rows = items.map(d => {
-      const pct   = (d.pct !== null && !isNaN(d.pct)) ? d.pct : 0;
-      const fp    = Math.max(0, Math.min(pct / maxPct, 1)) * 100;
-      const lbl   = (d.pct !== null && !isNaN(d.pct)) ? (d.pct * 100).toFixed(1) + '%' : '0%';
-      const bc    = barColor(d.pct);
-      const tc    = txtOnBar(d.pct);
-      const inside = fp > 26;
-      return `
-        <div class="bar-row" title="${d.rep} · Meta: ${fmtR(d.meta)} · Venda: ${fmtR(d.venda)} · ${lbl}">
+  function buildMetas() {
+    let h='';
+    colecoes.forEach(col => {
+      const items=data.filter(d=>d.col===col).sort((a,b)=>(b.pct||0)-(a.pct||0));
+      const cMeta=items.reduce((a,d)=>a+d.meta,0), cVenda=items.reduce((a,d)=>a+d.venda,0);
+      const cPct=cMeta>0?cVenda/cMeta:0, cAting=items.filter(d=>d.pct!==null&&!isNaN(d.pct)&&d.pct>=1).length;
+      const fillW=Math.min(Math.max(cPct,0),1.5)/1.5*100, maxPct=Math.max(...items.map(d=>d.pct||0),1.4);
+      const clisAtendidos=clientesPorColecao[col]?clientesPorColecao[col].size:0;
+      const fatReal=fatRealPorColecao[col]||{fat:0,qtd:0};
+      const marcasDestCol=marcasPorColecao[col]||new Set(), clisDestCol=clientesPorColecao[col]||new Set();
+      const clisBaseMarca=new Set();
+      marcasDestCol.forEach(m=>{ if(clientesPorMarcaUltimoAno[m]) clientesPorMarcaUltimoAno[m].forEach(c=>clisBaseMarca.add(c)); });
+      const clisAtender=[...clisBaseMarca].filter(c=>!clisDestCol.has(c)).length;
+      const rows=items.map(d=>{
+        const pct=(d.pct!==null&&!isNaN(d.pct))?d.pct:0, fp=Math.max(0,Math.min(pct/maxPct,1))*100;
+        const lbl=(d.pct!==null&&!isNaN(d.pct))?(d.pct*100).toFixed(1)+'%':'0%';
+        const bc=barColor(d.pct), inside=fp>28;
+        return `<div class="bar-row">
           <div class="bar-name" title="${d.rep}">${shortName(d.rep)}</div>
-          <div class="bar-track">
-            <div class="bar-inner">
-              <div class="bar-fill" style="width:${fp}%;background:${bc}">
-                ${inside ? `<span class="bar-label-in" style="color:${tc}">${lbl}</span>` : ''}
-              </div>
-            </div>
-            ${!inside ? `<span class="bar-label-out" style="left:calc(${fp}% + 6px)">${lbl}</span>` : ''}
-          </div>
+          <div class="bar-track"><div class="bar-inner"><div class="bar-fill" style="width:${fp}%;background:${bc}">${inside?`<span style="color:#000;font-size:11px;font-weight:700;padding-right:6px">${lbl}</span>`:''}</div></div>${!inside?`<span style="position:absolute;left:calc(${fp}% + 6px);top:50%;transform:translateY(-50%);font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap">${lbl}</span>`:''}</div>
         </div>`;
-    }).join('');
-
-    html += `
-      <div class="col-section">
-        <div class="col-summary">
-          <div>
-            <div class="col-name">${col}</div>
-            <div class="col-sub">${items.length} representantes · ${cAting} atingiram 100%</div>
-            <div class="col-progress">
-              <div class="col-progress-track">
-                <div class="col-progress-fill" style="width:${fillW}%;background:${barColor(cPct)}"></div>
-              </div>
-            </div>
+      }).join('');
+      h+=`<div class="col-card">
+        <div class="col-card-header">
+          <div class="col-card-left">
+            <div class="col-card-name">${col}</div>
+            <div class="col-card-sub">${items.length} reps · ${cAting} atingiram 100%</div>
+            <div class="col-progress-track"><div class="col-progress-fill" style="width:${fillW}%;background:${barColor(cPct)}"></div></div>
           </div>
-          <div class="col-stats">
-            <div class="col-stat"><div class="lbl">Meta</div><div class="val">${fmtR(cMeta)}</div></div>
-            <div class="col-stat"><div class="lbl">Venda</div><div class="val">${fmtR(cVenda)}</div></div>
-            <div class="col-stat"><div class="lbl">% meta</div><div class="val" style="color:${barColor(cPct)}">${(cPct * 100).toFixed(1)}%</div></div>
-            <div class="col-stat"><div class="lbl" style="color:#378ADD">👥 Atendidos</div><div class="val" style="color:#378ADD">${clisAtendidos}</div></div>
-            <div class="col-stat"><div class="lbl" style="color:#E24B4A">⚠️ A atender</div><div class="val" style="color:#E24B4A">${clisAtender}</div></div>
-            ${fatReal.fat > 0 ? `<div class="col-stat"><div class="lbl" style="color:#1D9E75">✅ Faturado</div><div class="val" style="color:#1D9E75">${fmtR(fatReal.fat)}</div></div><div class="col-stat"><div class="lbl" style="color:#1D9E75">📦 Exp.</div><div class="val" style="color:#1D9E75">${Math.round(fatReal.qtd)} pç</div></div>` : ''}
+          <div class="col-card-stats">
+            <div class="col-stat-item"><div class="cs-lbl">Meta</div><div class="cs-val">${fmtR(cMeta)}</div></div>
+            <div class="col-stat-item"><div class="cs-lbl">Venda</div><div class="cs-val">${fmtR(cVenda)}</div></div>
+            <div class="col-stat-item"><div class="cs-lbl">% meta</div><div class="cs-val" style="color:${barColor(cPct)}">${(cPct*100).toFixed(1)}%</div></div>
+            <div class="col-stat-item"><div class="cs-lbl" style="color:#4C9EF1">Atendidos</div><div class="cs-val" style="color:#4C9EF1">${clisAtendidos}</div></div>
+            <div class="col-stat-item"><div class="cs-lbl" style="color:#E84A4A">A atender</div><div class="cs-val" style="color:#E84A4A">${clisAtender}</div></div>
+            ${fatReal.fat>0?`<div class="col-stat-item"><div class="cs-lbl" style="color:#00C896">Faturado</div><div class="cs-val" style="color:#00C896">${fmtR(fatReal.fat)}</div></div>`:''}
             <span class="badge ${badgeClass(cPct)}">${badgeLabel(cPct)}</span>
           </div>
         </div>
-        <div class="col-detail">${col === '23-PRONTA ENTREGA' ? '' : rows}</div>
+        <div class="col-card-body">${rows}</div>
       </div>`;
-  });
-
-  // ── Tabela de Pedidos com Restrições ──
-  if (cachedRestricoes && cachedRestricoes.length > 0) {
-    const gR = (r,c) => r["PEDIDO CANCELADOS["+c+"]"] || r[c] || '';
-    const gM = (r,c) => parseFloat(r["["+c+"]"] || r[c] || 0) || 0;
-
-    // Agrupar por coleção
-    const colsR = [...new Set(cachedRestricoes.map(r => gR(r,'COLECAO')))].sort().reverse();
-    const totalGeral = cachedRestricoes.reduce((a,r) => a + gM(r,'FAT_LIQ'), 0);
-
-    html += `
-    <div class="section-label" style="margin-top:32px;">Pedidos com Restrições — Coleções Atuais</div>
-    <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;margin-bottom:24px;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="background:#f8f8f6;border-bottom:2px solid var(--border);">
-            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">COLEÇÃO</th>
-            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">REPRESENTANTE</th>
-            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">CLIENTE</th>
-            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">DESCRIÇÃO</th>
-            <th style="padding:10px 14px;text-align:center;color:var(--muted);font-weight:600;">PEDIDO</th>
-            <th style="padding:10px 14px;text-align:right;color:var(--muted);font-weight:600;">FAT. LÍQ.</th>
-            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">OBS. RESTRIÇÃO</th>
-          </tr>
-        </thead>
-        <tbody>`;
-
-    colsR.forEach(col => {
-      const rows = cachedRestricoes.filter(r => gR(r,'COLECAO') === col);
-      const totalCol = rows.reduce((a,r) => a + gM(r,'FAT_LIQ'), 0);
-
-      // Linha de subtítulo da coleção
-      html += `<tr style="background:#f0f4ff;">
-        <td colspan="6" style="padding:8px 14px;font-weight:700;color:#333;">${col}</td>
-        <td style="padding:8px 14px;text-align:right;font-weight:700;color:#333;">${fmtR(totalCol)}</td>
-        <td></td>
-      </tr>`;
-
-      rows.forEach((r,i) => {
-        const bg = i % 2 === 0 ? '#fff' : '#fafaf8';
-        const repNome = gR(r,'REPRESENTANTE') || '';
-        const obs = gR(r,'OBS') || '';
-        html += `<tr style="background:${bg};border-bottom:1px solid var(--border);">
-          <td style="padding:8px 14px;color:var(--muted)"></td>
-          <td style="padding:8px 14px;">${repNome}</td>
-          <td style="padding:8px 14px;">${gR(r,'CLIENTE')}</td>
-          <td style="padding:8px 14px;color:#E24B4A;font-weight:500;">${gR(r,'DESCRICAO')}</td>
-          <td style="padding:8px 14px;text-align:center;color:var(--muted);font-family:monospace;">${gR(r,'PEDIDO')}</td>
-          <td style="padding:8px 14px;text-align:right;font-weight:600;">${fmtR(gM(r,'FAT_LIQ'))}</td>
-          <td style="padding:8px 14px;font-size:12px;color:#666;max-width:320px;line-height:1.4;">${obs}</td>
-        </tr>`;
-      });
     });
-
-    html += `
-        </tbody>
-        <tfoot>
-          <tr style="background:#f8f8f6;border-top:2px solid var(--border);">
-            <td colspan="6" style="padding:10px 14px;font-weight:700;">Total</td>
-            <td style="padding:10px 14px;text-align:right;font-weight:700;">${fmtR(totalGeral)}</td>
-            <td></td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>`;
+    return h;
   }
 
-  // ── Tabela Clientes a Atender ──
-  if (cachedClientesAtender && cachedClientesAtender.length > 0) {
-    const gCA = (r,c) => r['PEDIDO['+c+']'] || r[c] || '';
-    const gCAm = (r,c) => parseFloat(r['['+c+']'] || r[c] || 0) || 0;
-
-    // Agrupar por marca → rep → clientes
-    const colsCA = [...new Set(cachedClientesAtender.map(r => gCA(r,'MARCA')))].sort();
-
-    // Cards por marca — somar valor uma vez por cliente único
-    const marcasCA = {};
-    const clientesVistos = {}; // "MARCA|CLIENTE" -> valor
-    cachedClientesAtender.forEach(r => {
-      const marca = gCA(r,'MARCA');
-      const cli = gCA(r,'CLIENTE');
-      const val = gCAm(r,'VALOR_ULTIMA_COMPRA');
-      if (!marcasCA[marca]) marcasCA[marca] = { clientes: new Set(), valor: 0 };
-      marcasCA[marca].clientes.add(cli);
-      // Somar valor apenas uma vez por cliente+marca
-      const key = marca + '|' + cli;
-      if (!clientesVistos[key]) {
-        clientesVistos[key] = true;
-        marcasCA[marca].valor += val;
-      }
-    });
-    // Total: clientes únicos e valor sem duplicados
-    const clientesTotaisVistos = {};
-    let totalCliCA = 0;
-    let totalValCA = 0;
-    Object.keys(marcasCA).forEach(marca => {
-      marcasCA[marca].clientes.forEach(cli => {
-        const key = marca + '|' + cli;
-        if (!clientesTotaisVistos[key]) {
-          clientesTotaisVistos[key] = true;
-          totalCliCA++;
-        }
-      });
-      totalValCA += marcasCA[marca].valor;
-    });
-
-    // Cores por marca
-    const marcaCores = { MYROCK:'#378ADD', CHARPEY:'#E24B4A', AMC:'#EF9F27', ROMITEX:'#1D9E75', PRINCIPESSA:'#9B59B6', BV:'#E67E22' };
-
-    html += `<div class="section-label" style="margin-top:32px;">Clientes a Atender — Resumo por Marca</div>
-    <div class="summary-global" style="margin-bottom:8px;">`;
-
-    Object.keys(marcasCA).sort().forEach(marca => {
-      const m = marcasCA[marca];
-      const cor = marcaCores[marca] || '#555';
-      html += `<div class="kpi-card" style="border-left:3px solid ${cor};">
-        <div class="lbl" style="color:${cor};font-weight:600;">${marca}</div>
-        <div class="val" style="color:${cor};">${m.clientes.size}</div>
-        <div class="sub">clientes a atender</div>
-        <div style="margin-top:6px;font-size:13px;font-weight:600;color:#333;">${fmtR(m.valor)}</div>
-        <div class="sub">valor última compra</div>
-      </div>`;
-    });
-
-    // Card total
-    html += `<div class="kpi-card" style="border-left:3px solid #333;">
-      <div class="lbl" style="font-weight:600;">TOTAL</div>
-      <div class="val">${totalCliCA}</div>
-      <div class="sub">clientes a atender</div>
-      <div style="margin-top:6px;font-size:13px;font-weight:600;color:#333;">${fmtR(totalValCA)}</div>
-      <div class="sub">valor última compra</div>
-    </div>`;
-
-    html += `</div>`;
-    const totalCA = cachedClientesAtender.reduce((acc, r) => {
-      const key = gCA(r,'CLIENTE') + '|' + gCA(r,'COLECAO');
-      if (!acc.has(key)) acc.set(key, true);
-      return acc;
-    }, new Map()).size;
-    const totalGlobalValor = cachedClientesAtender.reduce((a,r) => {
-      return a + (parseFloat(r['[VALOR_ULTIMA_COMPRA]']||r['VALOR_ULTIMA_COMPRA']||0)||0);
-    }, 0);
-
-    html += `
-    <div class="section-label" style="margin-top:32px;">Clientes a Atender — Coleções Atuais <span style="font-size:12px;color:var(--muted);font-weight:400;">(compraram em 2025 mas ainda não nas coleções atuais)</span></div>
-    <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;margin-bottom:24px;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="background:#f8f8f6;border-bottom:2px solid var(--border);">
-            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">MARCA / REPRESENTANTE</th>
-            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">CLIENTE</th>
-            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">ESTADO</th>
-            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">CIDADE</th>
-            <th style="padding:10px 14px;text-align:center;color:var(--muted);font-weight:600;">ÚLT. COMPRA</th>
-            <th style="padding:10px 14px;text-align:right;color:var(--muted);font-weight:600;">VALOR ÚLT. COMPRA</th>
-            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;">ÚLT. OBS. CRM</th>
-          </tr>
-        </thead>
-        <tbody>`;
-
-    colsCA.forEach(col => {
-      const rowsCol = cachedClientesAtender.filter(r => gCA(r,'MARCA') === col);
-      const reps = [...new Set(rowsCol.map(r => gCA(r,'REP')))].sort();
-      const totalColClis = new Set(rowsCol.map(r => gCA(r,'CLIENTE'))).size;
-      const totalColValor = rowsCol.reduce((a,r) => a + (parseFloat(r['[VALOR_ULTIMA_COMPRA]']||r['VALOR_ULTIMA_COMPRA']||0)||0), 0);
-
-      // Cabeçalho da marca com subtotal na primeira linha
-      html += `<tr style="background:#e8edf5;border-top:2px solid #c5d0e8;">
-        <td colspan="5" style="padding:8px 14px;font-weight:700;color:#333;">${col} — ${totalColClis} clientes a atender</td>
-        <td style="padding:8px 14px;"></td>
-        <td style="padding:8px 14px;text-align:right;font-weight:700;color:#1D9E75;">${fmtR(totalColValor)}</td>
-      </tr>`;
-
-      reps.forEach(rep => {
-        const rowsRep = rowsCol.filter(r => gCA(r,'REP') === rep);
-        const totalRepClis = new Set(rowsRep.map(r => gCA(r,'CLIENTE'))).size;
-        const totalRepValor = rowsRep.reduce((a,r) => a + (parseFloat(r['[VALOR_ULTIMA_COMPRA]']||r['VALOR_ULTIMA_COMPRA']||0)||0), 0);
-
-        // Cabeçalho do rep com subtotal na primeira linha
-        html += `<tr style="background:#f7f7f5;border-bottom:1px solid var(--border);">
-          <td colspan="5" style="padding:6px 14px 6px 28px;font-weight:600;color:#555;font-size:12px;">
-            👤 ${rep} <span style="font-weight:400;color:var(--muted);">(${totalRepClis} clientes)</span>
-          </td>
-          <td style="padding:6px 14px;"></td>
-          <td style="padding:6px 14px;text-align:right;font-weight:700;color:#1D9E75;font-size:12px;">${fmtR(totalRepValor)}</td>
+  function buildRestricoes() {
+    if(!cachedRestricoes||!cachedRestricoes.length) return '<div class="empty-state">Nenhuma restrição encontrada.</div>';
+    const gR=(r,c)=>r["PEDIDO CANCELADOS["+c+"]"]||r[c]||'';
+    const gM=(r,c)=>parseFloat(r["["+c+"]"]||r[c]||0)||0;
+    const colsR=[...new Set(cachedRestricoes.map(r=>gR(r,'COLECAO')))].sort().reverse();
+    const totalGeral=cachedRestricoes.reduce((a,r)=>a+gM(r,'FAT_LIQ'),0);
+    let h=`<div class="tbl-wrap"><table class="dash-table"><thead><tr>
+      <th>Coleção</th><th>Representante</th><th>Cliente</th><th>Descrição</th>
+      <th style="text-align:center">Pedido</th><th style="text-align:right">Fat. Líq.</th><th>Obs.</th>
+    </tr></thead><tbody>`;
+    colsR.forEach(col=>{
+      const rows=cachedRestricoes.filter(r=>gR(r,'COLECAO')===col);
+      const totalCol=rows.reduce((a,r)=>a+gM(r,'FAT_LIQ'),0);
+      h+=`<tr class="tbl-group"><td colspan="6" class="tbl-group-cell">${col}</td><td class="tbl-group-cell" style="text-align:right">${fmtR(totalCol)}</td></tr>`;
+      rows.forEach((r,i)=>{
+        h+=`<tr class="${i%2===0?'tbl-even':'tbl-odd'}">
+          <td></td><td>${gR(r,'REPRESENTANTE')}</td><td>${gR(r,'CLIENTE')}</td>
+          <td class="tbl-danger">${gR(r,'DESCRICAO')}</td>
+          <td style="text-align:center;font-family:monospace;color:var(--muted)">${gR(r,'PEDIDO')}</td>
+          <td style="text-align:right;font-weight:600">${fmtR(gM(r,'FAT_LIQ'))}</td>
+          <td class="tbl-obs">${gR(r,'OBS')||'—'}</td>
         </tr>`;
+      });
+    });
+    h+=`</tbody><tfoot><tr class="tbl-foot"><td colspan="6">Total geral</td><td style="text-align:right">${fmtR(totalGeral)}</td></tr></tfoot></table></div>`;
+    return h;
+  }
 
-        rowsRep.forEach((r, i) => {
-          const bg = i % 2 === 0 ? '#fff' : '#fafaf8';
-          html += `<tr style="background:${bg};border-bottom:1px solid #f0f0ec;">
-            <td style="padding:7px 14px;color:var(--muted)"></td>
-            <td style="padding:7px 14px;">${gCA(r,'CLIENTE')}</td>
-            <td style="padding:7px 14px;">${gCA(r,'ESTADO')}</td>
-            <td style="padding:7px 14px;">${gCA(r,'MUNICIPIO')}</td>
-            <td style="padding:7px 14px;text-align:center;color:var(--muted);font-size:12px;">${(gCA(r,'ULTIMA_COMPRA')||'').split('T')[0].split(' ')[0]}</td>
-            <td style="padding:7px 14px;text-align:right;font-weight:600;color:#1D9E75;">${fmtR(parseFloat(r['[VALOR_ULTIMA_COMPRA]']||r['VALOR_ULTIMA_COMPRA']||0)||0)}</td>
-            <td style="padding:7px 11px;font-size:11px;color:#555;max-width:200px;">${(function(){
-              // Tentar todas as variantes de chave possíveis
-              var keys = Object.keys(r);
-              var obsKey = keys.find(function(k){ return k.indexOf('CRM_OBS') > -1; }) || '';
-              var dtKey  = keys.find(function(k){ return k.indexOf('CRM_DATA') > -1; }) || '';
-              var obs = obsKey ? (r[obsKey]||'') : '';
-              var dt  = dtKey  ? ((r[dtKey]||'').split('T')[0].split(' ')[0]) : '';
-              var txt = obs.replace(/[{][^}]*[}]/g,'').replace(/[\\][a-z]+[0-9]*/g,'').replace(/[{}]/g,'').replace(/\n/g,' ').trim().substring(0,80);
-              return txt ? (dt ? '<span style="color:var(--muted);font-size:10px;">'+dt+'</span> '+txt+(txt.length>=80?'...':'') : txt) : '<span style="color:#ccc;">—</span>';
-            })()}</td>
+  function buildClientes() {
+    if(!cachedClientesAtender||!cachedClientesAtender.length) return '<div class="empty-state">Nenhum cliente a atender.</div>';
+    const gCA=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
+    const colsCA=[...new Set(cachedClientesAtender.map(r=>gCA(r,'MARCA')))].sort();
+    const CORES={MYROCK:'#4C9EF1',CHARPEY:'#E84A4A',AMC:'#F5A623',ROMITEX:'#00C896'};
+    const marcasCA={}, vistos={};
+    cachedClientesAtender.forEach(r=>{
+      const marca=gCA(r,'MARCA'),cli=gCA(r,'CLIENTE'),val=parseFloat(r['[VALOR_ULTIMA_COMPRA]']||r['VALOR_ULTIMA_COMPRA']||0)||0;
+      if(!marcasCA[marca]) marcasCA[marca]={clientes:new Set(),valor:0};
+      marcasCA[marca].clientes.add(cli);
+      if(!vistos[marca+'|'+cli]){vistos[marca+'|'+cli]=true;marcasCA[marca].valor+=val;}
+    });
+    let totalCli=0; const vG={};
+    Object.keys(marcasCA).forEach(m=>{ marcasCA[m].clientes.forEach(c=>{if(!vG[m+'|'+c]){vG[m+'|'+c]=true;totalCli++;}}); });
+
+    let h='<div class="kpi-row" style="margin-bottom:20px">';
+    Object.keys(marcasCA).sort().forEach(m=>{
+      const cor=CORES[m]||'#8B93A8';
+      h+=`<div class="kpi" style="border-top:3px solid ${cor}"><div class="kpi-lbl" style="color:${cor};font-weight:700">${m}</div><div class="kpi-val" style="color:${cor}">${marcasCA[m].clientes.size}</div><div class="kpi-sub">clientes</div><div style="margin-top:8px;font-size:14px;font-weight:700">${fmtR(marcasCA[m].valor)}</div><div class="kpi-sub">últ. compra</div></div>`;
+    });
+    h+=`<div class="kpi" style="border-top:3px solid var(--tx)"><div class="kpi-lbl" style="font-weight:700">Total</div><div class="kpi-val">${totalCli}</div><div class="kpi-sub">clientes</div></div></div>`;
+
+    h+=`<div class="tbl-wrap"><table class="dash-table"><thead><tr>
+      <th>Marca</th><th>Representante</th><th>Cliente</th><th>UF</th><th>Cidade</th>
+      <th style="text-align:center">Últ. Compra</th><th style="text-align:right">Valor</th>
+    </tr></thead><tbody>`;
+    colsCA.forEach(col=>{
+      const rowsCol=cachedClientesAtender.filter(r=>gCA(r,'MARCA')===col);
+      const reps=[...new Set(rowsCol.map(r=>gCA(r,'REP')))].sort();
+      const cor=CORES[col]||'#8B93A8';
+      h+=`<tr style="background:rgba(255,255,255,.05);border-left:4px solid ${cor}"><td colspan="5" style="color:${cor};font-weight:700;padding:9px 14px">${col}</td><td></td><td></td></tr>`;
+      reps.forEach(rep=>{
+        const rowsRep=rowsCol.filter(r=>gCA(r,'REP')===rep);
+        h+=`<tr class="tbl-rep"><td></td><td colspan="4" style="padding-left:24px;font-weight:600;font-size:12px">👤 ${rep} (${new Set(rowsRep.map(r=>gCA(r,'CLIENTE'))).size})</td><td></td><td></td></tr>`;
+        rowsRep.forEach((r,i)=>{
+          h+=`<tr class="${i%2===0?'tbl-even':'tbl-odd'}">
+            <td></td><td>${gCA(r,'REP')}</td><td>${gCA(r,'CLIENTE')}</td><td>${gCA(r,'ESTADO')}</td><td>${gCA(r,'MUNICIPIO')}</td>
+            <td style="text-align:center;font-size:12px;color:var(--muted)">${(gCA(r,'ULTIMA_COMPRA')||'').split('T')[0].split(' ')[0]}</td>
+            <td style="text-align:right;font-weight:600;color:var(--green)">${fmtR(parseFloat(r['[VALOR_ULTIMA_COMPRA]']||r['VALOR_ULTIMA_COMPRA']||0)||0)}</td>
           </tr>`;
         });
       });
     });
-
-    html += `
-        </tbody>
-        <tfoot>
-          <tr style="background:#e8f5e9;border-top:3px solid #1D9E75;">
-            <td colspan="5" style="padding:10px 14px;font-weight:700;color:#1D9E75;">✅ TOTAL GERAL: ${totalCA} clientes a atender</td>
-            <td style="padding:10px 14px;"></td>
-            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#1D9E75;">${fmtR(totalGlobalValor)}</td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>`;
+    h+=`</tbody></table></div>`;
+    return h;
   }
 
-  document.getElementById('mainContent').innerHTML = html;
+  const clientesBadge = cachedClientesAtender ? new Set(cachedClientesAtender.map(r=>(r['PEDIDO[CLIENTE]']||r['CLIENTE']||'')+'|'+(r['PEDIDO[MARCA]']||r['MARCA']||''))).size : 0;
+
+  const container = document.getElementById('mainContent');
+  container.innerHTML = `
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="overview">Visão Geral</button>
+      <button class="tab-btn" data-tab="metas">Metas por Coleção</button>
+      <button class="tab-btn" data-tab="restricoes">Restrições <span class="tab-badge">${cachedRestricoes?cachedRestricoes.length:0}</span></button>
+      <button class="tab-btn" data-tab="clientes">Clientes a Atender <span class="tab-badge" style="background:rgba(232,74,74,.15);color:#E84A4A">${clientesBadge}</span></button>
+    </div>
+    <div class="tab-content" id="tab-overview">${buildOverview()}</div>
+    <div class="tab-content hidden" id="tab-metas">${buildMetas()}</div>
+    <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
+    <div class="tab-content hidden" id="tab-clientes">${buildClientes()}</div>
+  `;
+
+  container.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      container.querySelectorAll('.tab-content').forEach(c=>c.classList.add('hidden'));
+      btn.classList.add('active');
+      document.getElementById('tab-'+btn.dataset.tab).classList.remove('hidden');
+    });
+  });
 
   const now = new Date();
   document.getElementById('lastUpdate').textContent =
-    'Atualizado: ' + now.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    'Atualizado: ' + now.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
 }
 
 // ════════════════════════════════════════════
