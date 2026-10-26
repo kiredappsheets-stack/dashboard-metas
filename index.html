@@ -922,14 +922,18 @@ async function loadDashboard() {
   }
 
   // Sem nenhum cache — buscar do Power BI (mantém skeleton enquanto carrega)
+  // Atualizar lastUpdate para mostrar progresso
+  const lu = document.getElementById('lastUpdate');
+  if (lu) lu.textContent = 'A obter token de acesso…';
+
   // Timeout de 30s para evitar skeleton infinito
   const _loadTimeout = setTimeout(() => {
-    const sk = document.getElementById('initSkeleton');
-    if (sk) renderError('Tempo limite esgotado. Verifica a ligação e tenta novamente.');
+    renderError('Tempo limite esgotado. Verifica a ligação e tenta novamente.');
   }, 30000);
 
   try {
     const token = await getToken();
+    if (lu) lu.textContent = 'A carregar dados do Power BI…';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
     const [data, kpis, kpisFat, metasHist, restricoes] = await Promise.all([
@@ -963,9 +967,18 @@ async function loadDashboard() {
     if (redirectResult && redirectResult.account) {
       account = redirectResult.account;
       sessionStorage.removeItem('msalLoginPending');
+      // Guardar token se veio no redirect (nem sempre vem)
       if (redirectResult.accessToken) {
         sessionStorage.setItem('pbi_token', redirectResult.accessToken);
         sessionStorage.setItem('pbi_token_exp', String(Date.now() + 50 * 60 * 1000));
+      }
+      // Tentar obter token silencioso agora que temos conta
+      try {
+        const silentResult = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account });
+        sessionStorage.setItem('pbi_token', silentResult.accessToken);
+        sessionStorage.setItem('pbi_token_exp', String(Date.now() + 50 * 60 * 1000));
+      } catch(e) {
+        console.warn('Silent após redirect falhou (token do redirect será usado):', e.message);
       }
       forceRefresh();
       return;
