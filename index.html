@@ -969,12 +969,12 @@ function renderDashboard(data, hasAllData=false) {
     return h;
   }
 
-  function renderClientesTab() {
+  window.renderClientesTab = function() {
     const marca = document.getElementById('filtMarca')?.value||'';
     const rep   = document.getElementById('filtRep')?.value||'';
     const el = document.getElementById('tab-clientes');
     if(el) el.innerHTML = buildClientes(marca, rep);
-  }
+  };
 
   // ─── Comparação de Vendas (Ano / Meses / Semanas) ────────────────
   function buildCompVendas(modo='ano') {
@@ -1096,10 +1096,10 @@ function renderDashboard(data, hasAllData=false) {
     return html2;
   }
 
-  function renderCompVendas() {
+  window.renderCompVendas = function() {
     const el=document.getElementById('tab-compvendas');
     if(el) el.innerHTML=buildCompVendas();
-  }
+  };
 
   // ─── Comparação entre Coleções ────────────────────────────────
   function buildCompColecoes() {
@@ -1157,10 +1157,10 @@ function renderDashboard(data, hasAllData=false) {
     return h;
   }
 
-  function renderCompColecoes() {
+  window.renderCompColecoes = function() {
     const el=document.getElementById('tab-compcol');
     if(el) el.innerHTML=buildCompColecoes();
-  }
+  };
 
   // ─── Comparação de Coleções por Cliente ───────────────────────
   function buildCompColecoesCli() {
@@ -1228,10 +1228,10 @@ function renderDashboard(data, hasAllData=false) {
     return h;
   }
 
-  function renderCompColecoesCli() {
+  window.renderCompColecoesCli = function() {
     const el=document.getElementById('tab-compcli');
     if(el) el.innerHTML=buildCompColecoesCli();
-  }
+  };
 
     // ─── Histórico de Coleções por Marca (Clientes a Atender) ───────
   function buildHistoricoCliente(filtroMarca2='', filtroRep2='', filtroCliente2='') {
@@ -1401,10 +1401,10 @@ function renderDashboard(data, hasAllData=false) {
     return h;
   }
 
-  function renderHistoricoCliente() {
+  window.renderHistoricoCliente = function() {
     const el=document.getElementById('tab-histcli');
     if(el) el.innerHTML=buildHistoricoCliente();
-  }
+  };
 
     const clientesBadge = cachedClientesAtender ? new Set(cachedClientesAtender.map(r=>(r['PEDIDO[CLIENTE]']||r['CLIENTE']||'')+'|'+(r['PEDIDO[MARCA]']||r['MARCA']||''))).size : 0;
 
