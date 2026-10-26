@@ -485,14 +485,16 @@ async function getToken() {
     throw new Error('Redirecionando para login...');
   }
   try {
-    const result = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account });
-    // Guardar token com validade de 50 minutos
+    // Timeout de 10s para acquireTokenSilent (pode travar em iframe)
+    const result = await Promise.race([
+      msalInstance.acquireTokenSilent({ scopes: SCOPES, account }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Token silent timeout — renovando via redirect')), 10000))
+    ]);
     sessionStorage.setItem('pbi_token', result.accessToken);
     sessionStorage.setItem('pbi_token_exp', String(Date.now() + 50 * 60 * 1000));
     return result.accessToken;
   } catch(e) {
     console.warn('Token silent falhou:', e.message);
-    // Limpar token expirado e ir para login
     sessionStorage.removeItem('pbi_token');
     sessionStorage.removeItem('pbi_token_exp');
     sessionStorage.setItem('msalLoginPending', '1');
@@ -919,13 +921,17 @@ async function loadDashboard() {
     return;
   }
 
-  // Sem nenhum cache — buscar do Power BI
-  renderLoading();
+  // Sem nenhum cache — buscar do Power BI (mantém skeleton enquanto carrega)
+  // Timeout de 30s para evitar skeleton infinito
+  const _loadTimeout = setTimeout(() => {
+    const sk = document.getElementById('initSkeleton');
+    if (sk) renderError('Tempo limite esgotado. Verifica a ligação e tenta novamente.');
+  }, 30000);
+
   try {
     const token = await getToken();
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    // ── FASE 1: queries essenciais para Visão Geral ──
     const [data, kpis, kpisFat, metasHist, restricoes] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
@@ -933,6 +939,7 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_METAS_HIST, true)),
       safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
     ]);
+    clearTimeout(_loadTimeout);
     cachedData = data;
     cachedMetasHist = metasHist;
     cachedRestricoes = restricoes;
@@ -943,6 +950,7 @@ async function loadDashboard() {
     renderDashboard(data);
 
   } catch(e) {
+    clearTimeout(_loadTimeout);
     renderError(e.message);
   }
 }
