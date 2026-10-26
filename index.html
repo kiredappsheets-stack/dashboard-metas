@@ -1449,7 +1449,9 @@ function renderDashboard(data, hasAllData=false) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h e às 12h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v4';
+const CACHE_KEY = 'dashCache_v5';
+// Limpar versões antigas do cache
+try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
@@ -1519,7 +1521,7 @@ function loadCacheStale() {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const entry = JSON.parse(raw);
-    if (!entry.data || !entry.data.pedidosDetalhe || !entry.data.vendas) return null;
+    if (!entry.data || !entry.data.pedidosDetalhe || !entry.data.vendas || !entry.data.clientesAtender) return null;
     return entry.data;
   } catch(e) {
     return null;
