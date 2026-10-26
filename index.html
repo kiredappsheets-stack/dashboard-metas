@@ -411,6 +411,18 @@ ROW(
 )
 `;
 
+// Histórico de vendas por MARCA, ANO e MÊS
+const DAX_HIST_MARCA = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  PEDIDO[MARCA],
+  "ANO",  YEAR(MIN(PEDIDO[DATA])),
+  "MES",  MONTH(MIN(PEDIDO[DATA])),
+  "VENDA", SUM(PEDIDO[FAT_LIQ])
+)
+ORDER BY PEDIDO[MARCA] ASC, [ANO] ASC, [MES] ASC
+`;
+
 // Coleções com datas — ordem cronológica
 
 // Pedidos detalhados — data dinâmica calculada em JS
@@ -748,13 +760,107 @@ function renderDashboard(data) {
 
 
 
+  function buildHistorico() {
+    if (!cachedHistMarca || !cachedHistMarca.length) return '<div class="empty-state">Dados históricos não disponíveis.</div>';
+
+    const gV = (r, c) => {
+      const keys = Object.keys(r);
+      const k = keys.find(k => k.includes(c)) || c;
+      return r[k] ?? r[c] ?? null;
+    };
+
+    const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const fmt = v => v >= 1000 ? 'R$ ' + (v/1000).toFixed(0) + 'k' : v > 0 ? 'R$ ' + v.toFixed(0) : '—';
+
+    // Agrupar por marca
+    const porMarca = {};
+    cachedHistMarca.forEach(r => {
+      const marca  = gV(r,'MARCA')  || gV(r,'Marca')  || String(Object.values(r)[0] || '?');
+      const ano    = parseInt(gV(r,'ANO')    || gV(r,'Ano')    || 0);
+      const mes    = parseInt(gV(r,'MES')    || gV(r,'Mes')    || 0);
+      const venda  = parseFloat(gV(r,'VENDA') || gV(r,'Venda') || 0) || 0;
+      if (!marca || !ano || !mes) return;
+      if (!porMarca[marca]) porMarca[marca] = {};
+      if (!porMarca[marca][ano]) porMarca[marca][ano] = {};
+      porMarca[marca][ano][mes] = (porMarca[marca][ano][mes] || 0) + venda;
+    });
+
+    const marcas = Object.keys(porMarca).sort();
+    if (!marcas.length) return '<div class="empty-state">Nenhum dado encontrado.</div>';
+
+    // Coletar todos os anos presentes
+    const todosAnos = [...new Set(
+      marcas.flatMap(m => Object.keys(porMarca[m]).map(Number))
+    )].sort();
+
+    // Meses que têm algum dado
+    const todosMeses = [...new Set(
+      marcas.flatMap(m => Object.values(porMarca[m]).flatMap(a => Object.keys(a).map(Number)))
+    )].sort((a,b) => a-b);
+
+    let html = '';
+
+    marcas.forEach(marca => {
+      const dadosMarca = porMarca[marca];
+      const anos = Object.keys(dadosMarca).map(Number).sort();
+
+      html += `<div style="margin-bottom:28px">
+        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:10px;padding:8px 12px;background:var(--surface2);border-radius:6px;border-left:3px solid var(--green)">${marca}</div>
+        <div class="tbl-wrap"><table class="dash-table">
+          <thead><tr>
+            <th style="min-width:60px">Ano</th>
+            ${todosMeses.map(m => `<th style="text-align:right">${MESES[m-1]}</th>`).join('')}
+            <th style="text-align:right;color:var(--tx)">Total</th>
+          </tr></thead>
+          <tbody>`;
+
+      // Calcular máximo para heat
+      let maxVal = 0;
+      anos.forEach(ano => {
+        todosMeses.forEach(mes => { const v = dadosMarca[ano]?.[mes] || 0; if(v > maxVal) maxVal = v; });
+      });
+
+      anos.forEach((ano, i) => {
+        const rowData = dadosMarca[ano] || {};
+        const totalAno = todosMeses.reduce((s, m) => s + (rowData[m] || 0), 0);
+        html += `<tr class="${i%2===0?'tbl-even':'tbl-odd'}">
+          <td style="font-weight:700;color:var(--muted);font-size:12px">${ano}</td>`;
+        todosMeses.forEach(mes => {
+          const v = rowData[mes] || 0;
+          const heat = maxVal > 0 && v > 0 ? Math.round((v / maxVal) * 100) : 0;
+          const alpha = heat > 0 ? (0.08 + heat / 100 * 0.55).toFixed(2) : '0';
+          const style = v > 0 ? `background:rgba(0,200,150,${alpha});color:${heat>60?'#fff':'var(--tx)'}` : 'color:var(--hint)';
+          html += `<td style="text-align:right;font-size:12px;${style}">${fmt(v)}</td>`;
+        });
+        html += `<td style="text-align:right;font-weight:700;color:var(--green)">${fmt(totalAno)}</td>
+        </tr>`;
+      });
+
+      // Linha de totais por mês
+      html += `<tr class="tbl-foot"><td>Total</td>`;
+      let totalGeral = 0;
+      todosMeses.forEach(mes => {
+        const t = anos.reduce((s,a) => s + (dadosMarca[a]?.[mes] || 0), 0);
+        totalGeral += t;
+        html += `<td style="text-align:right">${fmt(t)}</td>`;
+      });
+      html += `<td style="text-align:right">${fmt(totalGeral)}</td></tr>`;
+
+      html += `</tbody></table></div></div>`;
+    });
+
+    return html;
+  }
+
   const container = document.getElementById('mainContent');
   container.innerHTML = `
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="overview">Visão Geral</button>
+      <button class="tab-btn" data-tab="historico">Histórico por Marca</button>
       <button class="tab-btn" data-tab="restricoes">Restrições <span class="tab-badge">${cachedRestricoes?cachedRestricoes.length:0}</span></button>
     </div>
     <div class="tab-content" id="tab-overview">${buildOverview()}${buildMetas()}</div>
+    <div class="tab-content hidden" id="tab-historico">${buildHistorico()}</div>
     <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
   `;
 
@@ -779,9 +885,9 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h e às 12h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v6';
+const CACHE_KEY = 'dashCache_v7';
 // Limpar versões antigas do cache
-try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
+try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
@@ -863,6 +969,7 @@ function applyCache(cached) {
   cachedKpis            = cached.kpis            || null;
   cachedMetasHist       = cached.metasHist       || [];
   cachedRestricoes      = cached.restricoes      || [];
+  cachedHistMarca       = cached.histMarca       || [];
 }
 
 async function loadDashboard() {
@@ -896,18 +1003,19 @@ async function loadDashboard() {
       try {
         const token = await getToken();
         const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
-        const [data, kpis, kpisFat, metasHist, restricoes] = await Promise.all([
+        const [data, kpis, kpisFat, metasHist, restricoes, histMarca] = await Promise.all([
           safe(() => runDaxQuery(token, DAX_QUERY, false)),
           safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
           safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
           safe(() => runDaxQuery(token, DAX_METAS_HIST, true)),
           safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
+          safe(() => runDaxQuery(token, DAX_HIST_MARCA, true)),
         ]);
-        cachedData = data; cachedMetasHist = metasHist; cachedRestricoes = restricoes;
+        cachedData = data; cachedMetasHist = metasHist; cachedRestricoes = restricoes; cachedHistMarca = histMarca||[];
         cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
         if (kpisFat && kpisFat.length > 0) cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
 
-        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes });
+        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca });
         // Reatualizar as abas com dados novos
         renderDashboard(cachedData);
         const now2 = new Date();
@@ -936,21 +1044,24 @@ async function loadDashboard() {
     if (lu) lu.textContent = 'A carregar dados do Power BI…';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, kpis, kpisFat, metasHist, restricoes] = await Promise.all([
+    const [data, kpis, kpisFat, metasHist, restricoes, histMarca] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
       safe(() => runDaxQuery(token, DAX_METAS_HIST, true)),
       safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
+      safe(() => runDaxQuery(token, DAX_HIST_MARCA, true)),
     ]);
     clearTimeout(_loadTimeout);
     cachedData = data;
     cachedMetasHist = metasHist;
     cachedRestricoes = restricoes;
+    cachedHistMarca = histMarca || [];
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
+    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca });
     renderDashboard(data);
 
   } catch(e) {
@@ -1007,6 +1118,7 @@ let cachedData = null;
 let cachedMetasHist = null;
 let cachedKpis = null;
 let cachedRestricoes = null;
+let cachedHistMarca = [];
 // Variáveis legacy para contexto IA (queries removidas — sempre vazias)
 let cachedPedidos = [], cachedClientes = [], cachedReps = [], cachedVendas = [];
 let cachedMarcas = [], cachedColecoes = [], cachedPedidosDetalhe = [], cachedProdutos = [];
