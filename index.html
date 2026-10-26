@@ -414,13 +414,18 @@ ROW(
 // Histórico de vendas por MARCA, ANO e MÊS
 const DAX_HIST_MARCA = `
 EVALUATE
-SUMMARIZECOLUMNS(
+SUMMARIZE(
+  ADDCOLUMNS(
+    PEDIDO,
+    "ANO_CALC", YEAR(PEDIDO[DATA]),
+    "MES_CALC", MONTH(PEDIDO[DATA])
+  ),
   PEDIDO[MARCA],
-  "ANO",  YEAR(MIN(PEDIDO[DATA])),
-  "MES",  MONTH(MIN(PEDIDO[DATA])),
+  [ANO_CALC],
+  [MES_CALC],
   "VENDA", SUM(PEDIDO[FAT_LIQ])
 )
-ORDER BY PEDIDO[MARCA] ASC, [ANO] ASC, [MES] ASC
+ORDER BY PEDIDO[MARCA] ASC, [ANO_CALC] ASC, [MES_CALC] ASC
 `;
 
 // Coleções com datas — ordem cronológica
@@ -776,8 +781,8 @@ function renderDashboard(data) {
     const porMarca = {};
     cachedHistMarca.forEach(r => {
       const marca  = gV(r,'MARCA')  || gV(r,'Marca')  || String(Object.values(r)[0] || '?');
-      const ano    = parseInt(gV(r,'ANO')    || gV(r,'Ano')    || 0);
-      const mes    = parseInt(gV(r,'MES')    || gV(r,'Mes')    || 0);
+      const ano    = parseInt(gV(r,'ANO_CALC') || gV(r,'ANO') || gV(r,'Ano') || 0);
+      const mes    = parseInt(gV(r,'MES_CALC') || gV(r,'MES') || gV(r,'Mes') || 0);
       const venda  = parseFloat(gV(r,'VENDA') || gV(r,'Venda') || 0) || 0;
       if (!marca || !ano || !mes) return;
       if (!porMarca[marca]) porMarca[marca] = {};
