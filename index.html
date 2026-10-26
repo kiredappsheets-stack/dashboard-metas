@@ -580,14 +580,16 @@ let account = null;
 
 async function handleAuth() {
   if (account) {
-    // Logout
+    // Logout local — limpar tudo sem redirecionar para a Microsoft
     account = null;
-    localStorage.removeItem('msalLoggedIn');
+    localStorage.removeItem(CACHE_KEY);
     const fab = document.querySelector('.chat-fab');
     if(fab) fab.classList.remove('visible');
     const lbl = document.getElementById('chatIaLabel');
     if(lbl) lbl.style.display='none';
-    msalInstance.logoutRedirect({ postLogoutRedirectUri: window.location.href });
+    // Limpar contas MSAL sem redirect
+    try { msalInstance.clearCache(); } catch(e) {}
+    renderLogin();
     return;
   }
   // Usar popup para evitar problemas de redirect em GitHub Pages SPA
@@ -1629,16 +1631,9 @@ async function loadDashboard() {
 // Verifica se já há sessão activa
 (async () => {
   await msalInstance.initialize();
-  // Processar redirect de volta (caso venha de logoutRedirect)
-  try {
-    await msalInstance.handleRedirectPromise();
-  } catch(e) {
-    console.warn('Redirect handler:', e.message);
-  }
   const accounts = msalInstance.getAllAccounts();
   if (accounts.length > 0) {
     account = accounts[0];
-    renderLoading();
     loadDashboard();
   } else {
     renderLogin();
