@@ -837,43 +837,89 @@ function renderDashboard(data) {
     return h;
   }
 
-  function buildClientes() {
+  function buildClientes(filtroMarca='', filtroRep='') {
     if(!cachedClientesAtender||!cachedClientesAtender.length) return '<div class="empty-state">Nenhum cliente a atender.</div>';
     const gCA=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
-    const colsCA=[...new Set(cachedClientesAtender.map(r=>gCA(r,'MARCA')))].sort();
     const CORES={MYROCK:'#4C9EF1',CHARPEY:'#E84A4A',AMC:'#F5A623',ROMITEX:'#00C896'};
+
+    // Calcular coleções compradas por cliente (de cachedPedidosDetalhe ou cachedVendas)
+    const colsCompradasPorCli = {};
+    const gPD=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
+    const srcCol = (cachedPedidosDetalhe&&cachedPedidosDetalhe.length) ? cachedPedidosDetalhe : (cachedVendas||[]);
+    srcCol.forEach(r=>{
+      const cli=gPD(r,'CLIENTE'), col=gPD(r,'COLECAO');
+      if(!cli||!col) return;
+      if(!colsCompradasPorCli[cli]) colsCompradasPorCli[cli]=new Set();
+      colsCompradasPorCli[cli].add(col);
+    });
+    // Total de coleções distintas no histórico
+    const todasCols = new Set(srcCol.map(r=>gPD(r,'COLECAO')).filter(Boolean));
+    const nTotalCols = todasCols.size;
+
+    // Filtrar dados
+    let rows = cachedClientesAtender;
+    if(filtroMarca) rows = rows.filter(r=>gCA(r,'MARCA')===filtroMarca);
+    if(filtroRep)   rows = rows.filter(r=>gCA(r,'REP')===filtroRep);
+
+    const todasMarcas = [...new Set(cachedClientesAtender.map(r=>gCA(r,'MARCA')))].sort();
+    const todosReps   = [...new Set(cachedClientesAtender.map(r=>gCA(r,'REP')))].sort();
+
+    // KPI cards
     const marcasCA={}, vistos={};
-    cachedClientesAtender.forEach(r=>{
+    rows.forEach(r=>{
       const marca=gCA(r,'MARCA'),cli=gCA(r,'CLIENTE'),val=parseFloat(r['[VALOR_ULTIMA_COMPRA]']||r['VALOR_ULTIMA_COMPRA']||0)||0;
       if(!marcasCA[marca]) marcasCA[marca]={clientes:new Set(),valor:0};
       marcasCA[marca].clientes.add(cli);
       if(!vistos[marca+'|'+cli]){vistos[marca+'|'+cli]=true;marcasCA[marca].valor+=val;}
     });
-    let totalCli=0; const vG={};
-    Object.keys(marcasCA).forEach(m=>{ marcasCA[m].clientes.forEach(c=>{if(!vG[m+'|'+c]){vG[m+'|'+c]=true;totalCli++;}}); });
+    let totalCli=new Set(rows.map(r=>gCA(r,'CLIENTE')+'|'+gCA(r,'MARCA'))).size;
 
-    let h='<div class="kpi-row" style="margin-bottom:20px">';
+    // Filtros HTML
+    let h=`<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+      <select id="filtMarca" onchange="renderClientesTab()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px;cursor:pointer">
+        <option value="">Todas as Marcas</option>
+        ${todasMarcas.map(m=>`<option value="${m}"${filtroMarca===m?' selected':''}>${m}</option>`).join('')}
+      </select>
+      <select id="filtRep" onchange="renderClientesTab()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px;cursor:pointer">
+        <option value="">Todos os Representantes</option>
+        ${todosReps.map(r=>`<option value="${r}"${filtroRep===r?' selected':''}>${r}</option>`).join('')}
+      </select>
+      <span style="font-size:12px;color:var(--muted)">${totalCli} clientes</span>
+    </div>`;
+
+    // KPI row
+    h+='<div class="kpi-row" style="margin-bottom:20px">';
     Object.keys(marcasCA).sort().forEach(m=>{
       const cor=CORES[m]||'#8B93A8';
       h+=`<div class="kpi" style="border-top:3px solid ${cor}"><div class="kpi-lbl" style="color:${cor};font-weight:700">${m}</div><div class="kpi-val" style="color:${cor}">${marcasCA[m].clientes.size}</div><div class="kpi-sub">clientes</div><div style="margin-top:8px;font-size:14px;font-weight:700">${fmtR(marcasCA[m].valor)}</div><div class="kpi-sub">últ. compra</div></div>`;
     });
     h+=`<div class="kpi" style="border-top:3px solid var(--tx)"><div class="kpi-lbl" style="font-weight:700">Total</div><div class="kpi-val">${totalCli}</div><div class="kpi-sub">clientes</div></div></div>`;
 
+    // Tabela
     h+=`<div class="tbl-wrap"><table class="dash-table"><thead><tr>
-      <th>Marca</th><th>Representante</th><th>Cliente</th><th>UF</th><th>Cidade</th>
+      <th>Marca</th><th>Representante</th><th>Cliente</th><th style="text-align:center">Cols. sem compra</th><th>UF</th><th>Cidade</th>
       <th style="text-align:center">Últ. Compra</th><th style="text-align:right">Valor</th>
     </tr></thead><tbody>`;
+
+    const colsCA=[...new Set(rows.map(r=>gCA(r,'MARCA')))].sort();
     colsCA.forEach(col=>{
-      const rowsCol=cachedClientesAtender.filter(r=>gCA(r,'MARCA')===col);
-      const reps=[...new Set(rowsCol.map(r=>gCA(r,'REP')))].sort();
+      const rowsCol=rows.filter(r=>gCA(r,'MARCA')===col);
+      const repsCol=[...new Set(rowsCol.map(r=>gCA(r,'REP')))].sort();
       const cor=CORES[col]||'#8B93A8';
-      h+=`<tr style="background:rgba(255,255,255,.05);border-left:4px solid ${cor}"><td colspan="5" style="color:${cor};font-weight:700;padding:9px 14px">${col}</td><td></td><td></td></tr>`;
-      reps.forEach(rep=>{
+      h+=`<tr style="background:rgba(255,255,255,.05);border-left:4px solid ${cor}"><td colspan="6" style="color:${cor};font-weight:700;padding:9px 14px">${col}</td><td></td><td></td></tr>`;
+      repsCol.forEach(rep=>{
         const rowsRep=rowsCol.filter(r=>gCA(r,'REP')===rep);
-        h+=`<tr class="tbl-rep"><td></td><td colspan="4" style="padding-left:24px;font-weight:600;font-size:12px">👤 ${rep} (${new Set(rowsRep.map(r=>gCA(r,'CLIENTE'))).size})</td><td></td><td></td></tr>`;
+        h+=`<tr class="tbl-rep"><td></td><td colspan="5" style="padding-left:24px;font-weight:600;font-size:12px">👤 ${rep} (${new Set(rowsRep.map(r=>gCA(r,'CLIENTE'))).size})</td><td></td><td></td></tr>`;
         rowsRep.forEach((r,i)=>{
+          const cli=gCA(r,'CLIENTE');
+          const colsCompradas=colsCompradasPorCli[cli]?colsCompradasPorCli[cli].size:0;
+          const colsSem=nTotalCols-colsCompradas;
+          const badgeCol=colsSem>0?`<span style="background:rgba(232,74,74,.15);color:#E84A4A;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:700">${colsSem}</span>`:'<span style="color:var(--green);font-size:11px">✓</span>';
           h+=`<tr class="${i%2===0?'tbl-even':'tbl-odd'}">
-            <td></td><td>${gCA(r,'REP')}</td><td>${gCA(r,'CLIENTE')}</td><td>${gCA(r,'ESTADO')}</td><td>${gCA(r,'MUNICIPIO')}</td>
+            <td></td><td>${gCA(r,'REP')}</td>
+            <td>${cli} ${badgeCol}</td>
+            <td style="text-align:center">${badgeCol}</td>
+            <td>${gCA(r,'ESTADO')}</td><td>${gCA(r,'MUNICIPIO')}</td>
             <td style="text-align:center;font-size:12px;color:var(--muted)">${(gCA(r,'ULTIMA_COMPRA')||'').split('T')[0].split(' ')[0]}</td>
             <td style="text-align:right;font-weight:600;color:var(--green)">${fmtR(parseFloat(r['[VALOR_ULTIMA_COMPRA]']||r['VALOR_ULTIMA_COMPRA']||0)||0)}</td>
           </tr>`;
@@ -884,7 +930,273 @@ function renderDashboard(data) {
     return h;
   }
 
-  const clientesBadge = cachedClientesAtender ? new Set(cachedClientesAtender.map(r=>(r['PEDIDO[CLIENTE]']||r['CLIENTE']||'')+'|'+(r['PEDIDO[MARCA]']||r['MARCA']||''))).size : 0;
+  function renderClientesTab() {
+    const marca = document.getElementById('filtMarca')?.value||'';
+    const rep   = document.getElementById('filtRep')?.value||'';
+    const el = document.getElementById('tab-clientes');
+    if(el) el.innerHTML = buildClientes(marca, rep);
+  }
+
+  // ─── Comparação de Vendas (Ano / Meses / Semanas) ────────────────
+  function buildCompVendas(modo='ano') {
+    const gPD=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
+    const src = cachedPedidosDetalhe||[];
+    if(!src.length) return '<div class="empty-state">Sem dados de pedidos para comparação.</div>';
+
+    function parseData(r) {
+      const d=gPD(r,'DATA')||'';
+      return new Date(d.replace(' ','T'));
+    }
+    function semanaISO(d) {
+      const tmp=new Date(d); tmp.setHours(0,0,0,0);
+      tmp.setDate(tmp.getDate()+4-(tmp.getDay()||7));
+      const ini=new Date(tmp.getFullYear(),0,1);
+      return Math.ceil(((tmp-ini)/86400000+1)/7);
+    }
+
+    const anos=[...new Set(src.map(r=>{ const d=parseData(r); return isNaN(d)?null:d.getFullYear(); }).filter(Boolean))].sort();
+    const sel1=anos[anos.length-1]||new Date().getFullYear();
+    const sel2=anos[anos.length-2]||sel1-1;
+
+    // Parâmetros do modo vêm de selects (lidos de atributos data-)
+    const modoEl=document.getElementById('cvModo');
+    const a1El=document.getElementById('cvAno1');
+    const a2El=document.getElementById('cvAno2');
+    const curModo=modoEl?modoEl.value:modo;
+    const curA1=a1El?parseInt(a1El.value):sel1;
+    const curA2=a2El?parseInt(a2El.value):sel2;
+
+    const MESES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+    let labels=[], vals1=[], vals2=[], pcs1=[], pcs2=[];
+
+    if(curModo==='ano') {
+      anos.forEach(ano=>{
+        const r=src.filter(r=>{ const d=parseData(r); return !isNaN(d)&&d.getFullYear()===ano; });
+        labels.push(String(ano));
+        const v=r.reduce((s,x)=>s+(parseFloat(x['[FAT_LIQ]']||x['FAT_LIQ']||0)||0),0);
+        const p=r.reduce((s,x)=>s+(parseFloat(x['[QTDE_PEDIDA]']||x['QTDE_PEDIDA']||0)||0),0);
+        vals1.push(v); pcs1.push(p);
+      });
+      vals2=[]; pcs2=[];
+    } else if(curModo==='mes') {
+      for(let m=0;m<12;m++){
+        labels.push(MESES[m]);
+        const f1=src.filter(r=>{ const d=parseData(r); return !isNaN(d)&&d.getFullYear()===curA1&&d.getMonth()===m; });
+        const f2=src.filter(r=>{ const d=parseData(r); return !isNaN(d)&&d.getFullYear()===curA2&&d.getMonth()===m; });
+        vals1.push(f1.reduce((s,x)=>s+(parseFloat(x['[FAT_LIQ]']||x['FAT_LIQ']||0)||0),0));
+        vals2.push(f2.reduce((s,x)=>s+(parseFloat(x['[FAT_LIQ]']||x['FAT_LIQ']||0)||0),0));
+        pcs1.push(f1.reduce((s,x)=>s+(parseFloat(x['[QTDE_PEDIDA]']||x['QTDE_PEDIDA']||0)||0),0));
+        pcs2.push(f2.reduce((s,x)=>s+(parseFloat(x['[QTDE_PEDIDA]']||x['QTDE_PEDIDA']||0)||0),0));
+      }
+    } else { // semana
+      for(let s=1;s<=52;s++){
+        labels.push('S'+s);
+        const f1=src.filter(r=>{ const d=parseData(r); return !isNaN(d)&&d.getFullYear()===curA1&&semanaISO(d)===s; });
+        const f2=src.filter(r=>{ const d=parseData(r); return !isNaN(d)&&d.getFullYear()===curA2&&semanaISO(d)===s; });
+        vals1.push(f1.reduce((s2,x)=>s2+(parseFloat(x['[FAT_LIQ]']||x['FAT_LIQ']||0)||0),0));
+        vals2.push(f2.reduce((s2,x)=>s2+(parseFloat(x['[FAT_LIQ]']||x['FAT_LIQ']||0)||0),0));
+        pcs1.push(f1.reduce((s2,x)=>s2+(parseFloat(x['[QTDE_PEDIDA]']||x['QTDE_PEDIDA']||0)||0),0));
+        pcs2.push(f2.reduce((s2,x)=>s2+(parseFloat(x['[QTDE_PEDIDA]']||x['QTDE_PEDIDA']||0)||0),0));
+      }
+    }
+
+    const maxVal=Math.max(...vals1,...(vals2.length?vals2:[0]),1);
+    const maxPcs=Math.max(...pcs1,...(pcs2.length?pcs2:[0]),1);
+
+    function barChart(labelsArr, series, maxV, fmtFn, title) {
+      const barH=22, gap=4, w=100;
+      let h=`<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">${title}</div>`;
+      labelsArr.forEach((lbl,i)=>{
+        h+=`<div style="display:flex;align-items:center;margin-bottom:${gap}px;gap:8px">
+          <div style="width:28px;font-size:10px;color:var(--muted);text-align:right;flex-shrink:0">${lbl}</div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px">`;
+        series.forEach(({vals,color,label})=>{
+          const v=vals[i]||0;
+          const pct=maxV>0?Math.round(v/maxV*w):0;
+          h+=`<div style="display:flex;align-items:center;gap:6px">
+            <div style="height:${barH}px;width:${pct}%;background:${color};border-radius:3px;min-width:2px;transition:width .3s"></div>
+            <span style="font-size:11px;color:var(--tx);white-space:nowrap">${fmtFn(v)}</span>
+          </div>`;
+        });
+        h+=`</div></div>`;
+      });
+      h+=`</div>`;
+      return h;
+    }
+
+    const seriesValor = vals2.length
+      ? [{vals:vals1,color:'#00C896',label:String(curA1)},{vals:vals2,color:'#4C9EF1',label:String(curA2)}]
+      : [{vals:vals1,color:'#00C896',label:String(curA1)}];
+    const seriesPcs = pcs2.length
+      ? [{vals:pcs1,color:'#00C896',label:String(curA1)},{vals:pcs2,color:'#4C9EF1',label:String(curA2)}]
+      : [{vals:pcs1,color:'#00C896',label:String(curA1)}];
+
+    const anoBtns=anos.map(a=>`<option value="${a}"${a===curA1?' selected':''}>${a}</option>`).join('');
+    const anoBtns2=anos.map(a=>`<option value="${a}"${a===curA2?' selected':''}>${a}</option>`).join('');
+
+    let html2=`<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center">
+      <select id="cvModo" onchange="renderCompVendas()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">
+        <option value="ano"${curModo==='ano'?' selected':''}>Por Ano</option>
+        <option value="mes"${curModo==='mes'?' selected':''}>Meses (dois anos)</option>
+        <option value="sem"${curModo==='sem'?' selected':''}>Semanas (dois anos)</option>
+      </select>`;
+    if(curModo!=='ano') html2+=`
+      <select id="cvAno1" onchange="renderCompVendas()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">${anoBtns}</select>
+      <span style="color:var(--muted);font-size:13px">vs</span>
+      <select id="cvAno2" onchange="renderCompVendas()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">${anoBtns2}</select>`;
+    html2+=`</div>`;
+
+    // Legenda
+    if(seriesValor.length>1) html2+=`<div style="display:flex;gap:16px;margin-bottom:16px">${seriesValor.map(s=>`<div style="display:flex;align-items:center;gap:6px"><div style="width:12px;height:12px;border-radius:3px;background:${s.color}"></div><span style="font-size:12px;color:var(--muted)">${s.label}</span></div>`).join('')}</div>`;
+
+    html2+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px">`;
+    html2+=`<div>${barChart(labels, seriesValor, maxVal, fmtR, 'Valor (R$)')}</div>`;
+    html2+=`<div>${barChart(labels, seriesPcs, maxPcs, v=>Math.round(v).toLocaleString('pt-BR'), 'Peças')}</div>`;
+    html2+=`</div>`;
+    return html2;
+  }
+
+  function renderCompVendas() {
+    const el=document.getElementById('tab-compvendas');
+    if(el) el.innerHTML=buildCompVendas();
+  }
+
+  // ─── Comparação entre Coleções ────────────────────────────────
+  function buildCompColecoes() {
+    const gPD=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
+    const src = cachedPedidosDetalhe||cachedVendas||[];
+    if(!src.length) return '<div class="empty-state">Sem dados para comparação.</div>';
+
+    const cols=[...new Set(src.map(r=>gPD(r,'COLECAO')).filter(Boolean))].sort().reverse();
+    const marcas=[...new Set(src.map(r=>gPD(r,'MARCA')).filter(Boolean))].sort();
+
+    const filtMEl=document.getElementById('ccMarca');
+    const filtMarca=filtMEl?filtMEl.value:'';
+
+    const srcF=filtMarca?src.filter(r=>gPD(r,'MARCA')===filtMarca):src;
+
+    const dados=cols.map(col=>{
+      const r=srcF.filter(x=>gPD(x,'COLECAO')===col);
+      return {
+        col,
+        val:r.reduce((s,x)=>s+(parseFloat(x['[FAT_LIQ]']||x['FAT_LIQ']||0)||0),0),
+        pcs:r.reduce((s,x)=>s+(parseFloat(x['[QTDE_PEDIDA]']||x['QTDE_PEDIDA']||0)||0),0),
+        clis:new Set(r.map(x=>gPD(x,'CLIENTE'))).size
+      };
+    });
+
+    const maxVal=Math.max(...dados.map(d=>d.val),1);
+    const maxPcs=Math.max(...dados.map(d=>d.pcs),1);
+
+    let h=`<div style="display:flex;gap:12px;margin-bottom:20px;align-items:center">
+      <select id="ccMarca" onchange="renderCompColecoes()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">
+        <option value="">Todas as Marcas</option>
+        ${marcas.map(m=>`<option value="${m}"${filtMarca===m?' selected':''}>${m}</option>`).join('')}
+      </select>
+    </div>`;
+
+    h+=`<div class="tbl-wrap"><table class="dash-table"><thead><tr>
+      <th>Coleção</th>
+      <th style="text-align:right">Valor (R$)</th><th style="min-width:180px">Barra Valor</th>
+      <th style="text-align:right">Peças</th><th style="min-width:150px">Barra Peças</th>
+      <th style="text-align:center">Clientes</th>
+    </tr></thead><tbody>`;
+
+    dados.forEach((d,i)=>{
+      const pVal=maxVal>0?Math.round(d.val/maxVal*100):0;
+      const pPcs=maxPcs>0?Math.round(d.pcs/maxPcs*100):0;
+      h+=`<tr class="${i%2===0?'tbl-even':'tbl-odd'}">
+        <td style="font-weight:600">${d.col}</td>
+        <td style="text-align:right;color:var(--green)">${fmtR(d.val)}</td>
+        <td><div style="height:14px;width:${pVal}%;background:var(--green);border-radius:3px;min-width:2px"></div></td>
+        <td style="text-align:right">${Math.round(d.pcs).toLocaleString('pt-BR')}</td>
+        <td><div style="height:14px;width:${pPcs}%;background:#4C9EF1;border-radius:3px;min-width:2px"></div></td>
+        <td style="text-align:center">${d.clis}</td>
+      </tr>`;
+    });
+    h+=`</tbody></table></div>`;
+    return h;
+  }
+
+  function renderCompColecoes() {
+    const el=document.getElementById('tab-compcol');
+    if(el) el.innerHTML=buildCompColecoes();
+  }
+
+  // ─── Comparação de Coleções por Cliente ───────────────────────
+  function buildCompColecoesCli() {
+    const gPD=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
+    const src = cachedPedidosDetalhe||cachedVendas||[];
+    if(!src.length) return '<div class="empty-state">Sem dados para comparação.</div>';
+
+    const marcas=[...new Set(src.map(r=>gPD(r,'MARCA')).filter(Boolean))].sort();
+    const cols=[...new Set(src.map(r=>gPD(r,'COLECAO')).filter(Boolean))].sort().reverse();
+
+    const filtMEl=document.getElementById('cccMarca');
+    const filtCEl=document.getElementById('cccCliente');
+    const filtMarca=filtMEl?filtMEl.value:'';
+    const filtCli=filtCEl?filtCEl.value:'';
+
+    const srcF1=filtMarca?src.filter(r=>gPD(r,'MARCA')===filtMarca):src;
+    const clientes=[...new Set(srcF1.map(r=>gPD(r,'CLIENTE')).filter(Boolean))].sort();
+    const srcF2=filtCli?srcF1.filter(r=>gPD(r,'CLIENTE')===filtCli):srcF1;
+
+    // agrupar por cliente x coleção
+    const mapa={}; // cliente -> col -> {val,pcs}
+    srcF2.forEach(r=>{
+      const cli=gPD(r,'CLIENTE'),col=gPD(r,'COLECAO');
+      if(!cli||!col) return;
+      if(!mapa[cli]) mapa[cli]={};
+      if(!mapa[cli][col]) mapa[cli][col]={val:0,pcs:0};
+      mapa[cli][col].val+=parseFloat(r['[FAT_LIQ]']||r['FAT_LIQ']||0)||0;
+      mapa[cli][col].pcs+=parseFloat(r['[QTDE_PEDIDA]']||r['QTDE_PEDIDA']||0)||0;
+    });
+
+    const clisFiltrados=filtCli?[filtCli]:Object.keys(mapa).sort();
+    // Mostrar no máximo 100 clientes
+    const clisShow=clisFiltrados.slice(0,100);
+    const colsShow=cols.slice(0,15); // máx 15 coleções para não explodir a tabela
+
+    let h=`<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center">
+      <select id="cccMarca" onchange="renderCompColecoesCli()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">
+        <option value="">Todas as Marcas</option>
+        ${marcas.map(m=>`<option value="${m}"${filtMarca===m?' selected':''}>${m}</option>`).join('')}
+      </select>
+      <select id="cccCliente" onchange="renderCompColecoesCli()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px;max-width:300px">
+        <option value="">Todos os Clientes (${clientes.length})</option>
+        ${clientes.map(c=>`<option value="${c}"${filtCli===c?' selected':''}>${c}</option>`).join('')}
+      </select>
+      ${clisShow.length>=100?'<span style="font-size:12px;color:var(--muted)">Exibindo 100 de '+clisFiltrados.length+'</span>':''}
+    </div>`;
+
+    h+=`<div class="tbl-wrap"><table class="dash-table"><thead><tr>
+      <th>Cliente</th>
+      ${colsShow.map(c=>`<th style="text-align:center;font-size:11px;writing-mode:vertical-lr;transform:rotate(180deg);height:80px;padding:4px 8px">${c}</th>`).join('')}
+    </tr></thead><tbody>`;
+
+    clisShow.forEach((cli,i)=>{
+      h+=`<tr class="${i%2===0?'tbl-even':'tbl-odd'}"><td style="font-size:12px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${cli}">${cli}</td>`;
+      colsShow.forEach(col=>{
+        const d=mapa[cli]&&mapa[cli][col];
+        if(d&&d.val>0){
+          h+=`<td style="text-align:center;padding:4px"><div title="${fmtR(d.val)} — ${Math.round(d.pcs)} pcs" style="background:rgba(0,200,150,.2);border-radius:4px;padding:2px 4px;font-size:10px;color:var(--green);cursor:default">${Math.round(d.pcs)}</div></td>`;
+        } else {
+          h+=`<td style="text-align:center;color:var(--border);font-size:11px">—</td>`;
+        }
+      });
+      h+=`</tr>`;
+    });
+    h+=`</tbody></table></div>`;
+    return h;
+  }
+
+  function renderCompColecoesCli() {
+    const el=document.getElementById('tab-compcli');
+    if(el) el.innerHTML=buildCompColecoesCli();
+  }
+
+    const clientesBadge = cachedClientesAtender ? new Set(cachedClientesAtender.map(r=>(r['PEDIDO[CLIENTE]']||r['CLIENTE']||'')+'|'+(r['PEDIDO[MARCA]']||r['MARCA']||''))).size : 0;
 
   const container = document.getElementById('mainContent');
   container.innerHTML = `
@@ -892,10 +1204,16 @@ function renderDashboard(data) {
       <button class="tab-btn active" data-tab="overview">Visão Geral</button>
       <button class="tab-btn" data-tab="restricoes">Restrições <span class="tab-badge">${cachedRestricoes?cachedRestricoes.length:0}</span></button>
       <button class="tab-btn" data-tab="clientes">Clientes a Atender <span class="tab-badge" style="background:rgba(232,74,74,.15);color:#E84A4A">${clientesBadge}</span></button>
+      <button class="tab-btn" data-tab="compvendas">Comparação Vendas</button>
+      <button class="tab-btn" data-tab="compcol">Comparação Coleções</button>
+      <button class="tab-btn" data-tab="compcli">Coleções por Cliente</button>
     </div>
     <div class="tab-content" id="tab-overview">${buildOverview()}${buildMetas()}</div>
     <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
     <div class="tab-content hidden" id="tab-clientes">${buildClientes()}</div>
+    <div class="tab-content hidden" id="tab-compvendas">${buildCompVendas()}</div>
+    <div class="tab-content hidden" id="tab-compcol">${buildCompColecoes()}</div>
+    <div class="tab-content hidden" id="tab-compcli">${buildCompColecoesCli()}</div>
   `;
 
   container.querySelectorAll('.tab-btn').forEach(btn => {
