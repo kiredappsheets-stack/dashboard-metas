@@ -777,9 +777,9 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h e às 12h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v5';
+const CACHE_KEY = 'dashCache_v6';
 // Limpar versões antigas do cache
-try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
+try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
@@ -836,7 +836,7 @@ function loadCache() {
     const currentSlot = getLastSyncSlot();
     if (entry.slot !== currentSlot) return null; // cache expirado
     // Verificar se cache está completo (tem dados da fase 2)
-    if (!entry.data || !entry.data.pedidosDetalhe || !entry.data.vendas) return null;
+    if (!entry.data || !entry.data.data || !entry.data.restricoes) return null;
     return entry.data;
   } catch(e) {
     return null;
@@ -849,7 +849,7 @@ function loadCacheStale() {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const entry = JSON.parse(raw);
-    if (!entry.data || !entry.data.pedidosDetalhe || !entry.data.vendas || !entry.data.clientesAtender) return null;
+    if (!entry.data || !entry.data.data || !entry.data.restricoes) return null;
     return entry.data;
   } catch(e) {
     return null;
@@ -948,15 +948,20 @@ async function loadDashboard() {
 }
 
 // Verifica se já há sessão activa
+// Timeout de segurança: se MSAL travar, mostra login após 6s
+const _authTimeout = setTimeout(() => {
+  if (document.getElementById('initSkeleton')) renderLogin();
+}, 6000);
+
 (async () => {
   await msalInstance.initialize();
   // Processar redirect de volta do login Microsoft
   try {
     const redirectResult = await msalInstance.handleRedirectPromise();
     if (redirectResult && redirectResult.account) {
+      clearTimeout(_authTimeout);
       account = redirectResult.account;
       sessionStorage.removeItem('msalLoginPending');
-      // Guardar token imediatamente para evitar acquireTokenSilent depois
       if (redirectResult.accessToken) {
         sessionStorage.setItem('pbi_token', redirectResult.accessToken);
         sessionStorage.setItem('pbi_token_exp', String(Date.now() + 50 * 60 * 1000));
@@ -967,6 +972,7 @@ async function loadDashboard() {
   } catch(e) {
     console.warn('Redirect error:', e.message);
   }
+  clearTimeout(_authTimeout);
   // Verificar conta já existente no MSAL
   const accounts = msalInstance.getAllAccounts();
   if (accounts.length > 0) {
