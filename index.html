@@ -790,13 +790,17 @@ function renderDashboard(data) {
       porMarca[marca][ano][mes] = (porMarca[marca][ano][mes] || 0) + venda;
     });
 
-    const marcas = Object.keys(porMarca).sort();
+    const marcas = Object.keys(porMarca).sort((a, b) => {
+      if (a.toUpperCase().includes('MYROCK')) return -1;
+      if (b.toUpperCase().includes('MYROCK')) return 1;
+      return a.localeCompare(b, 'pt-BR');
+    });
     if (!marcas.length) return '<div class="empty-state">Nenhum dado encontrado.</div>';
 
     // Coletar todos os anos presentes
     const todosAnos = [...new Set(
       marcas.flatMap(m => Object.keys(porMarca[m]).map(Number))
-    )].sort();
+    )].sort((a,b) => b - a);
 
     // Meses que têm algum dado
     const todosMeses = [...new Set(
@@ -807,7 +811,7 @@ function renderDashboard(data) {
 
     marcas.forEach(marca => {
       const dadosMarca = porMarca[marca];
-      const anos = Object.keys(dadosMarca).map(Number).sort();
+      const anos = Object.keys(dadosMarca).map(Number).sort((a,b) => b - a);
 
       html += `<div style="margin-bottom:28px">
         <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:10px;padding:8px 12px;background:var(--surface2);border-radius:6px;border-left:3px solid var(--green)">${marca}</div>
