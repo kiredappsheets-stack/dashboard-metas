@@ -947,37 +947,28 @@ async function loadDashboard() {
   }
 }
 
-// Verifica se já há sessão activa
-// Timeout de segurança: se MSAL travar mais de 6s, força atualização dos dados
-const _authTimeout = setTimeout(() => {
-  if (document.getElementById('initSkeleton')) loadDashboard();
-}, 6000);
-
+// Verifica se já há sessão activa — sempre força atualização ao abrir/recarregar
 (async () => {
   await msalInstance.initialize();
-  // Processar redirect de volta do login Microsoft
   try {
     const redirectResult = await msalInstance.handleRedirectPromise();
     if (redirectResult && redirectResult.account) {
-      clearTimeout(_authTimeout);
       account = redirectResult.account;
       sessionStorage.removeItem('msalLoginPending');
       if (redirectResult.accessToken) {
         sessionStorage.setItem('pbi_token', redirectResult.accessToken);
         sessionStorage.setItem('pbi_token_exp', String(Date.now() + 50 * 60 * 1000));
       }
-      loadDashboard();
+      forceRefresh();
       return;
     }
   } catch(e) {
     console.warn('Redirect error:', e.message);
   }
-  clearTimeout(_authTimeout);
-  // Verificar conta já existente no MSAL
   const accounts = msalInstance.getAllAccounts();
   if (accounts.length > 0) {
     account = accounts[0];
-    loadDashboard();
+    forceRefresh();
   } else {
     renderLogin();
   }
