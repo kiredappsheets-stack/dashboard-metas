@@ -1578,7 +1578,7 @@ async function loadDashboard() {
       try {
         const token = await getToken();
         const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
-        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2] = await Promise.all([
+        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif] = await Promise.all([
           safe(() => runDaxQuery(token, DAX_QUERY, false)),
           safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
           safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -1624,7 +1624,7 @@ async function loadDashboard() {
     if (lu) lu.textContent = 'A carregar dados do Power BI…';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2] = await Promise.all([
+    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
