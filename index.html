@@ -433,21 +433,28 @@ ORDER BY PEDIDO[MARCA] ASC, [ANO_CALC] ASC, [MES_CALC] ASC
 // Histórico de vendas por CLIENTE, MARCA e COLEÇÃO
 const DAX_HIST_CLIENTES = `
 EVALUATE
-ADDCOLUMNS(
-  SUMMARIZE(
-    PEDIDO,
-    PEDIDO[CODCLI],
-    PEDIDO[CLIENTE],
-    PEDIDO[REP],
-    PEDIDO[COD_REP],
-    PEDIDO[MARCA],
-    PEDIDO[COLECAO],
-    "VENDA", SUM(PEDIDO[FAT_LIQ])
-  ),
-  "CIDADE", RELATED(CLIENTES[CIDADE]),
-  "ESTADO", RELATED(CLIENTES[ESTADO])
+SUMMARIZE(
+  PEDIDO,
+  PEDIDO[CODCLI],
+  PEDIDO[CLIENTE],
+  PEDIDO[REP],
+  PEDIDO[COD_REP],
+  PEDIDO[MARCA],
+  PEDIDO[COLECAO],
+  "VENDA", SUM(PEDIDO[FAT_LIQ])
 )
 ORDER BY PEDIDO[CLIENTE] ASC, PEDIDO[MARCA] ASC, PEDIDO[COLECAO] ASC
+`;
+
+// Query separada para buscar CIDADE/ESTADO da tabela CLIENTES
+const DAX_CLIENTES_LOC = `
+EVALUATE
+SELECTCOLUMNS(
+  CLIENTES,
+  "CODCLI", CLIENTES[CODCLI],
+  "CIDADE", CLIENTES[CIDADE],
+  "ESTADO", CLIENTES[ESTADO]
+)
 `;
 
 const DAX_CRM_JUSTIF = `
@@ -1113,6 +1120,17 @@ function renderDashboard(data) {
       });
     }
 
+    // Índice de localização: codcli -> { cidade, estado }
+    const locPorCod = {};
+    if (cachedClientesLoc && cachedClientesLoc.length) {
+      cachedClientesLoc.forEach(r => {
+        const cod    = String(gV(r,'CODCLI')||'').trim();
+        const cidade = String(gV(r,'CIDADE')||'');
+        const estado = String(gV(r,'ESTADO')||'');
+        if (cod) locPorCod[cod] = { cidade, estado };
+      });
+    }
+
     // Indexar: porCliente[cod] = { nome, rep, cidade, estado, marcas:{ marca:{ col: valor } } }
     const porCliente = {};
     cachedClientes2.forEach(r => {
@@ -1122,8 +1140,9 @@ function renderDashboard(data) {
       const marca  = String(gV(r,'MARCA')||'');
       const col    = String(gV(r,'COLECAO')||'');
       const venda  = parseFloat(gV(r,'VENDA')||0)||0;
-      const cidade = String(gV(r,'CIDADE')||'');
-      const estado = String(gV(r,'ESTADO')||'');
+      const loc    = locPorCod[cod] || {};
+      const cidade = loc.cidade || '';
+      const estado = loc.estado || '';
       if (!cod||!marca||!col) return;
       if (!porCliente[cod]) porCliente[cod] = {nome, rep, cidade, estado, marcas:{}};
       if (!porCliente[cod].marcas[marca]) porCliente[cod].marcas[marca] = {};
@@ -1467,9 +1486,9 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h e às 12h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v12';
+const CACHE_KEY = 'dashCache_v13';
 // Limpar versões antigas do cache
-try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
+try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
@@ -1555,6 +1574,7 @@ function applyCache(cached) {
   cachedHistPeriodo     = cached.histPeriodo     || [];
   cachedClientes2       = cached.clientes2       || [];
   cachedCrmJustif       = cached.crmJustif       || [];
+  cachedClientesLoc     = cached.clientesLoc     || [];
 }
 
 async function loadDashboard() {
@@ -1588,7 +1608,7 @@ async function loadDashboard() {
       try {
         const token = await getToken();
         const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
-        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif] = await Promise.all([
+        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc] = await Promise.all([
           safe(() => runDaxQuery(token, DAX_QUERY, false)),
           safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
           safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -1598,14 +1618,15 @@ async function loadDashboard() {
           safe(() => runDaxQuery(token, DAX_HIST_PERIODO, true)),
           safe(() => runDaxQuery(token, DAX_HIST_CLIENTES, true)),
           safe(() => runDaxQuery(token, DAX_CRM_JUSTIF, true)),
+          safe(() => runDaxQuery(token, DAX_CLIENTES_LOC, true)),
         ]);
         cachedData = data; cachedMetasHist = metasHist; cachedRestricoes = restricoes;
         cachedHistMarca = histMarca||[]; cachedHistPeriodo = histPeriodo||[];
-        cachedClientes2 = clientes2||[]; cachedCrmJustif = crmJustif||[];
+        cachedClientes2 = clientes2||[]; cachedCrmJustif = crmJustif||[]; cachedClientesLoc = clientesLoc||[];
         cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
         if (kpisFat && kpisFat.length > 0) cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
 
-        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif });
+        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc });
         // Reatualizar as abas com dados novos
         renderDashboard(cachedData);
         const now2 = new Date();
@@ -1634,7 +1655,7 @@ async function loadDashboard() {
     if (lu) lu.textContent = 'A carregar dados do Power BI…';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif] = await Promise.all([
+    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -1644,6 +1665,7 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_HIST_PERIODO, true)),
       safe(() => runDaxQuery(token, DAX_HIST_CLIENTES, true)),
       safe(() => runDaxQuery(token, DAX_CRM_JUSTIF, true)),
+      safe(() => runDaxQuery(token, DAX_CLIENTES_LOC, true)),
     ]);
     clearTimeout(_loadTimeout);
     cachedData = data;
@@ -1653,11 +1675,12 @@ async function loadDashboard() {
     cachedHistPeriodo = histPeriodo || [];
     cachedClientes2 = clientes2 || [];
     cachedCrmJustif = crmJustif || [];
+    cachedClientesLoc = clientesLoc || [];
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
-    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif });
+    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc });
     renderDashboard(data);
 
   } catch(e) {
@@ -1718,6 +1741,7 @@ let cachedHistMarca = [];
 let cachedHistPeriodo = [];
 let cachedClientes2 = [];
 let cachedCrmJustif = [];
+let cachedClientesLoc = [];
 // Variáveis legacy para contexto IA (queries removidas — sempre vazias)
 let cachedPedidos = [], cachedClientes = [], cachedReps = [], cachedVendas = [];
 let cachedMarcas = [], cachedColecoes = [], cachedPedidosDetalhe = [], cachedProdutos = [];
