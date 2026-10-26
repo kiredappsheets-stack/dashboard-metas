@@ -580,37 +580,20 @@ let account = null;
 
 async function handleAuth() {
   if (account) {
-    // Logout local — limpar tudo sem redirecionar para a Microsoft
+    // Logout local — sem redirect para Microsoft
     account = null;
     localStorage.removeItem(CACHE_KEY);
     const fab = document.querySelector('.chat-fab');
     if(fab) fab.classList.remove('visible');
     const lbl = document.getElementById('chatIaLabel');
     if(lbl) lbl.style.display='none';
-    // Limpar contas MSAL sem redirect
     try { msalInstance.clearCache(); } catch(e) {}
     renderLogin();
     return;
   }
-  // Usar popup para evitar problemas de redirect em GitHub Pages SPA
-  try {
-    renderLoading();
-    const result = await msalInstance.loginPopup({ scopes: SCOPES });
-    account = result.account;
-    localStorage.setItem('msalLoggedIn', '1');
-    loadDashboard();
-  } catch(e) {
-    console.warn('Login popup falhou:', e.message);
-    renderLogin();
-  }
-  return;
-  try {
-    const result = await msalInstance.loginRedirect({ scopes: SCOPES });
-    account = result.account;
-    loadDashboard();
-  } catch(e) {
-    console.error(e);
-  }
+  // Login via redirect (mais compatível em mobile/SPA)
+  sessionStorage.setItem('msalLoginPending', '1');
+  await msalInstance.loginRedirect({ scopes: SCOPES });
 }
 
 async function getToken() {
@@ -624,18 +607,11 @@ async function getToken() {
     const result = await msalInstance.acquireTokenSilent(req);
     return result.accessToken;
   } catch(e) {
-    console.warn('Token silent falhou, tentando popup:', e.message);
-    try {
-      const result = await msalInstance.acquireTokenPopup(req);
-      account = result.account;
-      return result.accessToken;
-    } catch(e2) {
-      // Popup bloqueado ou falhou — redirecionar para login
-      console.warn('Popup falhou:', e2.message);
-      account = null;
-      renderLogin();
-      throw e2;
-    }
+    console.warn('Token silent falhou, redirecionando para login:', e.message);
+    account = null;
+    sessionStorage.setItem('msalLoginPending', '1');
+    await msalInstance.acquireTokenRedirect(req);
+    throw new Error('Redirecionando para login...');
   }
 }
 
@@ -1631,6 +1607,19 @@ async function loadDashboard() {
 // Verifica se já há sessão activa
 (async () => {
   await msalInstance.initialize();
+  // Processar redirect de volta do login Microsoft
+  try {
+    const redirectResult = await msalInstance.handleRedirectPromise();
+    if (redirectResult && redirectResult.account) {
+      account = redirectResult.account;
+      sessionStorage.removeItem('msalLoginPending');
+      loadDashboard();
+      return;
+    }
+  } catch(e) {
+    console.warn('Redirect error:', e.message);
+  }
+  // Verificar conta já existente no MSAL
   const accounts = msalInstance.getAllAccounts();
   if (accounts.length > 0) {
     account = accounts[0];
