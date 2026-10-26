@@ -948,9 +948,9 @@ async function loadDashboard() {
 }
 
 // Verifica se já há sessão activa
-// Timeout de segurança: se MSAL travar, mostra login após 6s
+// Timeout de segurança: se MSAL travar mais de 6s, força atualização dos dados
 const _authTimeout = setTimeout(() => {
-  if (document.getElementById('initSkeleton')) renderLogin();
+  if (document.getElementById('initSkeleton')) loadDashboard();
 }, 6000);
 
 (async () => {
