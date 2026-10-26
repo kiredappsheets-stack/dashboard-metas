@@ -732,7 +732,8 @@ function renderError(msg) {
     </div>`;
 }
 
-function renderDashboard(data) {
+function renderDashboard(data, hasAllData=false) {
+  const _hasAllData = hasAllData;
   const colecoes = [...new Set(data.map(d => d.col))].sort((a, b) => b.localeCompare(a, 'pt-BR'));
   const totalMeta  = data.reduce((a, d) => a + d.meta, 0);
   const totalVenda = data.reduce((a, d) => a + d.venda, 0);
@@ -1425,11 +1426,11 @@ function renderDashboard(data) {
     </div>
     <div class="tab-content" id="tab-overview">${buildOverview()}${buildMetas()}</div>
     <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
-    <div class="tab-content hidden" id="tab-clientes"><div class="loading-tab"><div class="spinner"></div>A carregar clientes…</div></div>
-    <div class="tab-content hidden" id="tab-compvendas"><div class="loading-tab"><div class="spinner"></div>A carregar comparação de vendas…</div></div>
-    <div class="tab-content hidden" id="tab-compcol"><div class="loading-tab"><div class="spinner"></div>A carregar comparação de coleções…</div></div>
-    <div class="tab-content hidden" id="tab-compcli"><div class="loading-tab"><div class="spinner"></div>A carregar coleções por cliente…</div></div>
-    <div class="tab-content hidden" id="tab-histcli"><div class="loading-tab"><div class="spinner"></div>A carregar histórico por marca…</div></div>
+    <div class="tab-content hidden" id="tab-clientes">${_hasAllData ? buildClientes() : '<div class="loading-tab"><div class="spinner"></div>A carregar clientes…</div>'}</div>
+    <div class="tab-content hidden" id="tab-compvendas">${_hasAllData ? buildCompVendas() : '<div class="loading-tab"><div class="spinner"></div>A carregar comparação de vendas…</div>'}</div>
+    <div class="tab-content hidden" id="tab-compcol">${_hasAllData ? buildCompColecoes() : '<div class="loading-tab"><div class="spinner"></div>A carregar comparação de coleções…</div>'}</div>
+    <div class="tab-content hidden" id="tab-compcli">${_hasAllData ? buildCompColecoesCli() : '<div class="loading-tab"><div class="spinner"></div>A carregar coleções por cliente…</div>'}</div>
+    <div class="tab-content hidden" id="tab-histcli">${_hasAllData ? buildHistoricoCliente() : '<div class="loading-tab"><div class="spinner"></div>A carregar histórico por marca…</div>'}</div>
   `;
 
   container.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1544,14 +1545,7 @@ async function loadDashboard() {
   if (cached) {
     // Cache válido — renderizar imediatamente sem ir ao Power BI
     applyCache(cached);
-    renderDashboard(cachedData);
-    // Preencher todas as abas
-    const tC = document.getElementById('tab-clientes');      if(tC) tC.innerHTML = buildClientes();
-    const tCV = document.getElementById('tab-compvendas');   if(tCV) tCV.innerHTML = buildCompVendas();
-    const tCC = document.getElementById('tab-compcol');      if(tCC) tCC.innerHTML = buildCompColecoes();
-    const tCCli = document.getElementById('tab-compcli');    if(tCCli) tCCli.innerHTML = buildCompColecoesCli();
-    const tH = document.getElementById('tab-histcli');       if(tH) tH.innerHTML = buildHistoricoCliente();
-    const tOv = document.getElementById('tab-overview');     if(tOv) tOv.innerHTML = buildOverview() + buildMetas();
+    renderDashboard(cachedData, true); // cache completo — todas as abas já renderizadas dentro
     const cachedTs = JSON.parse(localStorage.getItem(CACHE_KEY)||'{}').ts;
     const cachedDate = cachedTs ? new Date(cachedTs).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '?';
     document.getElementById('lastUpdate').textContent = 'Cache de ' + cachedDate + ' · próx. sync 4h ou 12h';
