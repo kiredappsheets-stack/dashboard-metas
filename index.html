@@ -1194,6 +1194,179 @@ function renderDashboard(data) {
     if(el) el.innerHTML=buildCompColecoesCli();
   }
 
+    // ─── Histórico de Coleções por Marca (Clientes a Atender) ───────
+  function buildHistoricoCliente(filtroMarca2='', filtroRep2='', filtroCliente2='') {
+    const gCA=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
+    const gPD=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
+
+    if(!cachedClientesAtender||!cachedClientesAtender.length)
+      return '<div class="empty-state">Sem dados de clientes a atender.</div>';
+    if(!cachedPedidosDetalhe||!cachedPedidosDetalhe.length)
+      return '<div class="empty-state">Sem histórico de pedidos disponível.</div>';
+
+    // Montar lista única de clientes a atender com sua marca de última compra
+    const clientesInfo = {}; // codKey -> {cliente, marca, rep, ultima}
+    cachedClientesAtender.forEach(r=>{
+      const cli=gCA(r,'CLIENTE'), marca=gCA(r,'MARCA'), rep=gCA(r,'REP');
+      const ult=gCA(r,'ULTIMA_COMPRA')||'';
+      const key=cli+'|'+marca;
+      if(!clientesInfo[key]) clientesInfo[key]={cli, marca, rep, ult};
+    });
+
+    const todasMarcas=[...new Set(Object.values(clientesInfo).map(x=>x.marca))].sort();
+    const todosReps=[...new Set(Object.values(clientesInfo).map(x=>x.rep))].sort();
+
+    // Filtros
+    const mEl=document.getElementById('hcMarca');
+    const rEl=document.getElementById('hcRep');
+    const cEl=document.getElementById('hcCliente');
+    const fMarca=mEl?mEl.value:filtroMarca2;
+    const fRep=rEl?rEl.value:filtroRep2;
+    const fCli=cEl?cEl.value:filtroCliente2;
+
+    // Filtrar clientes
+    let entries=Object.values(clientesInfo);
+    if(fMarca) entries=entries.filter(x=>x.marca===fMarca);
+    if(fRep)   entries=entries.filter(x=>x.rep===fRep);
+    if(fCli)   entries=entries.filter(x=>x.cli===fCli);
+
+    const todosClis=[...new Set(entries.map(x=>x.cli))].sort();
+    const CORES={MYROCK:'#4C9EF1',CHARPEY:'#E84A4A',AMC:'#F5A623',ROMITEX:'#00C896'};
+
+    // Filtros HTML (sem backtick aninhado)
+    let h='<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center">'+
+      '<select id="hcMarca" onchange="renderHistoricoCliente()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">'+
+      '<option value="">Todas as Marcas</option>'+
+      todasMarcas.map(m=>'<option value="'+m+'"'+(fMarca===m?' selected':'')+'>'+m+'</option>').join('')+
+      '</select>'+
+      '<select id="hcRep" onchange="renderHistoricoCliente()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">'+
+      '<option value="">Todos os Representantes</option>'+
+      todosReps.map(r=>'<option value="'+r+'"'+(fRep===r?' selected':'')+'>'+r+'</option>').join('')+
+      '</select>'+
+      '<select id="hcCliente" onchange="renderHistoricoCliente()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px;max-width:260px">'+
+      '<option value="">Todos os Clientes</option>'+
+      todosClis.map(c=>'<option value="'+c+'"'+(fCli===c?' selected':'')+'>'+c+'</option>').join('')+
+      '</select>'+
+      '<span style="font-size:12px;color:var(--muted)">'+entries.length+' clientes</span>'+
+      '</div>';
+
+    if(!entries.length) return h+'<div class="empty-state">Nenhum resultado com estes filtros.</div>';
+
+    // Para cada cliente/marca: buscar histórico de coleções dessa marca
+    // Coleções ordenadas por data desc (mais recente = última compra)
+    const colOrdem={}; // colecao -> data de referência
+    cachedPedidosDetalhe.forEach(r=>{
+      const col=gPD(r,'COLECAO'), d=gPD(r,'DATA')||'';
+      if(!col) return;
+      if(!colOrdem[col]||d>colOrdem[col]) colOrdem[col]=d;
+    });
+    const colsOrdenadas=[...new Set(cachedPedidosDetalhe.map(r=>gPD(r,'COLECAO')).filter(Boolean))]
+      .sort((a,b)=>(colOrdem[b]||'').localeCompare(colOrdem[a]||''));
+
+    // Agrupar por cliente+marca -> colecao -> {val, pcs}
+    const histo={}; // cli|marca -> col -> {val,pcs}
+    cachedPedidosDetalhe.forEach(r=>{
+      const cli=gPD(r,'CLIENTE'), marca=gPD(r,'MARCA'), col=gPD(r,'COLECAO');
+      if(!cli||!marca||!col) return;
+      const key=cli+'|'+marca;
+      if(!histo[key]) histo[key]={};
+      if(!histo[key][col]) histo[key][col]={val:0,pcs:0};
+      histo[key][col].val+=parseFloat(r['[FAT_LIQ]']||r['FAT_LIQ']||0)||0;
+      histo[key][col].pcs+=parseFloat(r['[QTDE_PEDIDA]']||r['QTDE_PEDIDA']||0)||0;
+    });
+
+    // Para cada cliente, pegar apenas coleções da sua marca
+    const colsPorMarca={};
+    cachedPedidosDetalhe.forEach(r=>{
+      const marca=gPD(r,'MARCA'),col=gPD(r,'COLECAO');
+      if(!marca||!col) return;
+      if(!colsPorMarca[marca]) colsPorMarca[marca]=new Set();
+      colsPorMarca[marca].add(col);
+    });
+
+    // Agrupar entries por marca para renderizar em blocos
+    const porMarca={};
+    entries.forEach(e=>{
+      if(!porMarca[e.marca]) porMarca[e.marca]=[];
+      porMarca[e.marca].push(e);
+    });
+
+    Object.keys(porMarca).sort().forEach(marca=>{
+      const cor=CORES[marca]||'#8B93A8';
+      const clisM=porMarca[marca];
+      // Coleções desta marca em ordem cronológica desc
+      const colsM=colsOrdenadas.filter(c=>colsPorMarca[marca]&&colsPorMarca[marca].has(c));
+      const maxCols=Math.min(colsM.length, 12); // máx 12 coleções por marca
+      const colsShow=colsM.slice(0,maxCols);
+
+      // Calcular max para escala das barras
+      let maxVal=1, maxPcs=1;
+      clisM.forEach(e=>{
+        const key=e.cli+'|'+marca;
+        colsShow.forEach(col=>{
+          const d=histo[key]&&histo[key][col];
+          if(d){ if(d.val>maxVal) maxVal=d.val; if(d.pcs>maxPcs) maxPcs=d.pcs; }
+        });
+      });
+
+      // Header da marca
+      h+='<div style="margin-bottom:28px">'+
+        '<div style="font-size:13px;font-weight:800;color:'+cor+';letter-spacing:.08em;text-transform:uppercase;'+
+        'border-left:4px solid '+cor+';padding:8px 14px;background:rgba(255,255,255,.03);border-radius:0 8px 8px 0;margin-bottom:14px">'+
+        marca+' — '+clisM.length+' clientes</div>';
+
+      // Cabeçalho colunas (coleções)
+      h+='<div class="tbl-wrap"><table class="dash-table" style="font-size:11px"><thead><tr>'+
+        '<th style="min-width:180px">Cliente / Rep</th>'+
+        colsShow.map(c=>'<th style="text-align:center;padding:6px 4px;max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+c+'">'+c+'</th>').join('')+
+        '</tr></thead><tbody>';
+
+      // Linhas de clientes
+      clisM.forEach((e,i)=>{
+        const key=e.cli+'|'+marca;
+        const dadosCli=histo[key]||{};
+        const totalPcs=colsShow.reduce((s,c)=>s+(dadosCli[c]?dadosCli[c].pcs:0),0);
+        const totalVal=colsShow.reduce((s,c)=>s+(dadosCli[c]?dadosCli[c].val:0),0);
+
+        h+='<tr class="'+(i%2===0?'tbl-even':'tbl-odd')+'">'+
+          '<td style="padding:6px 10px">'+
+            '<div style="font-weight:600;font-size:12px">'+e.cli+'</div>'+
+            '<div style="font-size:10px;color:var(--muted)">'+e.rep+' · '+
+              Math.round(totalPcs)+' pcs · '+fmtR(totalVal)+
+            '</div>'+
+          '</td>';
+
+        colsShow.forEach(col=>{
+          const d=dadosCli[col];
+          if(d&&d.pcs>0){
+            const wPcs=Math.round(d.pcs/maxPcs*60)+40; // barra relativa min 40px
+            const isUlt=(col===colsM[0]); // mais recente = última compra
+            h+='<td style="text-align:center;padding:4px 6px">'+
+              '<div style="display:flex;flex-direction:column;align-items:center;gap:2px">'+
+                '<div title="'+fmtR(d.val)+'" style="background:'+(isUlt?cor:'rgba(0,200,150,.15)')+
+                ';border-radius:4px;padding:2px 6px;font-size:11px;color:'+(isUlt?'#fff':'var(--green)')+
+                ';font-weight:700;white-space:nowrap">'+Math.round(d.pcs)+' pcs</div>'+
+                '<div style="font-size:10px;color:var(--muted)">'+fmtR(d.val)+'</div>'+
+              '</div></td>';
+          } else {
+            h+='<td style="text-align:center;color:var(--border);font-size:11px">—</td>';
+          }
+        });
+
+        h+='</tr>';
+      });
+
+      h+='</tbody></table></div></div>';
+    });
+
+    return h;
+  }
+
+  function renderHistoricoCliente() {
+    const el=document.getElementById('tab-histcli');
+    if(el) el.innerHTML=buildHistoricoCliente();
+  }
+
     const clientesBadge = cachedClientesAtender ? new Set(cachedClientesAtender.map(r=>(r['PEDIDO[CLIENTE]']||r['CLIENTE']||'')+'|'+(r['PEDIDO[MARCA]']||r['MARCA']||''))).size : 0;
 
   const container = document.getElementById('mainContent');
@@ -1205,6 +1378,7 @@ function renderDashboard(data) {
       <button class="tab-btn" data-tab="compvendas">Comparação Vendas</button>
       <button class="tab-btn" data-tab="compcol">Comparação Coleções</button>
       <button class="tab-btn" data-tab="compcli">Coleções por Cliente</button>
+      <button class="tab-btn" data-tab="histcli">Histórico por Marca</button>
     </div>
     <div class="tab-content" id="tab-overview">${buildOverview()}${buildMetas()}</div>
     <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
@@ -1212,6 +1386,7 @@ function renderDashboard(data) {
     <div class="tab-content hidden" id="tab-compvendas">${buildCompVendas()}</div>
     <div class="tab-content hidden" id="tab-compcol">${buildCompColecoes()}</div>
     <div class="tab-content hidden" id="tab-compcli">${buildCompColecoesCli()}</div>
+    <div class="tab-content hidden" id="tab-histcli">${buildHistoricoCliente()}</div>
   `;
 
   container.querySelectorAll('.tab-btn').forEach(btn => {
