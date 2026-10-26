@@ -43,6 +43,8 @@
   .app-header h1 { font-size:14px; font-weight:600; color:var(--tx); letter-spacing:-.01em; }
   .app-header-right { display:flex; align-items:center; gap:12px; }
   .last-update { font-size:11px; color:var(--hint); }
+  .btn-refresh { background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:5px; font-size:14px; width:26px; height:26px; cursor:pointer; line-height:1; padding:0; transition:color .15s,border-color .15s; }
+  .btn-refresh:hover { color:var(--green); border-color:var(--green); }
   .btn-login { font-family:var(--font); font-size:12px; font-weight:600; padding:6px 14px; border-radius:6px; border:1px solid rgba(255,255,255,.15); background:var(--green); color:#000; cursor:pointer; transition:opacity .15s; }
   .btn-login:hover { opacity:.85; }
   .btn-login.logout { background:transparent; color:var(--muted); border-color:var(--border); }
@@ -198,6 +200,7 @@
   </div>
   <div class="app-header-right">
     <span class="last-update" id="lastUpdate"></span>
+    <button class="btn-refresh" id="btnRefresh" title="Forçar atualização agora" onclick="forceRefresh()">↻</button>
     <button class="btn-login" id="btnAuth" onclick="handleAuth()">Entrar com Microsoft</button>
   </div>
 </header>
@@ -1446,18 +1449,122 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════════
+
+// ════════════════════════════════════════════
+//  CACHE LOCAL — atualiza às 4h e às 12h
+// ════════════════════════════════════════════
+const CACHE_KEY = 'dashCache_v3';
+
+function getLastSyncSlot() {
+  // Retorna o timestamp do início do último slot de sync (4h ou 12h)
+  const now = new Date();
+  const tz = 'America/Sao_Paulo';
+  // Hora local em Sao Paulo
+  const localStr = now.toLocaleString('en-US', { timeZone: tz, hour12: false,
+    year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+  // Parse: "10/26/2026, 13:10"
+  const [datePart, timePart] = localStr.split(', ');
+  const [mo, da, yr] = datePart.split('/');
+  const [hh] = timePart.split(':');
+  const hour = parseInt(hh, 10);
+  // Slot: se >= 12h → slot de hoje às 12h; se >= 4h → slot de hoje às 4h; senão → slot de ontem às 12h
+  let slotHour, slotDay = da, slotMo = mo, slotYr = yr;
+  if (hour >= 12) {
+    slotHour = 12;
+  } else if (hour >= 4) {
+    slotHour = 4;
+  } else {
+    slotHour = 12;
+    // ontem
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yStr = yesterday.toLocaleString('en-US', { timeZone: tz, hour12: false,
+      year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    const [yd] = yStr.split(', ');
+    const [yMo, yDa, yYr] = yd.split('/');
+    slotDay = yDa; slotMo = yMo; slotYr = yYr;
+  }
+  return `${slotYr}-${slotMo}-${slotDay}-${slotHour}`;
+}
+
+function forceRefresh() {
+  localStorage.removeItem(CACHE_KEY);
+  loadDashboard();
+}
+
+function saveCache(payload) {
+  try {
+    const slot = getLastSyncSlot();
+    const entry = { slot, ts: Date.now(), data: payload };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(entry));
+  } catch(e) {
+    console.warn('Cache write falhou:', e.message);
+  }
+}
+
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const entry = JSON.parse(raw);
+    const currentSlot = getLastSyncSlot();
+    if (entry.slot !== currentSlot) return null; // cache expirado
+    return entry.data;
+  } catch(e) {
+    return null;
+  }
+}
+
+function applyCache(cached) {
+  cachedData            = cached.data            || [];
+  cachedKpis            = cached.kpis            || null;
+  cachedMetasHist       = cached.metasHist       || [];
+  cachedRestricoes      = cached.restricoes      || [];
+  cachedPedidos         = cached.pedidos         || [];
+  cachedClientes        = cached.clientes        || [];
+  cachedReps            = cached.reps            || [];
+  cachedVendas          = cached.vendas          || [];
+  cachedMarcas          = cached.marcas          || [];
+  cachedColecoes        = cached.colecoes        || [];
+  cachedPedidosDetalhe  = cached.pedidosDetalhe  || [];
+  cachedProdutos        = cached.produtos        || [];
+  cachedFaturamento     = cached.faturamento     || [];
+  cachedFatColecao      = cached.fatColecao      || [];
+  cachedClientesAtender = cached.clientesAtender || [];
+}
+
 async function loadDashboard() {
   document.getElementById('btnAuth').textContent = 'Sair';
   document.getElementById('btnAuth').classList.add('logout');
   document.querySelector('.chat-fab').classList.add('visible');
   const iaLbl = document.getElementById('chatIaLabel'); if(iaLbl) iaLbl.style.display='block';
+
+  // ── Verificar cache local ──
+  const cached = loadCache();
+  if (cached) {
+    // Cache válido — renderizar imediatamente sem ir ao Power BI
+    applyCache(cached);
+    renderDashboard(cachedData);
+    // Preencher todas as abas
+    const tC = document.getElementById('tab-clientes');      if(tC) tC.innerHTML = buildClientes();
+    const tCV = document.getElementById('tab-compvendas');   if(tCV) tCV.innerHTML = buildCompVendas();
+    const tCC = document.getElementById('tab-compcol');      if(tCC) tCC.innerHTML = buildCompColecoes();
+    const tCCli = document.getElementById('tab-compcli');    if(tCCli) tCCli.innerHTML = buildCompColecoesCli();
+    const tH = document.getElementById('tab-histcli');       if(tH) tH.innerHTML = buildHistoricoCliente();
+    const tOv = document.getElementById('tab-overview');     if(tOv) tOv.innerHTML = buildOverview() + buildMetas();
+    const cachedTs = JSON.parse(localStorage.getItem(CACHE_KEY)||'{}').ts;
+    const cachedDate = cachedTs ? new Date(cachedTs).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '?';
+    document.getElementById('lastUpdate').textContent = 'Cache de ' + cachedDate + ' · próx. sync 4h ou 12h';
+    return;
+  }
+
+  // Sem cache válido — buscar do Power BI
   renderLoading();
   try {
     const token = await getToken();
-    // Cada query é independente — se uma falhar não afecta as outras
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    // ── FASE 1: queries essenciais para Visão Geral (rápido) ──
+    // ── FASE 1: queries essenciais para Visão Geral ──
     const [data, kpis, kpisFat, metasHist, restricoes] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
@@ -1472,10 +1579,9 @@ async function loadDashboard() {
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
-    // Renderiza já com os dados essenciais
     renderDashboard(data);
 
-    // ── FASE 2: queries secundárias em background ──
+    // ── FASE 2: restantes em background ──
     (async () => {
       const [pedidos, clientes, reps, vendas, marcas, colecoes,
              pedidosDetalhe, produtos, faturamento, fatColecao, clientesAtender] = await Promise.all([
@@ -1502,26 +1608,25 @@ async function loadDashboard() {
       cachedFaturamento = faturamento;
       cachedFatColecao = fatColecao;
       cachedClientesAtender = clientesAtender;
-      // Preencher todas as abas com os dados completos
-      const tabClientes = document.getElementById('tab-clientes');
-      if (tabClientes) tabClientes.innerHTML = buildClientes();
-      const tabCompVendas = document.getElementById('tab-compvendas');
-      if (tabCompVendas) tabCompVendas.innerHTML = buildCompVendas();
-      const tabCompCol = document.getElementById('tab-compcol');
-      if (tabCompCol) tabCompCol.innerHTML = buildCompColecoes();
-      const tabCompCli = document.getElementById('tab-compcli');
-      if (tabCompCli) tabCompCli.innerHTML = buildCompColecoesCli();
-      const tabHistCli = document.getElementById('tab-histcli');
-      if (tabHistCli) tabHistCli.innerHTML = buildHistoricoCliente();
-      // Atualizar Metas por Coleção na visão geral (depende de pedidos)
-      const tabOverview = document.getElementById('tab-overview');
-      if (tabOverview) tabOverview.innerHTML = buildOverview() + buildMetas();
+
+      // Salvar tudo no cache local
+      saveCache({
+        data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist,
+        restricoes: cachedRestricoes, pedidos, clientes, reps, vendas, marcas,
+        colecoes, pedidosDetalhe, produtos, faturamento, fatColecao, clientesAtender
+      });
+
+      // Preencher todas as abas
+      const tC = document.getElementById('tab-clientes');      if(tC) tC.innerHTML = buildClientes();
+      const tCV = document.getElementById('tab-compvendas');   if(tCV) tCV.innerHTML = buildCompVendas();
+      const tCC = document.getElementById('tab-compcol');      if(tCC) tCC.innerHTML = buildCompColecoes();
+      const tCCli = document.getElementById('tab-compcli');    if(tCCli) tCCli.innerHTML = buildCompColecoesCli();
+      const tH = document.getElementById('tab-histcli');       if(tH) tH.innerHTML = buildHistoricoCliente();
+      const tOv = document.getElementById('tab-overview');     if(tOv) tOv.innerHTML = buildOverview() + buildMetas();
       const now2 = new Date();
       document.getElementById('lastUpdate').textContent =
         'Atualizado: ' + now2.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
     })();
-    // Não esperar fase 2 — retornar já
-    // (renderDashboard já chamado na fase 1 acima);
   } catch(e) {
     renderError(e.message);
   }
