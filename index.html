@@ -441,7 +441,9 @@ SUMMARIZE(
   PEDIDO[COD_REP],
   PEDIDO[MARCA],
   PEDIDO[COLECAO],
-  "VENDA", SUM(PEDIDO[FAT_LIQ])
+  "VENDA", SUM(PEDIDO[FAT_LIQ]),
+  "CIDADE", RELATED(CLIENTES[CIDADE]),
+  "ESTADO", RELATED(CLIENTES[ESTADO])
 )
 ORDER BY PEDIDO[CLIENTE] ASC, PEDIDO[MARCA] ASC, PEDIDO[COLECAO] ASC
 `;
@@ -1109,17 +1111,19 @@ function renderDashboard(data) {
       });
     }
 
-    // Indexar: porCliente[cod] = { nome, rep, marcas:{ marca:{ col: valor } } }
+    // Indexar: porCliente[cod] = { nome, rep, cidade, estado, marcas:{ marca:{ col: valor } } }
     const porCliente = {};
     cachedClientes2.forEach(r => {
-      const cod   = String(gV(r,'CODCLI')||'');
-      const nome  = String(gV(r,'CLIENTE')||cod);
-      const rep   = String(gV(r,'REP')||'');
-      const marca = String(gV(r,'MARCA')||'');
-      const col   = String(gV(r,'COLECAO')||'');
-      const venda = parseFloat(gV(r,'VENDA')||0)||0;
+      const cod    = String(gV(r,'CODCLI')||'');
+      const nome   = String(gV(r,'CLIENTE')||cod);
+      const rep    = String(gV(r,'REP')||'');
+      const marca  = String(gV(r,'MARCA')||'');
+      const col    = String(gV(r,'COLECAO')||'');
+      const venda  = parseFloat(gV(r,'VENDA')||0)||0;
+      const cidade = String(gV(r,'CIDADE')||'');
+      const estado = String(gV(r,'ESTADO')||'');
       if (!cod||!marca||!col) return;
-      if (!porCliente[cod]) porCliente[cod] = {nome, rep, marcas:{}};
+      if (!porCliente[cod]) porCliente[cod] = {nome, rep, cidade, estado, marcas:{}};
       if (!porCliente[cod].marcas[marca]) porCliente[cod].marcas[marca] = {};
       porCliente[cod].marcas[marca][col] = (porCliente[cod].marcas[marca][col]||0) + venda;
     });
@@ -1156,11 +1160,11 @@ function renderDashboard(data) {
         .cli-tbl { border-collapse:collapse; font-size:12px; }
         .cli-tbl th, .cli-tbl td { padding:6px 10px; white-space:nowrap; border-bottom:1px solid var(--border); }
         .cli-tbl thead th { background:var(--sidebar); position:sticky; top:0; z-index:2; font-size:11px; font-weight:600; color:var(--muted); }
-        .cli-tbl .col-nome { position:sticky; left:0; z-index:1; background:var(--surface); min-width:190px; max-width:210px; overflow:hidden; text-overflow:ellipsis; font-weight:500; }
+        .cli-tbl .col-nome { position:sticky; left:0; z-index:1; background:var(--surface); min-width:220px; max-width:240px; overflow:hidden; font-weight:500; vertical-align:middle; }
         .cli-tbl thead .col-nome { z-index:4; background:var(--sidebar); }
-        .cli-tbl .col-status { position:sticky; left:210px; z-index:1; background:var(--surface); min-width:100px; text-align:center; }
+        .cli-tbl .col-status { position:sticky; left:240px; z-index:1; background:var(--surface); min-width:105px; text-align:center; }
         .cli-tbl thead .col-status { z-index:3; background:var(--sidebar); }
-        .cli-tbl .col-crm { position:sticky; left:310px; z-index:1; background:var(--surface); width:36px; text-align:center; }
+        .cli-tbl .col-crm { position:sticky; left:345px; z-index:1; background:var(--surface); width:36px; text-align:center; }
         .cli-tbl thead .col-crm { z-index:3; background:var(--sidebar); }
         .cli-tbl tbody tr:nth-child(even) .col-nome,
         .cli-tbl tbody tr:nth-child(even) .col-status,
@@ -1295,7 +1299,11 @@ function renderDashboard(data) {
             const crmHtml = crm
               ? `<span class="crm-icon">💬<span class="crm-tooltip"><strong>Justificativa CRM</strong>${crm.obs || '(sem texto)'}<br><span style="color:var(--muted);margin-top:4px;display:block;font-size:10px">${crm.data ? crm.data.split(' ')[0] : ''}</span></span></span>`
               : '';
-            html += `<tr><td class="col-nome" title="${cli.nome}">${cli.nome}</td>
+            const loc = [cli.cidade, cli.estado].filter(Boolean).join(' / ');
+            html += `<tr><td class="col-nome" title="${cli.nome}${loc?' — '+loc:''}">
+                ${cli.nome}
+                ${loc ? `<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:1px;overflow:hidden;text-overflow:ellipsis">${loc}</span>` : ''}
+              </td>
               <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span></td>
               <td class="col-crm">${crmHtml}</td>`;
             cols.forEach((col,ci) => {
@@ -1457,9 +1465,9 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h e às 12h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v10';
+const CACHE_KEY = 'dashCache_v11';
 // Limpar versões antigas do cache
-try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
+try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
