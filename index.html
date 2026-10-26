@@ -866,9 +866,9 @@ function applyCache(cached) {
 }
 
 async function loadDashboard() {
-  document.getElementById('btnAuth').textContent = 'Sair';
-  document.getElementById('btnAuth').classList.add('logout');
-  document.querySelector('.chat-fab').classList.add('visible');
+  const btnAuth = document.getElementById('btnAuth');
+  if (btnAuth) { btnAuth.textContent = 'Sair'; btnAuth.classList.add('logout'); }
+  const fab = document.querySelector('.chat-fab'); if (fab) fab.classList.add('visible');
   const iaLbl = document.getElementById('chatIaLabel'); if(iaLbl) iaLbl.style.display='block';
 
   // ── Verificar cache local ──
