@@ -1513,6 +1513,19 @@ function loadCache() {
   }
 }
 
+// Retorna cache antigo (slot diferente) se estiver completo — para renderizar instantâneo e atualizar em background
+function loadCacheStale() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const entry = JSON.parse(raw);
+    if (!entry.data || !entry.data.pedidosDetalhe || !entry.data.vendas) return null;
+    return entry.data;
+  } catch(e) {
+    return null;
+  }
+}
+
 function applyCache(cached) {
   cachedData            = cached.data            || [];
   cachedKpis            = cached.kpis            || null;
@@ -1549,7 +1562,72 @@ async function loadDashboard() {
     return;
   }
 
-  // Sem cache válido — buscar do Power BI
+  // Cache expirado mas existe — renderizar imediatamente com dados antigos e atualizar em background
+  const stale = loadCacheStale();
+  if (stale) {
+    applyCache(stale);
+    renderDashboard(cachedData, true);
+    const staleTs = JSON.parse(localStorage.getItem(CACHE_KEY)||'{}').ts;
+    const staleDate = staleTs ? new Date(staleTs).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '?';
+    document.getElementById('lastUpdate').textContent = 'A atualizar dados… (cache de ' + staleDate + ')';
+    // Atualizar em background sem mostrar spinner
+    (async () => {
+      try {
+        const token = await getToken();
+        const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
+        const [data, kpis, kpisFat, metasHist, restricoes] = await Promise.all([
+          safe(() => runDaxQuery(token, DAX_QUERY, false)),
+          safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
+          safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
+          safe(() => runDaxQuery(token, DAX_METAS_HIST, true)),
+          safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
+        ]);
+        cachedData = data; cachedMetasHist = metasHist; cachedRestricoes = restricoes;
+        cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
+        if (kpisFat && kpisFat.length > 0) cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
+
+        const [pedidos, clientes, reps, vendas, marcas, colecoes,
+               pedidosDetalhe, produtos, faturamento, fatColecao, clientesAtender] = await Promise.all([
+          safe(() => runDaxQuery(token, DAX_PEDIDOS, true)),
+          safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
+          safe(() => runDaxQuery(token, DAX_REPRESENTANTES, true)),
+          safe(() => runDaxQuery(token, DAX_VENDAS, true)),
+          safe(() => runDaxQuery(token, DAX_MARCAS, true)),
+          safe(() => runDaxQuery(token, DAX_COLECOES, true)),
+          safe(() => runDaxQuery(token, DAX_PEDIDOS_DETALHE, true)),
+          safe(() => runDaxQuery(token, DAX_PRODUTOS, true)),
+          safe(() => runDaxQuery(token, DAX_FATURAMENTO, true)),
+          safe(() => runDaxQuery(token, DAX_FAT_COLECAO, true)),
+          safe(() => runDaxQuery(token, DAX_CLIENTES_ATENDER, true)),
+        ]);
+        cachedPedidos = pedidos; cachedClientes = clientes; cachedReps = reps;
+        cachedVendas = vendas; cachedMarcas = marcas; cachedColecoes = colecoes;
+        cachedPedidosDetalhe = pedidosDetalhe; cachedProdutos = produtos;
+        cachedFaturamento = faturamento; cachedFatColecao = fatColecao; cachedClientesAtender = clientesAtender;
+
+        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist,
+          restricoes: cachedRestricoes, pedidos, clientes, reps, vendas, marcas,
+          colecoes, pedidosDetalhe, produtos, faturamento, fatColecao, clientesAtender });
+
+        // Reatualizar todas as abas com dados novos
+        const tOv = document.getElementById('tab-overview');   if(tOv) tOv.innerHTML = buildOverview() + buildMetas();
+        const tC  = document.getElementById('tab-clientes');   if(tC)  tC.innerHTML  = buildClientes();
+        const tCV = document.getElementById('tab-compvendas'); if(tCV) tCV.innerHTML = buildCompVendas();
+        const tCC = document.getElementById('tab-compcol');    if(tCC) tCC.innerHTML = buildCompColecoes();
+        const tCCli=document.getElementById('tab-compcli');    if(tCCli) tCCli.innerHTML = buildCompColecoesCli();
+        const tH  = document.getElementById('tab-histcli');    if(tH)  tH.innerHTML  = buildHistoricoCliente();
+        const now2 = new Date();
+        document.getElementById('lastUpdate').textContent =
+          'Atualizado: ' + now2.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+      } catch(e) {
+        console.warn('Atualização em background falhou:', e.message);
+        document.getElementById('lastUpdate').textContent = 'Dados do cache (atualização falhou)';
+      }
+    })();
+    return;
+  }
+
+  // Sem nenhum cache — buscar do Power BI
   renderLoading();
   try {
     const token = await getToken();
