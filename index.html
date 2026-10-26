@@ -1491,11 +1491,11 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 
 // ════════════════════════════════════════════
-//  CACHE LOCAL — atualiza às 4h e às 12h
+//  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v13';
+const CACHE_KEY = 'dashCache_v14';
 // Limpar versões antigas do cache
-try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
+try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
@@ -1509,14 +1509,16 @@ function getLastSyncSlot() {
   const [mo, da, yr] = datePart.split('/');
   const [hh] = timePart.split(':');
   const hour = parseInt(hh, 10);
-  // Slot: se >= 12h → slot de hoje às 12h; se >= 4h → slot de hoje às 4h; senão → slot de ontem às 12h
+  // Slot: se >= 18h → slot de hoje às 18h; se >= 12h → slot de hoje às 12h; se >= 4h → slot de hoje às 4h; senão → slot de ontem às 18h
   let slotHour, slotDay = da, slotMo = mo, slotYr = yr;
-  if (hour >= 12) {
+  if (hour >= 18) {
+    slotHour = 18;
+  } else if (hour >= 12) {
     slotHour = 12;
   } else if (hour >= 4) {
     slotHour = 4;
   } else {
-    slotHour = 12;
+    slotHour = 18;
     // ontem
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
