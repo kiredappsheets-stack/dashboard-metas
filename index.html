@@ -301,21 +301,6 @@ ORDER BY METAS[COLECAO] DESC
 
 // Query para pedidos — TODAS as coleções (para o chat)
 // Vendas por REP e COLECAO — todas as coleções
-const DAX_PEDIDOS = `
-EVALUATE
-SUMMARIZECOLUMNS(
-  PEDIDO[COLECAO],
-  PEDIDO[REP],
-  "VAL_VENDA",     SUM(PEDIDO[VAL_DESC_EMPENHO]),
-  "FAT_LIQ",       SUM(PEDIDO[FAT_LIQ]),
-  "FAT_BRUTO",     SUM(PEDIDO[FAT_TOTAL_BRUTO]),
-  "QTDE_PEDIDA",   SUM(PEDIDO[QTDE_ORIG]),
-  "QTDE_FATURADA", SUM(PEDIDO[QTDE_FAT]),
-  "QTDE_CANC",     SUM(PEDIDO[QTDE_CANC]),
-  "DESCONTO",      SUM(PEDIDO[DESCONTO])
-)
-ORDER BY PEDIDO[COLECAO] DESC
-`;
 
 // Metas de TODAS as coleções (histórico)
 const DAX_METAS_HIST = `
@@ -346,64 +331,12 @@ ORDER BY CLIENTES[NOME] ASC
 `;
 
 // Produtos/SKU por cliente e coleção
-const DAX_PRODUTOS = `
-EVALUATE
-SUMMARIZECOLUMNS(
-  PEDIDO[COLECAO],
-  PEDIDO[CLIENTE],
-  PEDIDO[REP],
-  PEDIDO[MARCA],
-  PEDIDO[PRODUTO],
-  PEDIDO[CODIGO],
-  "VAL_VENDA",     SUM(PEDIDO[VAL_DESC_EMPENHO]),
-  "FAT_LIQ",       SUM(PEDIDO[FAT_LIQ]),
-  "QTDE_PEDIDA",   SUM(PEDIDO[QTDE_ORIG]),
-  "QTDE_FATURADA", SUM(PEDIDO[QTDE_FAT]),
-  "QTDE_CANC",     SUM(PEDIDO[QTDE_CANC]),
-  "PRECO_UNIT",    AVERAGE(PEDIDO[PRECO]),
-  "VAL_DESC",      SUM(PEDIDO[DESC]),
-  "PERC_DESC",     AVERAGE(PEDIDO[DESCONTO])
-)
-ORDER BY PEDIDO[COLECAO] DESC, PEDIDO[CLIENTE] ASC
-`;
 
 // Query para representantes
-const DAX_REPRESENTANTES = `
-EVALUATE
-SUMMARIZECOLUMNS(
-  REPRESENTANTE[CODREP],
-  REPRESENTANTE[REPRESENTANTE]
-)
-ORDER BY REPRESENTANTE[REPRESENTANTE] ASC
-`;
 
 // Vendas por MARCA e COLECAO
-const DAX_MARCAS = `
-EVALUATE
-SUMMARIZECOLUMNS(
-  PEDIDO[MARCA],
-  PEDIDO[COLECAO],
-  "VAL_VENDA",       SUM(PEDIDO[VAL_DESC_EMPENHO]),
-  "FAT_LIQ",         SUM(PEDIDO[FAT_LIQ]),
-  "QTDE_PEDIDA",     SUM(PEDIDO[QTDE_ORIG]),
-  "QTDE_FAT_PEDIDO", SUM(PEDIDO[QTDE_FAT]),
-  "QTDE_CANC",       SUM(PEDIDO[QTDE_CANC])
-)
-ORDER BY PEDIDO[MARCA] ASC, PEDIDO[COLECAO] ASC
-`;
 
 // Faturamento real por coleção (tabela FATURAMENTO — fonte correcta para qtd/valor faturado)
-const DAX_FAT_COLECAO = `
-EVALUATE
-SUMMARIZECOLUMNS(
-  FATURAMENTO[COLECAO],
-  FATURAMENTO[COL_ATUAL],
-  "FAT_TOTAL", SUM(FATURAMENTO[FAT TOTAL]),
-  "QTD_FAT",   SUM(FATURAMENTO[QTD]),
-  "GANHOS",    SUM(FATURAMENTO[GANHOS])
-)
-ORDER BY FATURAMENTO[COLECAO] DESC
-`;
 
 // Clientes atendidos e a atender por coleção
 const DAX_CLIENTES_COL = `
@@ -422,22 +355,6 @@ UNION(
 `;
 
 // Faturamento real (tabela FATURAMENTO relacionada com PEDIDO via coluna PEDIDO)
-const DAX_FATURAMENTO = `
-EVALUATE
-SUMMARIZECOLUMNS(
-  FATURAMENTO[COLECAO],
-  FATURAMENTO[COL_ATUAL],
-  FATURAMENTO[PEDIDO],
-  FATURAMENTO[CLIENTE_FORNECEDOR],
-  FATURAMENTO[REPRESENTANTE],
-  FATURAMENTO[ESTADO],
-  FATURAMENTO[MUNICIPIO],
-  "FAT_TOTAL",  SUM(FATURAMENTO[FAT TOTAL]),
-  "GANHOS",     SUM(FATURAMENTO[GANHOS]),
-  "QTD",        SUM(FATURAMENTO[QTD])
-)
-ORDER BY FATURAMENTO[COLECAO] DESC
-`;
 
 // KPIs das coleções atuais para cards do dashboard
 const DAX_KPIS_COL_ATUAL = `
@@ -468,30 +385,6 @@ ROW(
 `;
 
 // KPIs de faturamento real (tabela FATURAMENTO) separado para não quebrar o ROW()
-const DAX_CLIENTES_ATENDER = `
-EVALUATE
-CALCULATETABLE(
-  ADDCOLUMNS(
-    SUMMARIZECOLUMNS(
-      PEDIDO[MARCA],
-      PEDIDO[REP],
-      PEDIDO[CLIENTE],
-      PEDIDO[CODCLI],
-      PEDIDO[ESTADO],
-      PEDIDO[MUNICIPIO],
-      "ULTIMA_COMPRA",        MAX(PEDIDO[DATA]),
-      "VALOR_ULTIMA_COMPRA",  CALCULATE(SUM(PEDIDO[FAT_LIQ]), PEDIDO[DATA] = MAX(PEDIDO[DATA])),
-      "CODCLI_KEY",           MAX(PEDIDO[CODCLI])
-    ),
-    "CRM_DATA", MAXX(FILTER(CRM, CRM[CODCLI] = [CODCLI_KEY]), CRM[DATA]),
-    "CRM_OBS",  MAXX(TOPN(1, FILTER(CRM, CRM[CODCLI] = [CODCLI_KEY]), CRM[DATA], DESC), CRM[OBSERVACAO])
-  ),
-  PEDIDO[MARCA] IN CALCULATETABLE(VALUES(PEDIDO[MARCA]), PEDIDO[COL_ATUAL] = "COL ATUAL"),
-  PEDIDO[DATA] >= DATE(2025,1,1),
-  NOT(PEDIDO[CLIENTE] IN CALCULATETABLE(VALUES(PEDIDO[CLIENTE]), PEDIDO[COL_ATUAL] = "COL ATUAL"))
-)
-ORDER BY PEDIDO[MARCA] ASC, PEDIDO[REP] ASC, PEDIDO[ESTADO] ASC, PEDIDO[MUNICIPIO] ASC
-`;
 
 const DAX_RESTRICOES = `
 EVALUATE
@@ -519,17 +412,6 @@ ROW(
 `;
 
 // Coleções com datas — ordem cronológica
-const DAX_COLECOES = `
-EVALUATE
-SUMMARIZECOLUMNS(
-  COLECOES[COLECAO],
-  COLECOES[DESCRICAO],
-  COLECOES[DT_INICIO],
-  COLECOES[DT_FINAL],
-  COLECOES[COL_ATUAL]
-)
-ORDER BY COLECOES[COLECAO] ASC
-`;
 
 // Pedidos detalhados — data dinâmica calculada em JS
 const _hoje = new Date();
@@ -538,50 +420,8 @@ const _mes = _hoje.getMonth() + 1;
 const _dia = _hoje.getDate();
 const _anoInicio = _ano - 2; // 2 anos atrás
 
-const DAX_PEDIDOS_DETALHE = `
-EVALUATE
-CALCULATETABLE(
-  SUMMARIZECOLUMNS(
-    PEDIDO[DATA],
-    PEDIDO[PEDIDO],
-    PEDIDO[REP],
-    PEDIDO[CLIENTE],
-    PEDIDO[MARCA],
-    PEDIDO[COLECAO],
-    PEDIDO[ESTADO],
-    PEDIDO[MUNICIPIO],
-    "VAL_VENDA",     SUM(PEDIDO[VAL_DESC_EMPENHO]),
-    "FAT_LIQ",       SUM(PEDIDO[FAT_LIQ]),
-    "FAT_BRUTO",     SUM(PEDIDO[FAT_TOTAL_BRUTO]),
-    "QTDE_PEDIDA",   SUM(PEDIDO[QTDE_ORIG]),
-    "QTDE_FATURADA", SUM(PEDIDO[QTDE_FAT]),
-    "QTDE_CANC",     SUM(PEDIDO[QTDE_CANC]),
-    "VAL_DESC",      SUM(PEDIDO[DESC]),
-    "PERC_DESC",     AVERAGE(PEDIDO[DESCONTO])
-  ),
-  PEDIDO[DATA] >= DATE(${_anoInicio},1,1)
-)
-ORDER BY PEDIDO[DATA] DESC
-`;
 
 // Query para vendas — TODAS as coleções (para o chat)
-const DAX_VENDAS = `
-EVALUATE
-SUMMARIZECOLUMNS(
-  PEDIDO[COLECAO],
-  PEDIDO[MARCA],
-  PEDIDO[REP],
-  PEDIDO[CLIENTE],
-  PEDIDO[ESTADO],
-  PEDIDO[MUNICIPIO],
-  "VAL_VENDA",     SUM(PEDIDO[VAL_DESC_EMPENHO]),
-  "FAT_LIQ",       SUM(PEDIDO[FAT_LIQ]),
-  "QTDE_PEDIDA",   SUM(PEDIDO[QTDE_ORIG]),
-  "QTDE_FATURADA", SUM(PEDIDO[QTDE_FAT]),
-  "QTDE_CANC",     SUM(PEDIDO[QTDE_CANC])
-)
-ORDER BY PEDIDO[COLECAO] DESC
-`;
 
 // ════════════════════════════════════════════
 //  MSAL — autenticação Microsoft
@@ -756,8 +596,7 @@ function renderError(msg) {
     </div>`;
 }
 
-function renderDashboard(data, hasAllData=false) {
-  const _hasAllData = hasAllData;
+function renderDashboard(data) {
   const colecoes = [...new Set(data.map(d => d.col))].sort((a, b) => b.localeCompare(a, 'pt-BR'));
   const totalMeta  = data.reduce((a, d) => a + d.meta, 0);
   const totalVenda = data.reduce((a, d) => a + d.venda, 0);
@@ -905,556 +744,16 @@ function renderDashboard(data, hasAllData=false) {
     return h;
   }
 
-  function buildClientes(filtroMarca='', filtroRep='') {
-    if(!cachedClientesAtender||!cachedClientesAtender.length) return '<div class="empty-state">Nenhum cliente a atender.</div>';
-    const gCA=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
-    const CORES={MYROCK:'#4C9EF1',CHARPEY:'#E84A4A',AMC:'#F5A623',ROMITEX:'#00C896'};
 
-    // Calcular coleções compradas por cliente (de cachedPedidosDetalhe ou cachedVendas)
-    const colsCompradasPorCli = {};
-    const gPD=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
-    const srcCol = (cachedPedidosDetalhe&&cachedPedidosDetalhe.length) ? cachedPedidosDetalhe : (cachedVendas||[]);
-    srcCol.forEach(r=>{
-      const cli=gPD(r,'CLIENTE'), col=gPD(r,'COLECAO');
-      if(!cli||!col) return;
-      if(!colsCompradasPorCli[cli]) colsCompradasPorCli[cli]=new Set();
-      colsCompradasPorCli[cli].add(col);
-    });
-    // Total de coleções distintas no histórico
-    const todasCols = new Set(srcCol.map(r=>gPD(r,'COLECAO')).filter(Boolean));
-    const nTotalCols = todasCols.size;
-
-    // Filtrar dados
-    let rows = cachedClientesAtender;
-    if(filtroMarca) rows = rows.filter(r=>gCA(r,'MARCA')===filtroMarca);
-    if(filtroRep)   rows = rows.filter(r=>gCA(r,'REP')===filtroRep);
-
-    const todasMarcas = [...new Set(cachedClientesAtender.map(r=>gCA(r,'MARCA')))].sort();
-    const todosReps   = [...new Set(cachedClientesAtender.map(r=>gCA(r,'REP')))].sort();
-
-    // KPI cards
-    const marcasCA={}, vistos={};
-    rows.forEach(r=>{
-      const marca=gCA(r,'MARCA'),cli=gCA(r,'CLIENTE'),val=parseFloat(r['[VALOR_ULTIMA_COMPRA]']||r['VALOR_ULTIMA_COMPRA']||0)||0;
-      if(!marcasCA[marca]) marcasCA[marca]={clientes:new Set(),valor:0};
-      marcasCA[marca].clientes.add(cli);
-      if(!vistos[marca+'|'+cli]){vistos[marca+'|'+cli]=true;marcasCA[marca].valor+=val;}
-    });
-    let totalCli=new Set(rows.map(r=>gCA(r,'CLIENTE')+'|'+gCA(r,'MARCA'))).size;
-
-    // Filtros HTML
-    let h='<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center">'+
-      '<select id="filtMarca" onchange="renderClientesTab()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px;cursor:pointer">'+
-      '<option value="">Todas as Marcas</option>'+
-      todasMarcas.map(m=>'<option value="'+m+'"'+(filtroMarca===m?' selected':'')+'>'+m+'</option>').join('')+
-      '</select>'+
-      '<select id="filtRep" onchange="renderClientesTab()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px;cursor:pointer">'+
-      '<option value="">Todos os Representantes</option>'+
-      todosReps.map(r=>'<option value="'+r+'"'+(filtroRep===r?' selected':'')+'>'+r+'</option>').join('')+
-      '</select>'+
-      '<span style="font-size:12px;color:var(--muted)">'+totalCli+' clientes</span>'+
-      '</div>';
-
-    // KPI row
-    h+='<div class="kpi-row" style="margin-bottom:20px">';
-    Object.keys(marcasCA).sort().forEach(m=>{
-      const cor=CORES[m]||'#8B93A8';
-      h+=`<div class="kpi" style="border-top:3px solid ${cor}"><div class="kpi-lbl" style="color:${cor};font-weight:700">${m}</div><div class="kpi-val" style="color:${cor}">${marcasCA[m].clientes.size}</div><div class="kpi-sub">clientes</div><div style="margin-top:8px;font-size:14px;font-weight:700">${fmtR(marcasCA[m].valor)}</div><div class="kpi-sub">últ. compra</div></div>`;
-    });
-    h+=`<div class="kpi" style="border-top:3px solid var(--tx)"><div class="kpi-lbl" style="font-weight:700">Total</div><div class="kpi-val">${totalCli}</div><div class="kpi-sub">clientes</div></div></div>`;
-
-    // Tabela
-    h+=`<div class="tbl-wrap"><table class="dash-table"><thead><tr>
-      <th>Marca</th><th>Representante</th><th>Cliente</th><th style="text-align:center">Cols. sem compra</th><th>UF</th><th>Cidade</th>
-      <th style="text-align:center">Últ. Compra</th><th style="text-align:right">Valor</th>
-    </tr></thead><tbody>`;
-
-    const colsCA=[...new Set(rows.map(r=>gCA(r,'MARCA')))].sort();
-    colsCA.forEach(col=>{
-      const rowsCol=rows.filter(r=>gCA(r,'MARCA')===col);
-      const repsCol=[...new Set(rowsCol.map(r=>gCA(r,'REP')))].sort();
-      const cor=CORES[col]||'#8B93A8';
-      h+=`<tr style="background:rgba(255,255,255,.05);border-left:4px solid ${cor}"><td colspan="6" style="color:${cor};font-weight:700;padding:9px 14px">${col}</td><td></td><td></td></tr>`;
-      repsCol.forEach(rep=>{
-        const rowsRep=rowsCol.filter(r=>gCA(r,'REP')===rep);
-        h+=`<tr class="tbl-rep"><td></td><td colspan="5" style="padding-left:24px;font-weight:600;font-size:12px">👤 ${rep} (${new Set(rowsRep.map(r=>gCA(r,'CLIENTE'))).size})</td><td></td><td></td></tr>`;
-        rowsRep.forEach((r,i)=>{
-          const cli=gCA(r,'CLIENTE');
-          const colsCompradas=colsCompradasPorCli[cli]?colsCompradasPorCli[cli].size:0;
-          const colsSem=nTotalCols-colsCompradas;
-          const badgeCol=colsSem>0?`<span style="background:rgba(232,74,74,.15);color:#E84A4A;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:700">${colsSem}</span>`:'<span style="color:var(--green);font-size:11px">✓</span>';
-          h+=`<tr class="${i%2===0?'tbl-even':'tbl-odd'}">
-            <td></td><td>${gCA(r,'REP')}</td>
-            <td>${cli} ${badgeCol}</td>
-            <td style="text-align:center">${badgeCol}</td>
-            <td>${gCA(r,'ESTADO')}</td><td>${gCA(r,'MUNICIPIO')}</td>
-            <td style="text-align:center;font-size:12px;color:var(--muted)">${(gCA(r,'ULTIMA_COMPRA')||'').split('T')[0].split(' ')[0]}</td>
-            <td style="text-align:right;font-weight:600;color:var(--green)">${fmtR(parseFloat(r['[VALOR_ULTIMA_COMPRA]']||r['VALOR_ULTIMA_COMPRA']||0)||0)}</td>
-          </tr>`;
-        });
-      });
-    });
-    h+=`</tbody></table></div>`;
-    return h;
-  }
-
-  window.renderClientesTab = function() {
-    const marca = document.getElementById('filtMarca')?.value||'';
-    const rep   = document.getElementById('filtRep')?.value||'';
-    const el = document.getElementById('tab-clientes');
-    if(el) el.innerHTML = buildClientes(marca, rep);
-  };
-
-  // ─── Comparação de Vendas (Ano / Meses / Semanas) ────────────────
-  function buildCompVendas(modo='ano') {
-    const gPD=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
-    const src = cachedPedidosDetalhe||[];
-    if(!src.length) return '<div class="empty-state">Sem dados de pedidos para comparação.</div>';
-
-    function parseData(r) {
-      const d=gPD(r,'DATA')||'';
-      return new Date(d.replace(' ','T'));
-    }
-    function semanaISO(d) {
-      const tmp=new Date(d); tmp.setHours(0,0,0,0);
-      tmp.setDate(tmp.getDate()+4-(tmp.getDay()||7));
-      const ini=new Date(tmp.getFullYear(),0,1);
-      return Math.ceil(((tmp-ini)/86400000+1)/7);
-    }
-
-    const anos=[...new Set(src.map(r=>{ const d=parseData(r); return isNaN(d)?null:d.getFullYear(); }).filter(Boolean))].sort();
-    const sel1=anos[anos.length-1]||new Date().getFullYear();
-    const sel2=anos[anos.length-2]||sel1-1;
-
-    // Parâmetros do modo vêm de selects (lidos de atributos data-)
-    const modoEl=document.getElementById('cvModo');
-    const a1El=document.getElementById('cvAno1');
-    const a2El=document.getElementById('cvAno2');
-    const curModo=modoEl?modoEl.value:modo;
-    const curA1=a1El?parseInt(a1El.value):sel1;
-    const curA2=a2El?parseInt(a2El.value):sel2;
-
-    const MESES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-
-    let labels=[], vals1=[], vals2=[], pcs1=[], pcs2=[];
-
-    if(curModo==='ano') {
-      anos.forEach(ano=>{
-        const r=src.filter(r=>{ const d=parseData(r); return !isNaN(d)&&d.getFullYear()===ano; });
-        labels.push(String(ano));
-        const v=r.reduce((s,x)=>s+(parseFloat(x['[FAT_LIQ]']||x['FAT_LIQ']||0)||0),0);
-        const p=r.reduce((s,x)=>s+(parseFloat(x['[QTDE_PEDIDA]']||x['QTDE_PEDIDA']||0)||0),0);
-        vals1.push(v); pcs1.push(p);
-      });
-      vals2=[]; pcs2=[];
-    } else if(curModo==='mes') {
-      for(let m=0;m<12;m++){
-        labels.push(MESES[m]);
-        const f1=src.filter(r=>{ const d=parseData(r); return !isNaN(d)&&d.getFullYear()===curA1&&d.getMonth()===m; });
-        const f2=src.filter(r=>{ const d=parseData(r); return !isNaN(d)&&d.getFullYear()===curA2&&d.getMonth()===m; });
-        vals1.push(f1.reduce((s,x)=>s+(parseFloat(x['[FAT_LIQ]']||x['FAT_LIQ']||0)||0),0));
-        vals2.push(f2.reduce((s,x)=>s+(parseFloat(x['[FAT_LIQ]']||x['FAT_LIQ']||0)||0),0));
-        pcs1.push(f1.reduce((s,x)=>s+(parseFloat(x['[QTDE_PEDIDA]']||x['QTDE_PEDIDA']||0)||0),0));
-        pcs2.push(f2.reduce((s,x)=>s+(parseFloat(x['[QTDE_PEDIDA]']||x['QTDE_PEDIDA']||0)||0),0));
-      }
-    } else { // semana
-      for(let s=1;s<=52;s++){
-        labels.push('S'+s);
-        const f1=src.filter(r=>{ const d=parseData(r); return !isNaN(d)&&d.getFullYear()===curA1&&semanaISO(d)===s; });
-        const f2=src.filter(r=>{ const d=parseData(r); return !isNaN(d)&&d.getFullYear()===curA2&&semanaISO(d)===s; });
-        vals1.push(f1.reduce((s2,x)=>s2+(parseFloat(x['[FAT_LIQ]']||x['FAT_LIQ']||0)||0),0));
-        vals2.push(f2.reduce((s2,x)=>s2+(parseFloat(x['[FAT_LIQ]']||x['FAT_LIQ']||0)||0),0));
-        pcs1.push(f1.reduce((s2,x)=>s2+(parseFloat(x['[QTDE_PEDIDA]']||x['QTDE_PEDIDA']||0)||0),0));
-        pcs2.push(f2.reduce((s2,x)=>s2+(parseFloat(x['[QTDE_PEDIDA]']||x['QTDE_PEDIDA']||0)||0),0));
-      }
-    }
-
-    const maxVal=Math.max(...vals1,...(vals2.length?vals2:[0]),1);
-    const maxPcs=Math.max(...pcs1,...(pcs2.length?pcs2:[0]),1);
-
-    function barChart(labelsArr, series, maxV, fmtFn, title) {
-      const barH=22, gap=4, w=100;
-      let h=`<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">${title}</div>`;
-      labelsArr.forEach((lbl,i)=>{
-        h+=`<div style="display:flex;align-items:center;margin-bottom:${gap}px;gap:8px">
-          <div style="width:28px;font-size:10px;color:var(--muted);text-align:right;flex-shrink:0">${lbl}</div>
-          <div style="flex:1;display:flex;flex-direction:column;gap:2px">`;
-        series.forEach(({vals,color,label})=>{
-          const v=vals[i]||0;
-          const pct=maxV>0?Math.round(v/maxV*w):0;
-          h+=`<div style="display:flex;align-items:center;gap:6px">
-            <div style="height:${barH}px;width:${pct}%;background:${color};border-radius:3px;min-width:2px;transition:width .3s"></div>
-            <span style="font-size:11px;color:var(--tx);white-space:nowrap">${fmtFn(v)}</span>
-          </div>`;
-        });
-        h+=`</div></div>`;
-      });
-      h+=`</div>`;
-      return h;
-    }
-
-    const seriesValor = vals2.length
-      ? [{vals:vals1,color:'#00C896',label:String(curA1)},{vals:vals2,color:'#4C9EF1',label:String(curA2)}]
-      : [{vals:vals1,color:'#00C896',label:String(curA1)}];
-    const seriesPcs = pcs2.length
-      ? [{vals:pcs1,color:'#00C896',label:String(curA1)},{vals:pcs2,color:'#4C9EF1',label:String(curA2)}]
-      : [{vals:pcs1,color:'#00C896',label:String(curA1)}];
-
-    const anoBtns=anos.map(a=>'<option value="'+a+'"'+(a===curA1?' selected':'')+'>'+a+'</option>').join('');
-    const anoBtns2=anos.map(a=>'<option value="'+a+'"'+(a===curA2?' selected':'')+'>'+a+'</option>').join('');
-
-    let html2=`<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center">
-      <select id="cvModo" onchange="renderCompVendas()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">
-        <option value="ano"${curModo==='ano'?' selected':''}>Por Ano</option>
-        <option value="mes"${curModo==='mes'?' selected':''}>Meses (dois anos)</option>
-        <option value="sem"${curModo==='sem'?' selected':''}>Semanas (dois anos)</option>
-      </select>`;
-    if(curModo!=='ano') html2+=`
-      <select id="cvAno1" onchange="renderCompVendas()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">${anoBtns}</select>
-      <span style="color:var(--muted);font-size:13px">vs</span>
-      <select id="cvAno2" onchange="renderCompVendas()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">${anoBtns2}</select>`;
-    html2+=`</div>`;
-
-    // Legenda
-    if(seriesValor.length>1) html2+='<div style="display:flex;gap:16px;margin-bottom:16px">'+seriesValor.map(s=>'<div style="display:flex;align-items:center;gap:6px"><div style="width:12px;height:12px;border-radius:3px;background:'+s.color+'"></div><span style="font-size:12px;color:var(--muted)">'+s.label+'</span></div>').join('')+'</div>';
-
-    html2+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px">`;
-    html2+=`<div>${barChart(labels, seriesValor, maxVal, fmtR, 'Valor (R$)')}</div>`;
-    html2+=`<div>${barChart(labels, seriesPcs, maxPcs, v=>Math.round(v).toLocaleString('pt-BR'), 'Peças')}</div>`;
-    html2+=`</div>`;
-    return html2;
-  }
-
-  window.renderCompVendas = function() {
-    const el=document.getElementById('tab-compvendas');
-    if(el) el.innerHTML=buildCompVendas();
-  };
-
-  // ─── Comparação entre Coleções ────────────────────────────────
-  function buildCompColecoes() {
-    const gPD=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
-    const src = cachedPedidosDetalhe||cachedVendas||[];
-    if(!src.length) return '<div class="empty-state">Sem dados para comparação.</div>';
-
-    const cols=[...new Set(src.map(r=>gPD(r,'COLECAO')).filter(Boolean))].sort().reverse();
-    const marcas=[...new Set(src.map(r=>gPD(r,'MARCA')).filter(Boolean))].sort();
-
-    const filtMEl=document.getElementById('ccMarca');
-    const filtMarca=filtMEl?filtMEl.value:'';
-
-    const srcF=filtMarca?src.filter(r=>gPD(r,'MARCA')===filtMarca):src;
-
-    const dados=cols.map(col=>{
-      const r=srcF.filter(x=>gPD(x,'COLECAO')===col);
-      return {
-        col,
-        val:r.reduce((s,x)=>s+(parseFloat(x['[FAT_LIQ]']||x['FAT_LIQ']||0)||0),0),
-        pcs:r.reduce((s,x)=>s+(parseFloat(x['[QTDE_PEDIDA]']||x['QTDE_PEDIDA']||0)||0),0),
-        clis:new Set(r.map(x=>gPD(x,'CLIENTE'))).size
-      };
-    });
-
-    const maxVal=Math.max(...dados.map(d=>d.val),1);
-    const maxPcs=Math.max(...dados.map(d=>d.pcs),1);
-
-    let h='<div style="display:flex;gap:12px;margin-bottom:20px;align-items:center">'+
-      '<select id="ccMarca" onchange="renderCompColecoes()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">'+
-      '<option value="">Todas as Marcas</option>'+
-      marcas.map(m=>'<option value="'+m+'"'+(filtMarca===m?' selected':'')+'>'+m+'</option>').join('')+
-      '</select></div>';
-
-    h+=`<div class="tbl-wrap"><table class="dash-table"><thead><tr>
-      <th>Coleção</th>
-      <th style="text-align:right">Valor (R$)</th><th style="min-width:180px">Barra Valor</th>
-      <th style="text-align:right">Peças</th><th style="min-width:150px">Barra Peças</th>
-      <th style="text-align:center">Clientes</th>
-    </tr></thead><tbody>`;
-
-    dados.forEach((d,i)=>{
-      const pVal=maxVal>0?Math.round(d.val/maxVal*100):0;
-      const pPcs=maxPcs>0?Math.round(d.pcs/maxPcs*100):0;
-      h+=`<tr class="${i%2===0?'tbl-even':'tbl-odd'}">
-        <td style="font-weight:600">${d.col}</td>
-        <td style="text-align:right;color:var(--green)">${fmtR(d.val)}</td>
-        <td><div style="height:14px;width:${pVal}%;background:var(--green);border-radius:3px;min-width:2px"></div></td>
-        <td style="text-align:right">${Math.round(d.pcs).toLocaleString('pt-BR')}</td>
-        <td><div style="height:14px;width:${pPcs}%;background:#4C9EF1;border-radius:3px;min-width:2px"></div></td>
-        <td style="text-align:center">${d.clis}</td>
-      </tr>`;
-    });
-    h+=`</tbody></table></div>`;
-    return h;
-  }
-
-  window.renderCompColecoes = function() {
-    const el=document.getElementById('tab-compcol');
-    if(el) el.innerHTML=buildCompColecoes();
-  };
-
-  // ─── Comparação de Coleções por Cliente ───────────────────────
-  function buildCompColecoesCli() {
-    const gPD=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
-    const src = cachedPedidosDetalhe||cachedVendas||[];
-    if(!src.length) return '<div class="empty-state">Sem dados para comparação.</div>';
-
-    const marcas=[...new Set(src.map(r=>gPD(r,'MARCA')).filter(Boolean))].sort();
-    const cols=[...new Set(src.map(r=>gPD(r,'COLECAO')).filter(Boolean))].sort().reverse();
-
-    const filtMEl=document.getElementById('cccMarca');
-    const filtCEl=document.getElementById('cccCliente');
-    const filtMarca=filtMEl?filtMEl.value:'';
-    const filtCli=filtCEl?filtCEl.value:'';
-
-    const srcF1=filtMarca?src.filter(r=>gPD(r,'MARCA')===filtMarca):src;
-    const clientes=[...new Set(srcF1.map(r=>gPD(r,'CLIENTE')).filter(Boolean))].sort();
-    const srcF2=filtCli?srcF1.filter(r=>gPD(r,'CLIENTE')===filtCli):srcF1;
-
-    // agrupar por cliente x coleção
-    const mapa={}; // cliente -> col -> {val,pcs}
-    srcF2.forEach(r=>{
-      const cli=gPD(r,'CLIENTE'),col=gPD(r,'COLECAO');
-      if(!cli||!col) return;
-      if(!mapa[cli]) mapa[cli]={};
-      if(!mapa[cli][col]) mapa[cli][col]={val:0,pcs:0};
-      mapa[cli][col].val+=parseFloat(r['[FAT_LIQ]']||r['FAT_LIQ']||0)||0;
-      mapa[cli][col].pcs+=parseFloat(r['[QTDE_PEDIDA]']||r['QTDE_PEDIDA']||0)||0;
-    });
-
-    const clisFiltrados=filtCli?[filtCli]:Object.keys(mapa).sort();
-    // Mostrar no máximo 100 clientes
-    const clisShow=clisFiltrados.slice(0,100);
-    const colsShow=cols.slice(0,15); // máx 15 coleções para não explodir a tabela
-
-    let h='<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center">'+
-      '<select id="cccMarca" onchange="renderCompColecoesCli()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">'+
-      '<option value="">Todas as Marcas</option>'+
-      marcas.map(m=>'<option value="'+m+'"'+(filtMarca===m?' selected':'')+'>'+m+'</option>').join('')+
-      '</select>'+
-      '<select id="cccCliente" onchange="renderCompColecoesCli()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px;max-width:300px">'+
-      '<option value="">Todos os Clientes ('+clientes.length+')</option>'+
-      clientes.map(c=>'<option value="'+c+'"'+(filtCli===c?' selected':'')+'>'+c+'</option>').join('')+
-      '</select>'+
-      (clisShow.length>=100?'<span style="font-size:12px;color:var(--muted)">Exibindo 100 de '+clisFiltrados.length+'</span>':'')+
-      '</div>';
-
-    h+='<div class="tbl-wrap"><table class="dash-table"><thead><tr><th>Cliente</th>'+
-      colsShow.map(c=>'<th style="text-align:center;font-size:11px;writing-mode:vertical-lr;transform:rotate(180deg);height:80px;padding:4px 8px">'+c+'</th>').join('')+
-      '</tr></thead><tbody>';
-
-    clisShow.forEach((cli,i)=>{
-      h+='<tr class="'+(i%2===0?'tbl-even':'tbl-odd')+'"><td style="font-size:12px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+cli+'">'+cli+'</td>';
-      colsShow.forEach(col=>{
-        const d=mapa[cli]&&mapa[cli][col];
-        if(d&&d.val>0){
-          h+='<td style="text-align:center;padding:4px"><div title="'+fmtR(d.val)+' — '+Math.round(d.pcs)+' pcs" style="background:rgba(0,200,150,.2);border-radius:4px;padding:2px 4px;font-size:10px;color:var(--green);cursor:default">'+Math.round(d.pcs)+'</div></td>';
-        } else {
-          h+='<td style="text-align:center;color:var(--border);font-size:11px">—</td>';
-        }
-      });
-      h+='</tr>';
-    });
-    h+=`</tbody></table></div>`;
-    return h;
-  }
-
-  window.renderCompColecoesCli = function() {
-    const el=document.getElementById('tab-compcli');
-    if(el) el.innerHTML=buildCompColecoesCli();
-  };
-
-    // ─── Histórico de Coleções por Marca (Clientes a Atender) ───────
-  function buildHistoricoCliente(filtroMarca2='', filtroRep2='', filtroCliente2='') {
-    const gCA=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
-    const gPD=(r,c)=>r['PEDIDO['+c+']']||r[c]||'';
-
-    if(!cachedClientesAtender||!cachedClientesAtender.length)
-      return '<div class="empty-state">Sem dados de clientes a atender.</div>';
-    if(!cachedPedidosDetalhe||!cachedPedidosDetalhe.length)
-      return '<div class="empty-state">Sem histórico de pedidos disponível.</div>';
-
-    // Montar lista única de clientes a atender com sua marca de última compra
-    const clientesInfo = {}; // codKey -> {cliente, marca, rep, ultima}
-    cachedClientesAtender.forEach(r=>{
-      const cli=gCA(r,'CLIENTE'), marca=gCA(r,'MARCA'), rep=gCA(r,'REP');
-      const ult=gCA(r,'ULTIMA_COMPRA')||'';
-      const key=cli+'|'+marca;
-      if(!clientesInfo[key]) clientesInfo[key]={cli, marca, rep, ult};
-    });
-
-    const todasMarcas=[...new Set(Object.values(clientesInfo).map(x=>x.marca))].sort();
-    const todosReps=[...new Set(Object.values(clientesInfo).map(x=>x.rep))].sort();
-
-    // Filtros
-    const mEl=document.getElementById('hcMarca');
-    const rEl=document.getElementById('hcRep');
-    const cEl=document.getElementById('hcCliente');
-    const fMarca=mEl?mEl.value:filtroMarca2;
-    const fRep=rEl?rEl.value:filtroRep2;
-    const fCli=cEl?cEl.value:filtroCliente2;
-
-    // Filtrar clientes
-    let entries=Object.values(clientesInfo);
-    if(fMarca) entries=entries.filter(x=>x.marca===fMarca);
-    if(fRep)   entries=entries.filter(x=>x.rep===fRep);
-    if(fCli)   entries=entries.filter(x=>x.cli===fCli);
-
-    const todosClis=[...new Set(entries.map(x=>x.cli))].sort();
-    const CORES={MYROCK:'#4C9EF1',CHARPEY:'#E84A4A',AMC:'#F5A623',ROMITEX:'#00C896'};
-
-    // Filtros HTML (sem backtick aninhado)
-    let h='<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center">'+
-      '<select id="hcMarca" onchange="renderHistoricoCliente()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">'+
-      '<option value="">Todas as Marcas</option>'+
-      todasMarcas.map(m=>'<option value="'+m+'"'+(fMarca===m?' selected':'')+'>'+m+'</option>').join('')+
-      '</select>'+
-      '<select id="hcRep" onchange="renderHistoricoCliente()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px">'+
-      '<option value="">Todos os Representantes</option>'+
-      todosReps.map(r=>'<option value="'+r+'"'+(fRep===r?' selected':'')+'>'+r+'</option>').join('')+
-      '</select>'+
-      '<select id="hcCliente" onchange="renderHistoricoCliente()" style="background:var(--surface);border:1px solid var(--border);color:var(--tx);padding:7px 12px;border-radius:8px;font-size:13px;max-width:260px">'+
-      '<option value="">Todos os Clientes</option>'+
-      todosClis.map(c=>'<option value="'+c+'"'+(fCli===c?' selected':'')+'>'+c+'</option>').join('')+
-      '</select>'+
-      '<span style="font-size:12px;color:var(--muted)">'+entries.length+' clientes</span>'+
-      '</div>';
-
-    if(!entries.length) return h+'<div class="empty-state">Nenhum resultado com estes filtros.</div>';
-
-    // Para cada cliente/marca: buscar histórico de coleções dessa marca
-    // Coleções ordenadas por data desc (mais recente = última compra)
-    const colOrdem={}; // colecao -> data de referência
-    cachedPedidosDetalhe.forEach(r=>{
-      const col=gPD(r,'COLECAO'), d=gPD(r,'DATA')||'';
-      if(!col) return;
-      if(!colOrdem[col]||d>colOrdem[col]) colOrdem[col]=d;
-    });
-    const colsOrdenadas=[...new Set(cachedPedidosDetalhe.map(r=>gPD(r,'COLECAO')).filter(Boolean))]
-      .sort((a,b)=>(colOrdem[b]||'').localeCompare(colOrdem[a]||''));
-
-    // Agrupar por cliente+marca -> colecao -> {val, pcs}
-    const histo={}; // cli|marca -> col -> {val,pcs}
-    cachedPedidosDetalhe.forEach(r=>{
-      const cli=gPD(r,'CLIENTE'), marca=gPD(r,'MARCA'), col=gPD(r,'COLECAO');
-      if(!cli||!marca||!col) return;
-      const key=cli+'|'+marca;
-      if(!histo[key]) histo[key]={};
-      if(!histo[key][col]) histo[key][col]={val:0,pcs:0};
-      histo[key][col].val+=parseFloat(r['[FAT_LIQ]']||r['FAT_LIQ']||0)||0;
-      histo[key][col].pcs+=parseFloat(r['[QTDE_PEDIDA]']||r['QTDE_PEDIDA']||0)||0;
-    });
-
-    // Para cada cliente, pegar apenas coleções da sua marca
-    const colsPorMarca={};
-    cachedPedidosDetalhe.forEach(r=>{
-      const marca=gPD(r,'MARCA'),col=gPD(r,'COLECAO');
-      if(!marca||!col) return;
-      if(!colsPorMarca[marca]) colsPorMarca[marca]=new Set();
-      colsPorMarca[marca].add(col);
-    });
-
-    // Agrupar entries por marca para renderizar em blocos
-    const porMarca={};
-    entries.forEach(e=>{
-      if(!porMarca[e.marca]) porMarca[e.marca]=[];
-      porMarca[e.marca].push(e);
-    });
-
-    Object.keys(porMarca).sort().forEach(marca=>{
-      const cor=CORES[marca]||'#8B93A8';
-      const clisM=porMarca[marca];
-      // Coleções desta marca em ordem cronológica desc
-      const colsM=colsOrdenadas.filter(c=>colsPorMarca[marca]&&colsPorMarca[marca].has(c));
-      const maxCols=Math.min(colsM.length, 12); // máx 12 coleções por marca
-      const colsShow=colsM.slice(0,maxCols);
-
-      // Calcular max para escala das barras
-      let maxVal=1, maxPcs=1;
-      clisM.forEach(e=>{
-        const key=e.cli+'|'+marca;
-        colsShow.forEach(col=>{
-          const d=histo[key]&&histo[key][col];
-          if(d){ if(d.val>maxVal) maxVal=d.val; if(d.pcs>maxPcs) maxPcs=d.pcs; }
-        });
-      });
-
-      // Header da marca
-      h+='<div style="margin-bottom:28px">'+
-        '<div style="font-size:13px;font-weight:800;color:'+cor+';letter-spacing:.08em;text-transform:uppercase;'+
-        'border-left:4px solid '+cor+';padding:8px 14px;background:rgba(255,255,255,.03);border-radius:0 8px 8px 0;margin-bottom:14px">'+
-        marca+' — '+clisM.length+' clientes</div>';
-
-      // Cabeçalho colunas (coleções)
-      h+='<div class="tbl-wrap"><table class="dash-table" style="font-size:11px"><thead><tr>'+
-        '<th style="min-width:180px">Cliente / Rep</th>'+
-        colsShow.map(c=>'<th style="text-align:center;padding:6px 4px;max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+c+'">'+c+'</th>').join('')+
-        '</tr></thead><tbody>';
-
-      // Linhas de clientes
-      clisM.forEach((e,i)=>{
-        const key=e.cli+'|'+marca;
-        const dadosCli=histo[key]||{};
-        const totalPcs=colsShow.reduce((s,c)=>s+(dadosCli[c]?dadosCli[c].pcs:0),0);
-        const totalVal=colsShow.reduce((s,c)=>s+(dadosCli[c]?dadosCli[c].val:0),0);
-
-        h+='<tr class="'+(i%2===0?'tbl-even':'tbl-odd')+'">'+
-          '<td style="padding:6px 10px">'+
-            '<div style="font-weight:600;font-size:12px">'+e.cli+'</div>'+
-            '<div style="font-size:10px;color:var(--muted)">'+e.rep+' · '+
-              Math.round(totalPcs)+' pcs · '+fmtR(totalVal)+
-            '</div>'+
-          '</td>';
-
-        colsShow.forEach(col=>{
-          const d=dadosCli[col];
-          if(d&&d.pcs>0){
-            const wPcs=Math.round(d.pcs/maxPcs*60)+40; // barra relativa min 40px
-            const isUlt=(col===colsM[0]); // mais recente = última compra
-            h+='<td style="text-align:center;padding:4px 6px">'+
-              '<div style="display:flex;flex-direction:column;align-items:center;gap:2px">'+
-                '<div title="'+fmtR(d.val)+'" style="background:'+(isUlt?cor:'rgba(0,200,150,.15)')+
-                ';border-radius:4px;padding:2px 6px;font-size:11px;color:'+(isUlt?'#fff':'var(--green)')+
-                ';font-weight:700;white-space:nowrap">'+Math.round(d.pcs)+' pcs</div>'+
-                '<div style="font-size:10px;color:var(--muted)">'+fmtR(d.val)+'</div>'+
-              '</div></td>';
-          } else {
-            h+='<td style="text-align:center;color:var(--border);font-size:11px">—</td>';
-          }
-        });
-
-        h+='</tr>';
-      });
-
-      h+='</tbody></table></div></div>';
-    });
-
-    return h;
-  }
-
-  window.renderHistoricoCliente = function() {
-    const el=document.getElementById('tab-histcli');
-    if(el) el.innerHTML=buildHistoricoCliente();
-  };
-
-    const clientesBadge = cachedClientesAtender ? new Set(cachedClientesAtender.map(r=>(r['PEDIDO[CLIENTE]']||r['CLIENTE']||'')+'|'+(r['PEDIDO[MARCA]']||r['MARCA']||''))).size : 0;
 
   const container = document.getElementById('mainContent');
   container.innerHTML = `
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="overview">Visão Geral</button>
       <button class="tab-btn" data-tab="restricoes">Restrições <span class="tab-badge">${cachedRestricoes?cachedRestricoes.length:0}</span></button>
-      <button class="tab-btn" data-tab="clientes">Clientes a Atender <span class="tab-badge" style="background:rgba(232,74,74,.15);color:#E84A4A">${clientesBadge}</span></button>
-      <button class="tab-btn" data-tab="compvendas">Comparação Vendas</button>
-      <button class="tab-btn" data-tab="compcol">Comparação Coleções</button>
-      <button class="tab-btn" data-tab="compcli">Coleções por Cliente</button>
-      <button class="tab-btn" data-tab="histcli">Histórico por Marca</button>
     </div>
     <div class="tab-content" id="tab-overview">${buildOverview()}${buildMetas()}</div>
     <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
-    <div class="tab-content hidden" id="tab-clientes">${_hasAllData ? buildClientes() : '<div class="loading-tab"><div class="spinner"></div>A carregar clientes…</div>'}</div>
-    <div class="tab-content hidden" id="tab-compvendas">${_hasAllData ? buildCompVendas() : '<div class="loading-tab"><div class="spinner"></div>A carregar comparação de vendas…</div>'}</div>
-    <div class="tab-content hidden" id="tab-compcol">${_hasAllData ? buildCompColecoes() : '<div class="loading-tab"><div class="spinner"></div>A carregar comparação de coleções…</div>'}</div>
-    <div class="tab-content hidden" id="tab-compcli">${_hasAllData ? buildCompColecoesCli() : '<div class="loading-tab"><div class="spinner"></div>A carregar coleções por cliente…</div>'}</div>
-    <div class="tab-content hidden" id="tab-histcli">${_hasAllData ? buildHistoricoCliente() : '<div class="loading-tab"><div class="spinner"></div>A carregar histórico por marca…</div>'}</div>
   `;
 
   container.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1562,17 +861,6 @@ function applyCache(cached) {
   cachedKpis            = cached.kpis            || null;
   cachedMetasHist       = cached.metasHist       || [];
   cachedRestricoes      = cached.restricoes      || [];
-  cachedPedidos         = cached.pedidos         || [];
-  cachedClientes        = cached.clientes        || [];
-  cachedReps            = cached.reps            || [];
-  cachedVendas          = cached.vendas          || [];
-  cachedMarcas          = cached.marcas          || [];
-  cachedColecoes        = cached.colecoes        || [];
-  cachedPedidosDetalhe  = cached.pedidosDetalhe  || [];
-  cachedProdutos        = cached.produtos        || [];
-  cachedFaturamento     = cached.faturamento     || [];
-  cachedFatColecao      = cached.fatColecao      || [];
-  cachedClientesAtender = cached.clientesAtender || [];
 }
 
 async function loadDashboard() {
@@ -1586,7 +874,7 @@ async function loadDashboard() {
   if (cached) {
     // Cache válido — renderizar imediatamente sem ir ao Power BI
     applyCache(cached);
-    renderDashboard(cachedData, true); // cache completo — todas as abas já renderizadas dentro
+    renderDashboard(cachedData);
     const cachedTs = JSON.parse(localStorage.getItem(CACHE_KEY)||'{}').ts;
     const cachedDate = cachedTs ? new Date(cachedTs).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '?';
     document.getElementById('lastUpdate').textContent = 'Cache de ' + cachedDate + ' · próx. sync 4h ou 12h';
@@ -1597,7 +885,7 @@ async function loadDashboard() {
   const stale = loadCacheStale();
   if (stale) {
     applyCache(stale);
-    renderDashboard(cachedData, true);
+    renderDashboard(cachedData);
     const staleTs = JSON.parse(localStorage.getItem(CACHE_KEY)||'{}').ts;
     const staleDate = staleTs ? new Date(staleTs).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '?';
     document.getElementById('lastUpdate').textContent = 'A atualizar dados… (cache de ' + staleDate + ')';
@@ -1617,36 +905,9 @@ async function loadDashboard() {
         cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
         if (kpisFat && kpisFat.length > 0) cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
 
-        const [pedidos, clientes, reps, vendas, marcas, colecoes,
-               pedidosDetalhe, produtos, faturamento, fatColecao, clientesAtender] = await Promise.all([
-          safe(() => runDaxQuery(token, DAX_PEDIDOS, true)),
-          safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
-          safe(() => runDaxQuery(token, DAX_REPRESENTANTES, true)),
-          safe(() => runDaxQuery(token, DAX_VENDAS, true)),
-          safe(() => runDaxQuery(token, DAX_MARCAS, true)),
-          safe(() => runDaxQuery(token, DAX_COLECOES, true)),
-          safe(() => runDaxQuery(token, DAX_PEDIDOS_DETALHE, true)),
-          safe(() => runDaxQuery(token, DAX_PRODUTOS, true)),
-          safe(() => runDaxQuery(token, DAX_FATURAMENTO, true)),
-          safe(() => runDaxQuery(token, DAX_FAT_COLECAO, true)),
-          safe(() => runDaxQuery(token, DAX_CLIENTES_ATENDER, true)),
-        ]);
-        cachedPedidos = pedidos; cachedClientes = clientes; cachedReps = reps;
-        cachedVendas = vendas; cachedMarcas = marcas; cachedColecoes = colecoes;
-        cachedPedidosDetalhe = pedidosDetalhe; cachedProdutos = produtos;
-        cachedFaturamento = faturamento; cachedFatColecao = fatColecao; cachedClientesAtender = clientesAtender;
-
-        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist,
-          restricoes: cachedRestricoes, pedidos, clientes, reps, vendas, marcas,
-          colecoes, pedidosDetalhe, produtos, faturamento, fatColecao, clientesAtender });
-
-        // Reatualizar todas as abas com dados novos
-        const tOv = document.getElementById('tab-overview');   if(tOv) tOv.innerHTML = buildOverview() + buildMetas();
-        const tC  = document.getElementById('tab-clientes');   if(tC)  tC.innerHTML  = buildClientes();
-        const tCV = document.getElementById('tab-compvendas'); if(tCV) tCV.innerHTML = buildCompVendas();
-        const tCC = document.getElementById('tab-compcol');    if(tCC) tCC.innerHTML = buildCompColecoes();
-        const tCCli=document.getElementById('tab-compcli');    if(tCCli) tCCli.innerHTML = buildCompColecoesCli();
-        const tH  = document.getElementById('tab-histcli');    if(tH)  tH.innerHTML  = buildHistoricoCliente();
+        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes });
+        // Reatualizar as abas com dados novos
+        renderDashboard(cachedData);
         const now2 = new Date();
         document.getElementById('lastUpdate').textContent =
           'Atualizado: ' + now2.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
@@ -1681,52 +942,6 @@ async function loadDashboard() {
     }
     renderDashboard(data);
 
-    // ── FASE 2: restantes em background ──
-    (async () => {
-      const [pedidos, clientes, reps, vendas, marcas, colecoes,
-             pedidosDetalhe, produtos, faturamento, fatColecao, clientesAtender] = await Promise.all([
-        safe(() => runDaxQuery(token, DAX_PEDIDOS, true)),
-        safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
-        safe(() => runDaxQuery(token, DAX_REPRESENTANTES, true)),
-        safe(() => runDaxQuery(token, DAX_VENDAS, true)),
-        safe(() => runDaxQuery(token, DAX_MARCAS, true)),
-        safe(() => runDaxQuery(token, DAX_COLECOES, true)),
-        safe(() => runDaxQuery(token, DAX_PEDIDOS_DETALHE, true)),
-        safe(() => runDaxQuery(token, DAX_PRODUTOS, true)),
-        safe(() => runDaxQuery(token, DAX_FATURAMENTO, true)),
-        safe(() => runDaxQuery(token, DAX_FAT_COLECAO, true)),
-        safe(() => runDaxQuery(token, DAX_CLIENTES_ATENDER, true)),
-      ]);
-      cachedPedidos = pedidos;
-      cachedClientes = clientes;
-      cachedReps = reps;
-      cachedVendas = vendas;
-      cachedMarcas = marcas;
-      cachedColecoes = colecoes;
-      cachedPedidosDetalhe = pedidosDetalhe;
-      cachedProdutos = produtos;
-      cachedFaturamento = faturamento;
-      cachedFatColecao = fatColecao;
-      cachedClientesAtender = clientesAtender;
-
-      // Salvar tudo no cache local
-      saveCache({
-        data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist,
-        restricoes: cachedRestricoes, pedidos, clientes, reps, vendas, marcas,
-        colecoes, pedidosDetalhe, produtos, faturamento, fatColecao, clientesAtender
-      });
-
-      // Preencher todas as abas
-      const tC = document.getElementById('tab-clientes');      if(tC) tC.innerHTML = buildClientes();
-      const tCV = document.getElementById('tab-compvendas');   if(tCV) tCV.innerHTML = buildCompVendas();
-      const tCC = document.getElementById('tab-compcol');      if(tCC) tCC.innerHTML = buildCompColecoes();
-      const tCCli = document.getElementById('tab-compcli');    if(tCCli) tCCli.innerHTML = buildCompColecoesCli();
-      const tH = document.getElementById('tab-histcli');       if(tH) tH.innerHTML = buildHistoricoCliente();
-      const tOv = document.getElementById('tab-overview');     if(tOv) tOv.innerHTML = buildOverview() + buildMetas();
-      const now2 = new Date();
-      document.getElementById('lastUpdate').textContent =
-        'Atualizado: ' + now2.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-    })();
   } catch(e) {
     renderError(e.message);
   }
@@ -1771,20 +986,13 @@ const CLAUDE_URL = "https://ancient-frog-f410.kiredappsheets.workers.dev";
 
 let chatOpen = false;
 let cachedData = null;
-let cachedPedidos = null;
-let cachedClientes = null;
-let cachedReps = null;
-let cachedVendas = null;
 let cachedMetasHist = null;
-let cachedMarcas = null;
-let cachedColecoes = null;
-let cachedPedidosDetalhe = null;
-let cachedProdutos = null;
 let cachedKpis = null;
-let cachedFaturamento = null;
-let cachedFatColecao = null;
 let cachedRestricoes = null;
-let cachedClientesAtender = null;
+// Variáveis legacy para contexto IA (queries removidas — sempre vazias)
+let cachedPedidos = [], cachedClientes = [], cachedReps = [], cachedVendas = [];
+let cachedMarcas = [], cachedColecoes = [], cachedPedidosDetalhe = [], cachedProdutos = [];
+let cachedFaturamento = [], cachedFatColecao = [], cachedClientesAtender = [];
 let chatHistory = [];
 
 function toggleChat() {
