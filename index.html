@@ -428,6 +428,23 @@ SUMMARIZE(
 ORDER BY PEDIDO[MARCA] ASC, [ANO_CALC] ASC, [MES_CALC] ASC
 `;
 
+// Histórico de vendas por MARCA, ANO e SEMANA (período AASS)
+const DAX_HIST_PERIODO = `
+EVALUATE
+SUMMARIZE(
+  ADDCOLUMNS(
+    PEDIDO,
+    "ANO_CALC",  YEAR(PEDIDO[DATA]),
+    "SEM_CALC",  WEEKNUM(PEDIDO[DATA], 2)
+  ),
+  PEDIDO[MARCA],
+  [ANO_CALC],
+  [SEM_CALC],
+  "VENDA", SUM(PEDIDO[FAT_LIQ])
+)
+ORDER BY PEDIDO[MARCA] ASC, [ANO_CALC] ASC, [SEM_CALC] ASC
+`;
+
 // Coleções com datas — ordem cronológica
 
 // Pedidos detalhados — data dinâmica calculada em JS
@@ -905,15 +922,140 @@ function renderDashboard(data) {
     return html;
   }
 
+  function buildHistoricoPeriodo() {
+    if (!cachedHistPeriodo || !cachedHistPeriodo.length) return '<div class="empty-state">Dados por período não disponíveis.</div>';
+
+    const gV = (r, c) => {
+      const k = Object.keys(r).find(k => k.includes(c)) || c;
+      return r[k] ?? r[c] ?? null;
+    };
+    const fmt = v => v > 0 ? 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+    const pad2 = n => String(n).padStart(2,'0');
+    const periodoLabel = (ano, sem) => String(ano).slice(-2) + pad2(sem); // ex: 2601
+
+    // Agrupar por marca → ano → semana
+    const porMarca = {};
+    cachedHistPeriodo.forEach(r => {
+      const marca = gV(r,'MARCA') || gV(r,'Marca') || String(Object.values(r)[0] || '?');
+      const ano   = parseInt(gV(r,'ANO_CALC') || gV(r,'ANO') || 0);
+      const sem   = parseInt(gV(r,'SEM_CALC') || gV(r,'SEM') || 0);
+      const venda = parseFloat(gV(r,'VENDA') || 0) || 0;
+      if (!marca || !ano || !sem) return;
+      if (!porMarca[marca]) porMarca[marca] = {};
+      if (!porMarca[marca][ano]) porMarca[marca][ano] = {};
+      porMarca[marca][ano][sem] = (porMarca[marca][ano][sem] || 0) + venda;
+    });
+
+    const marcas = Object.keys(porMarca).sort((a, b) => {
+      if (a.toUpperCase().includes('MYROCK')) return -1;
+      if (b.toUpperCase().includes('MYROCK')) return 1;
+      return a.localeCompare(b, 'pt-BR');
+    });
+    if (!marcas.length) return '<div class="empty-state">Nenhum dado encontrado.</div>';
+
+    const todosAnos = [...new Set(marcas.flatMap(m => Object.keys(porMarca[m]).map(Number)))].sort((a,b) => b-a);
+    const todasSems = [...new Set(marcas.flatMap(m => Object.values(porMarca[m]).flatMap(a => Object.keys(a).map(Number))))].sort((a,b) => a-b);
+
+    let html = '';
+
+    // Tabela por marca
+    marcas.forEach(marca => {
+      const dm = porMarca[marca];
+      const anos = Object.keys(dm).map(Number).sort((a,b) => b-a);
+      let maxVal = 0;
+      anos.forEach(a => todasSems.forEach(s => { const v = dm[a]?.[s]||0; if(v>maxVal) maxVal=v; }));
+
+      html += `<div style="margin-bottom:28px">
+        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:10px;padding:8px 12px;background:var(--surface2);border-radius:6px;border-left:3px solid var(--green)">${marca}</div>
+        <div class="tbl-wrap"><table class="dash-table">
+          <thead><tr>
+            <th style="min-width:60px">Ano</th>
+            ${todasSems.map(s => `<th style="text-align:right;font-size:11px">${pad2(s)}</th>`).join('')}
+            <th style="text-align:right;color:var(--tx)">Total</th>
+          </tr></thead><tbody>`;
+
+      anos.forEach((ano, i) => {
+        const rowData = dm[ano] || {};
+        const totalAno = todasSems.reduce((s,sem) => s + (rowData[sem]||0), 0);
+        html += `<tr class="${i%2===0?'tbl-even':'tbl-odd'}">
+          <td style="font-weight:700;color:var(--muted);font-size:12px">${ano}</td>`;
+        todasSems.forEach(sem => {
+          const v = rowData[sem] || 0;
+          const heat = maxVal>0&&v>0 ? Math.round((v/maxVal)*100) : 0;
+          const alpha = heat>0 ? (0.08+heat/100*0.55).toFixed(2) : '0';
+          const style = v>0 ? `background:rgba(0,200,150,${alpha});color:${heat>60?'#fff':'var(--tx)'}` : 'color:var(--hint)';
+          html += `<td style="text-align:right;font-size:11px;${style}">${fmt(v)}</td>`;
+        });
+        html += `<td style="text-align:right;font-weight:700;color:var(--green)">${fmt(totalAno)}</td></tr>`;
+      });
+
+      html += `<tr class="tbl-foot"><td>Total</td>`;
+      let tg = 0;
+      todasSems.forEach(sem => {
+        const t = anos.reduce((s,a) => s+(dm[a]?.[sem]||0), 0);
+        tg += t;
+        html += `<td style="text-align:right">${fmt(t)}</td>`;
+      });
+      html += `<td style="text-align:right">${fmt(tg)}</td></tr>`;
+      html += `</tbody></table></div></div>`;
+    });
+
+    // Tabela consolidada
+    let maxGlobal = 0;
+    marcas.forEach(m => todosAnos.forEach(a => todasSems.forEach(s => { const v=porMarca[m]?.[a]?.[s]||0; if(v>maxGlobal) maxGlobal=v; })));
+
+    html += `<div style="margin-bottom:28px">
+      <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:10px;padding:8px 12px;background:var(--surface2);border-radius:6px;border-left:3px solid var(--amber)">TODAS AS MARCAS</div>
+      <div class="tbl-wrap"><table class="dash-table">
+        <thead><tr>
+          <th style="min-width:60px">Ano</th>
+          ${todasSems.map(s => `<th style="text-align:right;font-size:11px">${pad2(s)}</th>`).join('')}
+          <th style="text-align:right;color:var(--tx)">Total</th>
+        </tr></thead><tbody>`;
+
+    todosAnos.forEach((ano, i) => {
+      const totalAno = todasSems.reduce((s,sem) => s+marcas.reduce((sm,m) => sm+(porMarca[m]?.[ano]?.[sem]||0),0), 0);
+      html += `<tr class="${i%2===0?'tbl-even':'tbl-odd'}">
+        <td style="font-weight:700;color:var(--muted);font-size:12px">${ano}</td>`;
+      todasSems.forEach(sem => {
+        const v = marcas.reduce((s,m) => s+(porMarca[m]?.[ano]?.[sem]||0), 0);
+        const heat = maxGlobal>0&&v>0 ? Math.round((v/maxGlobal)*100) : 0;
+        const alpha = heat>0 ? (0.08+heat/100*0.55).toFixed(2) : '0';
+        const style = v>0 ? `background:rgba(245,166,35,${alpha});color:${heat>60?'#fff':'var(--tx)'}` : 'color:var(--hint)';
+        html += `<td style="text-align:right;font-size:11px;${style}">${fmt(v)}</td>`;
+      });
+      html += `<td style="text-align:right;font-weight:700;color:var(--amber)">${fmt(totalAno)}</td></tr>`;
+    });
+
+    html += `<tr class="tbl-foot"><td>Total</td>`;
+    let tgg = 0;
+    todasSems.forEach(sem => {
+      const t = marcas.reduce((s,m) => s+todosAnos.reduce((sa,a) => sa+(porMarca[m]?.[a]?.[sem]||0),0),0);
+      tgg += t;
+      html += `<td style="text-align:right">${fmt(t)}</td>`;
+    });
+    html += `<td style="text-align:right">${fmt(tgg)}</td></tr>`;
+    html += `</tbody></table></div></div>`;
+
+    // Legenda de períodos
+    html += `<div style="font-size:11px;color:var(--hint);margin-top:4px;padding:0 4px">
+      Período = 2 dígitos do ano + semana (ex: ${periodoLabel(2026,1)} = sem. 01 de 2026 · ${periodoLabel(2026,10)} = sem. 10 de 2026)
+    </div>`;
+
+    return html;
+  }
+
   const container = document.getElementById('mainContent');
   container.innerHTML = `
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="overview">Visão Geral</button>
-      <button class="tab-btn" data-tab="historico">Histórico por Marca</button>
+      <button class="tab-btn" data-tab="historico">Histórico Mensal</button>
+      <button class="tab-btn" data-tab="periodo">Histórico Semanal</button>
       <button class="tab-btn" data-tab="restricoes">Restrições <span class="tab-badge">${cachedRestricoes?cachedRestricoes.length:0}</span></button>
     </div>
     <div class="tab-content" id="tab-overview">${buildOverview()}${buildMetas()}</div>
     <div class="tab-content hidden" id="tab-historico">${buildHistorico()}</div>
+    <div class="tab-content hidden" id="tab-periodo">${buildHistoricoPeriodo()}</div>
     <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
   `;
 
@@ -938,9 +1080,9 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h e às 12h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v7';
+const CACHE_KEY = 'dashCache_v8';
 // Limpar versões antigas do cache
-try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
+try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
@@ -1023,6 +1165,7 @@ function applyCache(cached) {
   cachedMetasHist       = cached.metasHist       || [];
   cachedRestricoes      = cached.restricoes      || [];
   cachedHistMarca       = cached.histMarca       || [];
+  cachedHistPeriodo     = cached.histPeriodo     || [];
 }
 
 async function loadDashboard() {
@@ -1056,19 +1199,21 @@ async function loadDashboard() {
       try {
         const token = await getToken();
         const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
-        const [data, kpis, kpisFat, metasHist, restricoes, histMarca] = await Promise.all([
+        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo] = await Promise.all([
           safe(() => runDaxQuery(token, DAX_QUERY, false)),
           safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
           safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
           safe(() => runDaxQuery(token, DAX_METAS_HIST, true)),
           safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
           safe(() => runDaxQuery(token, DAX_HIST_MARCA, true)),
+          safe(() => runDaxQuery(token, DAX_HIST_PERIODO, true)),
         ]);
-        cachedData = data; cachedMetasHist = metasHist; cachedRestricoes = restricoes; cachedHistMarca = histMarca||[];
+        cachedData = data; cachedMetasHist = metasHist; cachedRestricoes = restricoes;
+        cachedHistMarca = histMarca||[]; cachedHistPeriodo = histPeriodo||[];
         cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
         if (kpisFat && kpisFat.length > 0) cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
 
-        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca });
+        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo });
         // Reatualizar as abas com dados novos
         renderDashboard(cachedData);
         const now2 = new Date();
@@ -1097,24 +1242,26 @@ async function loadDashboard() {
     if (lu) lu.textContent = 'A carregar dados do Power BI…';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, kpis, kpisFat, metasHist, restricoes, histMarca] = await Promise.all([
+    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
       safe(() => runDaxQuery(token, DAX_METAS_HIST, true)),
       safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
       safe(() => runDaxQuery(token, DAX_HIST_MARCA, true)),
+      safe(() => runDaxQuery(token, DAX_HIST_PERIODO, true)),
     ]);
     clearTimeout(_loadTimeout);
     cachedData = data;
     cachedMetasHist = metasHist;
     cachedRestricoes = restricoes;
     cachedHistMarca = histMarca || [];
+    cachedHistPeriodo = histPeriodo || [];
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
-    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca });
+    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo });
     renderDashboard(data);
 
   } catch(e) {
@@ -1172,6 +1319,7 @@ let cachedMetasHist = null;
 let cachedKpis = null;
 let cachedRestricoes = null;
 let cachedHistMarca = [];
+let cachedHistPeriodo = [];
 // Variáveis legacy para contexto IA (queries removidas — sempre vazias)
 let cachedPedidos = [], cachedClientes = [], cachedReps = [], cachedVendas = [];
 let cachedMarcas = [], cachedColecoes = [], cachedPedidosDetalhe = [], cachedProdutos = [];
