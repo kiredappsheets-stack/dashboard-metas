@@ -1098,8 +1098,9 @@ function renderDashboard(data) {
     const todosReps = [...new Set(Object.values(porCliente).map(c=>c.rep).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
 
     // Estado dos filtros
-    let repFiltro   = '';
-    let buscaFiltro = '';
+    let repFiltro    = '';
+    let buscaFiltro  = '';
+    let statusFiltro = '';
     // colsFiltro[marca] = Set de coleções selecionadas (null = todas)
     const colsFiltro = {};
     todasMarcas.forEach(m => { colsFiltro[m] = null; }); // null = sem filtro
@@ -1133,9 +1134,45 @@ function renderDashboard(data) {
         .col-checkbox-panel label { display:inline-flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); cursor:pointer; margin:3px 6px 3px 0; white-space:nowrap; }
         .col-checkbox-panel label:hover { color:var(--tx); }
         .col-checkbox-panel input[type=checkbox] { accent-color:var(--green); cursor:pointer; }
+        .cli-status { display:inline-block; font-size:9px; font-weight:700; border-radius:4px; padding:1px 5px; margin-left:6px; vertical-align:middle; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; }
+        .cli-status.mantido    { background:rgba(0,200,150,.18); color:#00c896; border:1px solid rgba(0,200,150,.35); }
+        .cli-status.recuperado { background:rgba(76,158,241,.18); color:#4c9ef1; border:1px solid rgba(76,158,241,.35); }
+        .cli-status.nao-rep    { background:rgba(245,166,35,.15); color:#f5a623; border:1px solid rgba(245,166,35,.35); }
+        .cli-status.novo       { background:rgba(180,100,255,.15); color:#b464ff; border:1px solid rgba(180,100,255,.35); }
       `;
       document.head.appendChild(s);
     }
+
+    // Calcular status por marca (Mantido/Recuperado/Não repetido/Novo)
+    // Compara as duas últimas coleções de cada marca
+    const statusPorMarcaCli = {}; // statusPorMarcaCli[marca][cod] = 'mantido'|'recuperado'|'nao-rep'|'novo'
+    todasMarcas.forEach(marca => {
+      const cols = colsPorMarca[marca];
+      statusPorMarcaCli[marca] = {};
+      if (cols.length < 2) {
+        // Só uma coleção → todos são "novo"
+        Object.keys(porCliente).forEach(cod => {
+          if (porCliente[cod].marcas[marca]) statusPorMarcaCli[marca][cod] = 'novo';
+        });
+        return;
+      }
+      const colAtual    = cols[cols.length - 1];
+      const colAnterior = cols[cols.length - 2];
+      Object.keys(porCliente).forEach(cod => {
+        const dm = porCliente[cod].marcas[marca];
+        if (!dm) return;
+        const comprou_atual    = (dm[colAtual]    || 0) > 0;
+        const comprou_anterior = (dm[colAnterior] || 0) > 0;
+        const comprouAntes = cols.slice(0, -1).some(c => (dm[c] || 0) > 0);
+        if (comprou_atual && comprou_anterior)  statusPorMarcaCli[marca][cod] = 'mantido';
+        else if (comprou_atual && !comprouAntes) statusPorMarcaCli[marca][cod] = 'novo';
+        else if (comprou_atual && !comprou_anterior) statusPorMarcaCli[marca][cod] = 'recuperado';
+        else if (!comprou_atual && comprouAntes) statusPorMarcaCli[marca][cod] = 'nao-rep';
+        else statusPorMarcaCli[marca][cod] = 'novo';
+      });
+    });
+
+    const statusLabel = { 'mantido':'Mantido', 'recuperado':'Recuperado', 'nao-rep':'Não repetido', 'novo':'Novo' };
 
     // Render dos painéis
     const renderPaineis = (colsFiltroAtual) => {
@@ -1144,6 +1181,8 @@ function renderDashboard(data) {
       if (buscaFiltro) { const b=buscaFiltro.toLowerCase(); codigos=codigos.filter(c=>porCliente[c].nome.toLowerCase().includes(b)||c.toLowerCase().includes(b)); }
 
       if (!codigos.length) return '<div class="empty-state" style="padding:32px">Nenhum cliente encontrado.</div>';
+
+      // Filtro de status: aplica por marca ao montar codsNaMarca
 
       let html = '';
 
@@ -1154,7 +1193,8 @@ function renderDashboard(data) {
         const cols = filtro && filtro.size > 0 ? colsTodas.filter(c=>filtro.has(c)) : colsTodas;
         if (!cols.length) return;
 
-        const codsNaMarca = codigos.filter(c => porCliente[c].marcas[marca] && cols.some(col=>(porCliente[c].marcas[marca][col]||0)>0));
+        let codsNaMarca = codigos.filter(c => porCliente[c].marcas[marca] && cols.some(col=>(porCliente[c].marcas[marca][col]||0)>0));
+        if (statusFiltro) codsNaMarca = codsNaMarca.filter(c => (statusPorMarcaCli[marca]?.[c] || 'novo') === statusFiltro);
         if (!codsNaMarca.length) return;
 
         const isMY  = marca.toUpperCase().includes('MYROCK');
@@ -1194,7 +1234,8 @@ function renderDashboard(data) {
             const dm  = cli.marcas[marca]||{};
             const totalCli = cols.reduce((s,col)=>s+(dm[col]||0),0);
             totGeral += totalCli;
-            html += `<tr><td class="col-nome" title="${cli.nome}">${cli.nome}</td>`;
+            const st = statusPorMarcaCli[marca]?.[cod] || 'novo';
+            html += `<tr><td class="col-nome" title="${cli.nome}">${cli.nome}<span class="cli-status ${st}">${statusLabel[st]}</span></td>`;
             cols.forEach((col,ci) => {
               const v = dm[col]||0;
               totCols[ci] += v;
@@ -1238,6 +1279,13 @@ function renderDashboard(data) {
           <option value="">Todos os representantes</option>
           ${todosReps.map(r=>`<option value="${r}">${r}</option>`).join('')}
         </select>
+        <select id="${uid}_status" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;cursor:pointer">
+          <option value="">Todos os status</option>
+          <option value="mantido">Mantido</option>
+          <option value="recuperado">Recuperado</option>
+          <option value="nao-rep">Não repetido</option>
+          <option value="novo">Novo</option>
+        </select>
         <button id="${uid}_col_toggle" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap">⚙ Coleções</button>
         <span id="${uid}_count" style="font-size:11px;color:var(--hint);margin-left:4px"></span>
       </div>
@@ -1251,6 +1299,7 @@ function renderDashboard(data) {
       const repSel     = document.getElementById(uid+'_rep');
       const buscaEl    = document.getElementById(uid+'_busca');
       const countEl    = document.getElementById(uid+'_count');
+      const statusSel  = document.getElementById(uid+'_status');
       const colToggle  = document.getElementById(uid+'_col_toggle');
       const colPanel   = document.getElementById(uid+'_col_panel');
       if (!tableEl||!repSel||!buscaEl) return;
@@ -1282,8 +1331,9 @@ function renderDashboard(data) {
       });
 
       const update = () => {
-        repFiltro   = repSel.value;
-        buscaFiltro = buscaEl.value.trim();
+        repFiltro    = repSel.value;
+        buscaFiltro  = buscaEl.value.trim();
+        statusFiltro = statusSel ? statusSel.value : '';
         // Ler coleções selecionadas
         todasMarcas.forEach(marca => {
           const selecionadas = [...document.querySelectorAll(`.${uid}_chk[data-marca="${marca}"]:checked`)].map(c=>c.dataset.col);
@@ -1301,6 +1351,7 @@ function renderDashboard(data) {
 
       repSel.addEventListener('change', update);
       buscaEl.addEventListener('input', update);
+      if (statusSel) statusSel.addEventListener('change', update);
       update();
     }, 0);
 
