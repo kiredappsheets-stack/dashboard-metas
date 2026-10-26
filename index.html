@@ -80,6 +80,8 @@
   /* TAB CONTENT */
   .tab-content { flex:1; overflow-y:auto; padding:20px 24px; }
   .tab-content.hidden { display:none; }
+  #tab-clientes { overflow:hidden; padding:0; display:flex; flex-direction:column; }
+  #tab-clientes.hidden { display:none; }
 
   /* KPI ROW */
   .kpi-row { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
@@ -429,6 +431,25 @@ ORDER BY PEDIDO[MARCA] ASC, [ANO_CALC] ASC, [MES_CALC] ASC
 `;
 
 // Histórico de vendas por MARCA, ANO e SEMANA (período AASS)
+const DAX_CLIENTES = `
+EVALUATE
+SUMMARIZE(
+  ADDCOLUMNS(
+    PEDIDO,
+    "ANO_CALC", YEAR(PEDIDO[DATA]),
+    "MES_CALC", MONTH(PEDIDO[DATA])
+  ),
+  PEDIDO[CODCLI],
+  PEDIDO[CLIENTE],
+  PEDIDO[REP],
+  PEDIDO[COD_REP],
+  [ANO_CALC],
+  [MES_CALC],
+  "VENDA", SUM(PEDIDO[FAT_LIQ])
+)
+ORDER BY PEDIDO[CLIENTE] ASC, [ANO_CALC] DESC, [MES_CALC] ASC
+`;
+
 const DAX_HIST_PERIODO = `
 EVALUATE
 SUMMARIZE(
@@ -1045,17 +1066,162 @@ function renderDashboard(data) {
     return html;
   }
 
+  function buildClientes() {
+    if (!cachedClientes2 || !cachedClientes2.length) return '<div class="empty-state">Dados de clientes não disponíveis.</div>';
+
+    const gV = (r, c) => {
+      const k = Object.keys(r).find(k => k.toUpperCase().includes(c.toUpperCase())) || c;
+      return r[k] ?? null;
+    };
+    const fmt = v => v > 0 ? 'R$ ' + Number(v).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+    const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+    // Indexar por cliente: { CODCLI: { nome, rep, codRep, anos: { ano: { mes: valor } } } }
+    const porCliente = {};
+    cachedClientes2.forEach(r => {
+      const cod  = String(gV(r,'CODCLI') || '');
+      const nome = String(gV(r,'CLIENTE') || gV(r,'FANTASIA') || cod);
+      const rep  = String(gV(r,'REP') || '');
+      const codRep = String(gV(r,'COD_REP') || gV(r,'CODREP') || '');
+      const ano  = parseInt(gV(r,'ANO_CALC') || gV(r,'ANO') || 0);
+      const mes  = parseInt(gV(r,'MES_CALC') || gV(r,'MES') || 0);
+      const venda = parseFloat(gV(r,'VENDA') || 0) || 0;
+      if (!cod || !ano || !mes) return;
+      if (!porCliente[cod]) porCliente[cod] = { nome, rep, codRep, anos: {} };
+      if (!porCliente[cod].anos[ano]) porCliente[cod].anos[ano] = {};
+      porCliente[cod].anos[ano][mes] = (porCliente[cod].anos[ano][mes] || 0) + venda;
+    });
+
+    // Listas únicas de reps para filtro
+    const todosReps = [...new Set(Object.values(porCliente).map(c => c.rep).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const todosAnos = [...new Set(Object.values(porCliente).flatMap(c => Object.keys(c.anos).map(Number)))].sort((a,b)=>b-a);
+
+    // Render com estado de filtro armazenado em variáveis locais
+    let repFiltro = '';
+    let anoFiltro = todosAnos[0] || 0;
+    let buscaFiltro = '';
+
+    const render = () => {
+      // Filtrar clientes
+      let codigos = Object.keys(porCliente);
+      if (repFiltro) codigos = codigos.filter(c => porCliente[c].rep === repFiltro);
+      if (buscaFiltro) {
+        const b = buscaFiltro.toLowerCase();
+        codigos = codigos.filter(c => porCliente[c].nome.toLowerCase().includes(b) || c.includes(b));
+      }
+      codigos.sort((a,b) => porCliente[a].nome.localeCompare(porCliente[b].nome, 'pt-BR'));
+
+      if (!codigos.length) return '<div class="empty-state" style="padding:32px">Nenhum cliente encontrado com esse filtro.</div>';
+
+      // Total por mês nesse ano (para heatmap)
+      let maxMes = 0;
+      codigos.forEach(c => {
+        const dm = porCliente[c].anos[anoFiltro] || {};
+        for (let m=1;m<=12;m++) { const v=dm[m]||0; if(v>maxMes) maxMes=v; }
+      });
+
+      let tbl = `<table class="dash-table" style="min-width:900px">
+        <thead><tr>
+          <th style="min-width:220px;text-align:left">Cliente</th>
+          <th style="min-width:130px;text-align:left">Representante</th>
+          ${MESES.map(m=>`<th style="text-align:right;font-size:11px">${m}</th>`).join('')}
+          <th style="text-align:right">Total ${anoFiltro}</th>
+        </tr></thead><tbody>`;
+
+      let totalMeses = new Array(12).fill(0);
+      let totalGeral = 0;
+
+      codigos.forEach((cod, i) => {
+        const cli = porCliente[cod];
+        const dm  = cli.anos[anoFiltro] || {};
+        const totalAno = Object.values(dm).reduce((s,v)=>s+v,0);
+        totalGeral += totalAno;
+        tbl += `<tr class="${i%2===0?'tbl-even':'tbl-odd'}">
+          <td style="font-size:12px;font-weight:500">${cli.nome}</td>
+          <td style="font-size:11px;color:var(--muted)">${cli.rep||'—'}</td>`;
+        for (let m=1;m<=12;m++) {
+          const v = dm[m] || 0;
+          totalMeses[m-1] += v;
+          const heat = maxMes>0&&v>0 ? Math.round((v/maxMes)*100) : 0;
+          const alpha = heat>0 ? (0.08+heat/100*0.55).toFixed(2) : '0';
+          const style = v>0 ? `background:rgba(76,158,241,${alpha});color:${heat>60?'#fff':'var(--tx)'}` : 'color:var(--hint)';
+          tbl += `<td style="text-align:right;font-size:11px;${style}">${fmt(v)}</td>`;
+        }
+        tbl += `<td style="text-align:right;font-weight:700;color:var(--blue)">${fmt(totalAno)}</td></tr>`;
+      });
+
+      // Linha de totais
+      tbl += `<tr class="tbl-foot"><td>Total (${codigos.length} clientes)</td><td></td>`;
+      totalMeses.forEach(t => { tbl += `<td style="text-align:right">${fmt(t)}</td>`; });
+      tbl += `<td style="text-align:right">${fmt(totalGeral)}</td></tr>`;
+      tbl += `</tbody></table>`;
+      return tbl;
+    };
+
+    const uid = 'cli_' + Date.now();
+    const filtersId = uid + '_filters';
+    const tableId   = uid + '_table';
+
+    // HTML inicial
+    const filtersHtml = `
+      <div id="${filtersId}" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid var(--border);background:var(--sidebar);flex-shrink:0">
+        <input id="${uid}_busca" type="text" placeholder="Buscar cliente…" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;width:200px" />
+        <select id="${uid}_rep" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;cursor:pointer">
+          <option value="">Todos os representantes</option>
+          ${todosReps.map(r=>`<option value="${r}">${r}</option>`).join('')}
+        </select>
+        <select id="${uid}_ano" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;cursor:pointer">
+          ${todosAnos.map(a=>`<option value="${a}"${a===anoFiltro?' selected':''}>${a}</option>`).join('')}
+        </select>
+        <span id="${uid}_count" style="font-size:11px;color:var(--hint);margin-left:4px"></span>
+      </div>
+      <div id="${tableId}" class="tbl-wrap" style="flex:1;overflow:auto;padding:16px 20px"></div>`;
+
+    // Script de interatividade (inserido depois do render inicial)
+    setTimeout(() => {
+      const tableEl  = document.getElementById(tableId);
+      const repSel   = document.getElementById(uid+'_rep');
+      const anoSel   = document.getElementById(uid+'_ano');
+      const buscaEl  = document.getElementById(uid+'_busca');
+      const countEl  = document.getElementById(uid+'_count');
+      if (!tableEl||!repSel||!anoSel||!buscaEl) return;
+
+      const update = () => {
+        repFiltro   = repSel.value;
+        anoFiltro   = parseInt(anoSel.value) || todosAnos[0];
+        buscaFiltro = buscaEl.value.trim();
+        tableEl.innerHTML = render();
+        // Contar clientes visíveis
+        let n = Object.keys(porCliente).filter(c => {
+          if (repFiltro && porCliente[c].rep !== repFiltro) return false;
+          if (buscaFiltro) { const b=buscaFiltro.toLowerCase(); return porCliente[c].nome.toLowerCase().includes(b)||c.includes(b); }
+          return true;
+        }).length;
+        if (countEl) countEl.textContent = n + ' cliente' + (n!==1?'s':'');
+      };
+
+      repSel.addEventListener('change', update);
+      anoSel.addEventListener('change', update);
+      buscaEl.addEventListener('input', update);
+      update();
+    }, 0);
+
+    return `<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">${filtersHtml}</div>`;
+  }
+
   const container = document.getElementById('mainContent');
   container.innerHTML = `
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="overview">Visão Geral</button>
       <button class="tab-btn" data-tab="historico">Histórico Mensal</button>
       <button class="tab-btn" data-tab="periodo">Histórico Semanal</button>
+      <button class="tab-btn" data-tab="clientes">Clientes</button>
       <button class="tab-btn" data-tab="restricoes">Restrições <span class="tab-badge">${cachedRestricoes?cachedRestricoes.length:0}</span></button>
     </div>
     <div class="tab-content" id="tab-overview">${buildOverview()}${buildMetas()}</div>
     <div class="tab-content hidden" id="tab-historico">${buildHistorico()}</div>
     <div class="tab-content hidden" id="tab-periodo">${buildHistoricoPeriodo()}</div>
+    <div class="tab-content hidden" id="tab-clientes">${buildClientes()}</div>
     <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
   `;
 
@@ -1080,9 +1246,9 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h e às 12h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v8';
+const CACHE_KEY = 'dashCache_v9';
 // Limpar versões antigas do cache
-try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
+try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
@@ -1166,6 +1332,7 @@ function applyCache(cached) {
   cachedRestricoes      = cached.restricoes      || [];
   cachedHistMarca       = cached.histMarca       || [];
   cachedHistPeriodo     = cached.histPeriodo     || [];
+  cachedClientes2       = cached.clientes2       || [];
 }
 
 async function loadDashboard() {
@@ -1199,7 +1366,7 @@ async function loadDashboard() {
       try {
         const token = await getToken();
         const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
-        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo] = await Promise.all([
+        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2] = await Promise.all([
           safe(() => runDaxQuery(token, DAX_QUERY, false)),
           safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
           safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -1207,13 +1374,15 @@ async function loadDashboard() {
           safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
           safe(() => runDaxQuery(token, DAX_HIST_MARCA, true)),
           safe(() => runDaxQuery(token, DAX_HIST_PERIODO, true)),
+          safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
         ]);
         cachedData = data; cachedMetasHist = metasHist; cachedRestricoes = restricoes;
         cachedHistMarca = histMarca||[]; cachedHistPeriodo = histPeriodo||[];
+        cachedClientes2 = clientes2||[];
         cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
         if (kpisFat && kpisFat.length > 0) cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
 
-        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo });
+        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2 });
         // Reatualizar as abas com dados novos
         renderDashboard(cachedData);
         const now2 = new Date();
@@ -1242,7 +1411,7 @@ async function loadDashboard() {
     if (lu) lu.textContent = 'A carregar dados do Power BI…';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo] = await Promise.all([
+    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -1250,6 +1419,7 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
       safe(() => runDaxQuery(token, DAX_HIST_MARCA, true)),
       safe(() => runDaxQuery(token, DAX_HIST_PERIODO, true)),
+      safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
     ]);
     clearTimeout(_loadTimeout);
     cachedData = data;
@@ -1257,11 +1427,12 @@ async function loadDashboard() {
     cachedRestricoes = restricoes;
     cachedHistMarca = histMarca || [];
     cachedHistPeriodo = histPeriodo || [];
+    cachedClientes2 = clientes2 || [];
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
-    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo });
+    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2 });
     renderDashboard(data);
 
   } catch(e) {
@@ -1320,6 +1491,7 @@ let cachedKpis = null;
 let cachedRestricoes = null;
 let cachedHistMarca = [];
 let cachedHistPeriodo = [];
+let cachedClientes2 = [];
 // Variáveis legacy para contexto IA (queries removidas — sempre vazias)
 let cachedPedidos = [], cachedClientes = [], cachedReps = [], cachedVendas = [];
 let cachedMarcas = [], cachedColecoes = [], cachedPedidosDetalhe = [], cachedProdutos = [];
