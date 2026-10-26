@@ -58,6 +58,7 @@
   .btn-big { font-family:var(--font); font-size:14px; font-weight:700; padding:12px 28px; border-radius:8px; border:none; background:var(--green); color:#000; cursor:pointer; margin-top:8px; transition:opacity .15s; }
   .btn-big:hover { opacity:.85; }
   .loading { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:12px; color:var(--muted); font-size:14px; }
+  .loading-tab { display:flex; align-items:center; gap:10px; padding:40px 24px; color:var(--muted); font-size:14px; }
   .spinner { width:32px; height:32px; border:2px solid var(--border); border-top-color:var(--green); border-radius:50%; animation:spin .7s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
   .error-box { background:var(--red-bg); color:var(--red-tx); border-radius:var(--radius); padding:16px 20px; font-size:13px; margin:20px; line-height:1.6; border:1px solid rgba(232,74,74,.3); }
@@ -1410,11 +1411,11 @@ function renderDashboard(data) {
     </div>
     <div class="tab-content" id="tab-overview">${buildOverview()}${buildMetas()}</div>
     <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
-    <div class="tab-content hidden" id="tab-clientes">${buildClientes()}</div>
-    <div class="tab-content hidden" id="tab-compvendas">${buildCompVendas()}</div>
-    <div class="tab-content hidden" id="tab-compcol">${buildCompColecoes()}</div>
-    <div class="tab-content hidden" id="tab-compcli">${buildCompColecoesCli()}</div>
-    <div class="tab-content hidden" id="tab-histcli">${buildHistoricoCliente()}</div>
+    <div class="tab-content hidden" id="tab-clientes"><div class="loading-tab"><div class="spinner"></div>A carregar clientes…</div></div>
+    <div class="tab-content hidden" id="tab-compvendas"><div class="loading-tab"><div class="spinner"></div>A carregar comparação de vendas…</div></div>
+    <div class="tab-content hidden" id="tab-compcol"><div class="loading-tab"><div class="spinner"></div>A carregar comparação de coleções…</div></div>
+    <div class="tab-content hidden" id="tab-compcli"><div class="loading-tab"><div class="spinner"></div>A carregar coleções por cliente…</div></div>
+    <div class="tab-content hidden" id="tab-histcli"><div class="loading-tab"><div class="spinner"></div>A carregar histórico por marca…</div></div>
   `;
 
   container.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1445,70 +1446,71 @@ async function loadDashboard() {
     // Cada query é independente — se uma falhar não afecta as outras
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, pedidos, clientes, reps, vendas, metasHist, marcas, colecoes, pedidosDetalhe, produtos, kpis, faturamento, kpisFat, fatColecao, restricoes, clientesAtender] = await Promise.all([
+    // ── FASE 1: queries essenciais para Visão Geral (rápido) ──
+    const [data, kpis, kpisFat, metasHist, restricoes] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
-      safe(() => runDaxQuery(token, DAX_PEDIDOS, true)),
-      safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
-      safe(() => runDaxQuery(token, DAX_REPRESENTANTES, true)),
-      safe(() => runDaxQuery(token, DAX_VENDAS, true)),
-      safe(() => runDaxQuery(token, DAX_METAS_HIST, true)),
-      safe(() => runDaxQuery(token, DAX_MARCAS, true)),
-      safe(() => runDaxQuery(token, DAX_COLECOES, true)),
-      safe(() => runDaxQuery(token, DAX_PEDIDOS_DETALHE, true)),
-      safe(() => runDaxQuery(token, DAX_PRODUTOS, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
-      safe(() => runDaxQuery(token, DAX_FATURAMENTO, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
-      safe(() => runDaxQuery(token, DAX_FAT_COLECAO, true)),
+      safe(() => runDaxQuery(token, DAX_METAS_HIST, true)),
       safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
-      safe(() => runDaxQuery(token, DAX_CLIENTES_ATENDER, true)),
     ]);
     cachedData = data;
-    cachedPedidos = pedidos;
-    cachedClientes = clientes;
-    cachedReps = reps;
-    cachedVendas = vendas;
     cachedMetasHist = metasHist;
-    cachedMarcas = marcas;
-    cachedColecoes = colecoes;
-    cachedPedidosDetalhe = pedidosDetalhe;
-    cachedProdutos = produtos;
-    cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
-    cachedFaturamento = faturamento;
-    cachedFatColecao = fatColecao;
     cachedRestricoes = restricoes;
-    cachedClientesAtender = clientesAtender;
+    cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
-    console.log('Dados carregados:', {
-      metas: data.length, pedidos: pedidos.length, clientes: clientes.length,
-      reps: reps.length, vendas: vendas.length, metasHist: metasHist.length,
-      marcas: marcas.length, colecoes: colecoes.length,
-      pedidosDetalhe: pedidosDetalhe.length, produtos: produtos.length
-    });
-    // Debug completo
-    if (pedidosDetalhe.length > 0) {
-      const keys = Object.keys(pedidosDetalhe[0]);
-      const dataKey = keys.find(k => k.includes('DATA')) || keys[0];
-      const primeiras = pedidosDetalhe.slice(0,3).map(r => r[dataKey]);
-      console.log('Formato das datas:', primeiras);
-      console.log('Hoje calculado:', _dia+'/'+(_mes).toString().padStart(2,'0')+'/'+_ano);
-      // Testar parseDt
-      const testDt = parseDt ? parseDt(primeiras[0]) : 'parseDt não disponível';
-      console.log('parseDt teste:', testDt);
-      // Contar pedidos de hoje
-      const hojeTest = new Date(_ano, _mes-1, _dia);
-      hojeTest.setHours(0,0,0,0);
-      const pedHoje = pedidosDetalhe.filter(r => {
-        const dt = parseDt ? parseDt(r[dataKey]) : null;
-        if (!dt) return false;
-        dt.setHours(0,0,0,0);
-        return dt.getTime() === hojeTest.getTime();
-      });
-      console.log('Pedidos de hoje encontrados:', pedHoje.length, pedHoje.slice(0,2).map(r => r[dataKey]));
-    }
+    // Renderiza já com os dados essenciais
     renderDashboard(data);
+
+    // ── FASE 2: queries secundárias em background ──
+    (async () => {
+      const [pedidos, clientes, reps, vendas, marcas, colecoes,
+             pedidosDetalhe, produtos, faturamento, fatColecao, clientesAtender] = await Promise.all([
+        safe(() => runDaxQuery(token, DAX_PEDIDOS, true)),
+        safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
+        safe(() => runDaxQuery(token, DAX_REPRESENTANTES, true)),
+        safe(() => runDaxQuery(token, DAX_VENDAS, true)),
+        safe(() => runDaxQuery(token, DAX_MARCAS, true)),
+        safe(() => runDaxQuery(token, DAX_COLECOES, true)),
+        safe(() => runDaxQuery(token, DAX_PEDIDOS_DETALHE, true)),
+        safe(() => runDaxQuery(token, DAX_PRODUTOS, true)),
+        safe(() => runDaxQuery(token, DAX_FATURAMENTO, true)),
+        safe(() => runDaxQuery(token, DAX_FAT_COLECAO, true)),
+        safe(() => runDaxQuery(token, DAX_CLIENTES_ATENDER, true)),
+      ]);
+      cachedPedidos = pedidos;
+      cachedClientes = clientes;
+      cachedReps = reps;
+      cachedVendas = vendas;
+      cachedMarcas = marcas;
+      cachedColecoes = colecoes;
+      cachedPedidosDetalhe = pedidosDetalhe;
+      cachedProdutos = produtos;
+      cachedFaturamento = faturamento;
+      cachedFatColecao = fatColecao;
+      cachedClientesAtender = clientesAtender;
+      // Preencher todas as abas com os dados completos
+      const tabClientes = document.getElementById('tab-clientes');
+      if (tabClientes) tabClientes.innerHTML = buildClientes();
+      const tabCompVendas = document.getElementById('tab-compvendas');
+      if (tabCompVendas) tabCompVendas.innerHTML = buildCompVendas();
+      const tabCompCol = document.getElementById('tab-compcol');
+      if (tabCompCol) tabCompCol.innerHTML = buildCompColecoes();
+      const tabCompCli = document.getElementById('tab-compcli');
+      if (tabCompCli) tabCompCli.innerHTML = buildCompColecoesCli();
+      const tabHistCli = document.getElementById('tab-histcli');
+      if (tabHistCli) tabHistCli.innerHTML = buildHistoricoCliente();
+      // Atualizar Metas por Coleção na visão geral (depende de pedidos)
+      const tabOverview = document.getElementById('tab-overview');
+      if (tabOverview) tabOverview.innerHTML = buildOverview() + buildMetas();
+      const now2 = new Date();
+      document.getElementById('lastUpdate').textContent =
+        'Atualizado: ' + now2.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    })();
+    // Não esperar fase 2 — retornar já
+    // (renderDashboard já chamado na fase 1 acima);
   } catch(e) {
     renderError(e.message);
   }
