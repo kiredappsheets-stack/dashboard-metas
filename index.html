@@ -430,8 +430,8 @@ SUMMARIZE(
 ORDER BY PEDIDO[MARCA] ASC, [ANO_CALC] ASC, [MES_CALC] ASC
 `;
 
-// Histórico de vendas por MARCA, ANO e SEMANA (período AASS)
-const DAX_CLIENTES = `
+// Histórico de vendas por CLIENTE, ANO e MÊS
+const DAX_HIST_CLIENTES = `
 EVALUATE
 SUMMARIZE(
   ADDCOLUMNS(
@@ -1374,7 +1374,7 @@ async function loadDashboard() {
           safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
           safe(() => runDaxQuery(token, DAX_HIST_MARCA, true)),
           safe(() => runDaxQuery(token, DAX_HIST_PERIODO, true)),
-          safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
+          safe(() => runDaxQuery(token, DAX_HIST_CLIENTES, true)),
         ]);
         cachedData = data; cachedMetasHist = metasHist; cachedRestricoes = restricoes;
         cachedHistMarca = histMarca||[]; cachedHistPeriodo = histPeriodo||[];
@@ -1419,7 +1419,7 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
       safe(() => runDaxQuery(token, DAX_HIST_MARCA, true)),
       safe(() => runDaxQuery(token, DAX_HIST_PERIODO, true)),
-      safe(() => runDaxQuery(token, DAX_CLIENTES, true)),
+      safe(() => runDaxQuery(token, DAX_HIST_CLIENTES, true)),
     ]);
     clearTimeout(_loadTimeout);
     cachedData = data;
