@@ -1449,7 +1449,7 @@ function renderDashboard(data, hasAllData=false) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h e às 12h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v3';
+const CACHE_KEY = 'dashCache_v4';
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
@@ -1505,6 +1505,8 @@ function loadCache() {
     const entry = JSON.parse(raw);
     const currentSlot = getLastSyncSlot();
     if (entry.slot !== currentSlot) return null; // cache expirado
+    // Verificar se cache está completo (tem dados da fase 2)
+    if (!entry.data || !entry.data.pedidosDetalhe || !entry.data.vendas) return null;
     return entry.data;
   } catch(e) {
     return null;
