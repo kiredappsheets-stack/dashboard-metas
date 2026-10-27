@@ -166,6 +166,7 @@
   /* CHAT */
   .chat-fab { position:fixed; bottom:24px; right:24px; z-index:200; width:50px; height:50px; border-radius:50%; background:var(--green); border:none; cursor:pointer; display:none; align-items:center; justify-content:center; box-shadow:0 4px 20px rgba(0,200,150,.4); transition:transform .15s; }
   .chat-fab.visible { display:flex; }
+  body.logged-in .chat-fab { display:flex; }
   .chat-fab:hover { transform:scale(1.05); }
   .chat-fab svg { width:22px; height:22px; fill:#000; }
   .chat-panel { position:fixed; bottom:88px; right:24px; z-index:200; width:380px; height:520px; background:var(--sidebar); border:1px solid var(--border); border-radius:12px; display:none; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.6); overflow:hidden; }
@@ -536,6 +537,7 @@ async function handleAuth() {
     localStorage.removeItem(CACHE_KEY);
     sessionStorage.removeItem('pbi_token');
     sessionStorage.removeItem('pbi_token_exp');
+    document.body.classList.remove('logged-in');
     const fab = document.querySelector('.chat-fab');
     if(fab) fab.classList.remove('visible');
     const lbl = document.getElementById('chatIaLabel');
@@ -1587,6 +1589,7 @@ function applyCache(cached) {
 }
 
 async function loadDashboard() {
+  document.body.classList.add('logged-in');
   const btnAuth = document.getElementById('btnAuth');
   if (btnAuth) { btnAuth.textContent = 'Sair'; btnAuth.classList.add('logout'); }
   const fab = document.querySelector('.chat-fab'); if (fab) fab.classList.add('visible');
@@ -1600,7 +1603,7 @@ async function loadDashboard() {
     renderDashboard(cachedData);
     const cachedTs = JSON.parse(localStorage.getItem(CACHE_KEY)||'{}').ts;
     const cachedDate = cachedTs ? new Date(cachedTs).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '?';
-    document.getElementById('lastUpdate').textContent = 'Cache de ' + cachedDate + ' · próx. sync 4h ou 12h';
+    document.getElementById('lastUpdate').textContent = 'Cache de ' + cachedDate + ' · próx. sync 4h, 12h ou 18h';
     return;
   }
 
