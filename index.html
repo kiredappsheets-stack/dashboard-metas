@@ -1756,14 +1756,14 @@ function renderDashboard(data) {
         .crm-status-badge { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; margin-bottom:12px; }
         .crm-status-badge.validado { background:var(--green-bg); color:var(--green); }
         .crm-status-badge.recusado { background:var(--red-bg); color:var(--red); }
-        .cli-tbl .rep-row td { background:var(--sidebar)!important; font-size:14px; font-weight:700; color:var(--tx); padding:9px 10px; letter-spacing:-.01em; border-top:2px solid var(--border); border-bottom:1px solid var(--border); }
+        .cli-tbl .rep-row td { background:#080A0F!important; font-size:14px; font-weight:700; color:var(--tx); padding:10px 10px; letter-spacing:-.01em; border-top:2px solid rgba(255,255,255,.06); border-bottom:2px solid rgba(255,255,255,.06); }
         .cli-tbl .rep-row .col-nome,
-        .cli-tbl .rep-row .col-status { background:var(--sidebar)!important; }
-        .cli-tbl .rep-row .rep-label { display:inline-flex; align-items:center; gap:8px; }
+        .cli-tbl .rep-row .col-status { background:#080A0F!important; }
+        .cli-tbl .rep-row .rep-label { display:inline-flex; align-items:center; gap:10px; }
         .cli-tbl .rep-row .rep-label::before { content:''; display:inline-block; width:3px; height:16px; border-radius:2px; background:var(--green); flex-shrink:0; }
-        .cli-tbl .rep-row .rep-label.sem-rep::before { background:var(--hint); }
-        .cli-tbl .rep-row .rep-label.sem-rep .rep-nome { color:var(--muted); font-style:italic; font-weight:500; font-size:13px; }
-        .cli-tbl .rep-row .rep-badge { font-size:10px; font-weight:500; color:var(--muted); background:var(--surface2); border-radius:10px; padding:1px 7px; margin-left:4px; }
+        .cli-tbl .rep-row .rep-label.sem-rep::before { background:var(--amber); }
+        .cli-tbl .rep-row .rep-label.sem-rep .rep-nome { color:var(--amber); font-style:normal; font-weight:700; font-size:14px; }
+        .cli-tbl .rep-row .rep-badge { font-size:10px; font-weight:500; color:var(--muted); background:rgba(255,255,255,.07); border-radius:10px; padding:2px 8px; margin-left:2px; }
         .col-val { text-align:right; font-size:11px; }
         .col-total { text-align:right; font-weight:700; }
         .col-checkbox-panel { padding:10px 14px; background:var(--surface2); border-radius:6px; border:1px solid var(--border); }
