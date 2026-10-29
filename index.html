@@ -1767,6 +1767,8 @@ function renderDashboard(data) {
         .cli-tbl .rep-row .rep-label::before { content:''; display:inline-block; width:3px; height:16px; border-radius:2px; background:var(--green); flex-shrink:0; }
         .cli-tbl .rep-row .rep-label.sem-rep::before { background:var(--amber); }
         .cli-tbl .rep-row .rep-label.sem-rep .rep-nome { color:var(--amber); font-style:normal; font-weight:700; font-size:14px; }
+        .cli-tbl .rep-row .rep-sub-val { font-size:12px; font-weight:700; color:var(--muted); text-align:right; }
+        .cli-tbl .rep-row .rep-sub-total { font-size:13px; font-weight:700; }
         .cli-tbl .rep-row .rep-badge { font-size:10px; font-weight:500; color:var(--muted); background:rgba(255,255,255,.07); border-radius:10px; padding:2px 8px; margin-left:2px; }
         .col-val { text-align:right; font-size:11px; }
         .col-total { text-align:right; font-weight:700; }
@@ -1874,22 +1876,37 @@ function renderDashboard(data) {
           const cliDoRep = codsNaMarca.filter(c=>(porCliente[c].rep||SEM_REP)===rep);
           if (!cliDoRep.length) return;
 
-          // Linha de cabeçalho do representante
+          // Pré-calcular subtotais do representante
+          const subCols = new Array(cols.length).fill(0);
+          let subGeral = 0;
+          cliDoRep.forEach(cod => {
+            const dm2 = porCliente[cod].marcas[marca]||{};
+            cols.forEach((col,ci) => { subCols[ci] += dm2[col]||0; });
+            subGeral += cols.reduce((s,col)=>s+(dm2[col]||0),0);
+          });
+
+          // Linha de cabeçalho do representante (com subtotais embutidos)
           const isSemRep = rep === SEM_REP;
           const repLabel = isSemRep ? 'Sem representante' : rep;
           const repLabelClass = isSemRep ? 'rep-label sem-rep' : 'rep-label';
           const repNomeHtml = `<span class="rep-nome">${repLabel}</span>`;
-          html += `<tr class="rep-row"><td class="col-nome" colspan="${cols.length+3}"><span class="${repLabelClass}">${repNomeHtml}<span class="rep-badge">${cliDoRep.length} cliente${cliDoRep.length!==1?'s':''}</span></span></td></tr>`;
+          const subColsHtml = subCols.map(v=>`<td class="col-val rep-sub-val">${v>0?fmt(v):'—'}</td>`).join('');
+          html += `<tr class="rep-row">
+            <td class="col-nome"><span class="${repLabelClass}">${repNomeHtml}<span class="rep-badge">${cliDoRep.length} cliente${cliDoRep.length!==1?'s':''}</span></span></td>
+            <td class="col-status"></td>
+            ${subColsHtml}
+            <td class="col-total rep-sub-total" style="color:${acento}">${fmt(subGeral)}</td>
+          </tr>`;
 
           cliDoRep.sort((a,b)=>porCliente[a].nome.localeCompare(porCliente[b].nome,'pt-BR'));
-          const subCols = new Array(cols.length).fill(0);
-          let subGeral = 0;
+          const subCols2 = new Array(cols.length).fill(0);
+          let subGeral2 = 0;
           cliDoRep.forEach(cod => {
             const cli = porCliente[cod];
             const dm  = cli.marcas[marca]||{};
             const totalCli = cols.reduce((s,col)=>s+(dm[col]||0),0);
             totGeral += totalCli;
-            subGeral += totalCli;
+            subGeral2 += totalCli;
             const st = statusPorMarcaCli[marca]?.[cod] || 'novo';
             const crm = crmPorCliente[cod];
             const loc = [cli.cidade, cli.estado].filter(Boolean).join(' / ');
@@ -1901,7 +1918,7 @@ function renderDashboard(data) {
             cols.forEach((col,ci) => {
               const v = dm[col]||0;
               totCols[ci] += v;
-              subCols[ci] += v;
+              subCols2[ci] = (subCols2[ci]||0) + v;
               const heat = maxVal>0&&v>0 ? Math.round((v/maxVal)*100) : 0;
               const alpha = heat>0 ? (0.08+heat/100*0.55).toFixed(2) : '0';
               const style = v>0 ? `background:rgba(${bgRgb},${alpha});color:${heat>60?'#fff':'var(--tx)'}` : 'color:var(--hint)';
@@ -1923,16 +1940,6 @@ function renderDashboard(data) {
             html += `<td class="col-total" style="color:${acento}">${fmt(totalCli)}</td></tr>`;
           });
 
-          // Linha de subtotal do representante
-          if (cliDoRep.length > 1) {
-            html += `<tr class="rep-subtotal">
-              <td class="col-nome" style="font-size:11px;color:var(--muted);font-weight:600;padding-left:18px">Subtotal</td>
-              <td class="col-status"></td>`;
-            subCols.forEach(v => {
-              html += `<td class="col-val" style="font-weight:700;color:var(--muted)">${v>0?fmt(v):'—'}</td>`;
-            });
-            html += `<td class="col-total" style="font-weight:700;color:${acento}">${fmt(subGeral)}</td></tr>`;
-          }
         });
 
         html += `<tr class="tbl-foot"><td class="col-nome">Total</td><td class="col-status"></td>`;
