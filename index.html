@@ -3512,14 +3512,13 @@ function _renderMetasGrid() {
   });
 
   gridEl.innerHTML = `
-  <div style="overflow:auto;width:100%;height:100%">
-  <table class="metas-tbl" style="min-width:max-content;width:100%">
+  <table class="metas-tbl" style="min-width:max-content">
     <thead><tr>${thGroup}</tr><tr>${thSub}</tr></thead>
     <tbody>${tbody}</tbody>
     <tfoot><tr>
       <td class="ma-nome-cell">Total geral</td>${footCells}
     </tr></tfoot>
-  </table></div>`;
+  </table>`;
 
   if (statEl) {
     const locCount = Object.values(metasLocaisTodos).reduce((acc,obj)=>acc+Object.keys(obj).length,0);
@@ -3541,16 +3540,15 @@ window._abrirModalNovaColecao = function() {
   ]);
 
   // Coleções do PBI (tabela COLECOES) ainda não cadastradas
-  const cols = (typeof cachedColecoesDatas !== 'undefined' && cachedColecoesDatas && cachedColecoesDatas.length)
-    ? cachedColecoesDatas
-    : [];
-  const colGK = cols.length ? (r,c)=> Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c : null;
+  // Chaves do raw DAX: 'COLECOES[COLECAO]', 'COLECOES[DT_INICIO]', 'COLECOES[DT_FINAL]'
+  const gCo = (r,c) => String(r['COLECOES['+c+']'] || r[c] || '').trim();
+  const cols = (typeof cachedColecoesDatas !== 'undefined' && cachedColecoesDatas) ? cachedColecoesDatas : [];
 
   const colsDisponiveis = cols
     .map(r => ({
-      nome:  colGK ? r[colGK(r,'COLECAO')] : '',
-      ini:   colGK ? r[colGK(r,'DT_INICIO')] : '',
-      fim:   colGK ? r[colGK(r,'DT_FINAL')] : ''
+      nome: gCo(r,'COLECAO'),
+      ini:  gCo(r,'DT_INICIO'),
+      fim:  gCo(r,'DT_FINAL')
     }))
     .filter(c => c.nome && !colecoesExist.has(c.nome))
     .sort((a,b) => a.nome.localeCompare(b.nome, 'pt-BR'));
@@ -3690,9 +3688,7 @@ function _initMetasTab() {
           🔄 Atualizar dados
         </button>
       </div>
-      <div style="flex:1;overflow:auto;padding:16px 20px">
-        <div id="metasAdmin_grid"></div>
-      </div>
+      <div id="metasAdmin_grid" style="flex:1;overflow:auto"></div>
     </div>`;
   }
   _renderMetasGrid();
