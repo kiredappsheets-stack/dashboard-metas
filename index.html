@@ -1413,27 +1413,29 @@ function renderDashboard(data) {
       const hasMarcas = r.marcas.length > 1;
 
       // Linha do representante (clicável para expandir marcas)
-      html += `<tr class="gc-rep-row" data-id="${repId}" style="background:${bg};${semVenda?'opacity:.65':''}cursor:${hasMarcas?'pointer':'default'}" onclick="${hasMarcas?`gcToggle('${repId}')`:''}" title="${hasMarcas?'Clique para ver por marca':''}">
-        ${tdC(r.venda > 0 ? r.rk : '—', 'font-weight:700;color:var(--muted)')}
-        ${tdC(r.codRep || '—', 'color:var(--muted);font-family:monospace;font-size:11px')}
-        ${tdL(`<span style="display:flex;align-items:center;gap:6px">
-          ${hasMarcas ? `<span class="gc-chevron" id="chev-${repId}" style="font-size:10px;color:var(--muted);transition:transform .2s">▶</span>` : '<span style="width:14px"></span>'}
-          <span title="${r.rep}" style="max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis;font-weight:600">${shortRep(r.rep)}</span>
-        </span>`)}
-        ${tdC(r.uf || '—', 'color:var(--muted)')}
-        ${td(r.pecas > 0 ? fmtN(r.pecas) : '—')}
-        ${td(fmtR(r.meta))}
-        ${td(fmtR(r.venda), `color:${pctColor};font-weight:700`)}
-        ${td(r.venda > 0 ? (r.pct*100).toFixed(1)+'%' : '0%', `color:${pctColor};font-weight:700`)}
-        ${td(pcPedido > 0 ? Math.round(pcPedido) : '—')}
-        ${td(pedMedio > 0 ? fmtR(pedMedio) : '—')}
-        ${td(r.clisA > 0 ? r.clisA : '—')}
-        ${td(r.novos > 0 ? r.novos : '—', 'color:var(--green)')}
-        ${td(r.mantidos > 0 ? r.mantidos : '—', 'color:#4C9EF1')}
-        ${td(naoRep > 0 ? naoRep : '—', 'color:var(--amber)')}
-        ${td(r.exClientes > 0 ? r.exClientes : '—', 'color:#E84A4A')}
-        ${td(r.valorNovos > 0 ? fmtR(r.valorNovos) : '—', 'color:var(--green)')}
-      </tr>`;
+      const onclickAttr = hasMarcas ? 'onclick="gcToggle(\'' + repId + '\')"' : '';
+      const titleAttr   = hasMarcas ? 'title="Clique para ver por marca"' : '';
+      const chevron     = hasMarcas
+        ? '<span class="gc-chevron" id="chev-' + repId + '" style="font-size:10px;color:var(--muted);transition:transform .2s">▶</span>'
+        : '<span style="width:14px"></span>';
+      html += '<tr class="gc-rep-row" data-id="' + repId + '" style="background:' + bg + ';' + (semVenda?'opacity:.65':'') + 'cursor:' + (hasMarcas?'pointer':'default') + '" ' + onclickAttr + ' ' + titleAttr + '>';
+      html += tdC(r.venda > 0 ? r.rk : '—', 'font-weight:700;color:var(--muted)');
+      html += tdC(r.codRep || '—', 'color:var(--muted);font-family:monospace;font-size:11px');
+      html += tdL('<span style="display:flex;align-items:center;gap:6px">' + chevron + '<span title="' + r.rep.replace(/"/g,'&quot;') + '" style="max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis;font-weight:600">' + shortRep(r.rep) + '</span></span>');
+      html += tdC(r.uf || '—', 'color:var(--muted)');
+      html += td(r.pecas > 0 ? fmtN(r.pecas) : '—');
+      html += td(fmtR(r.meta));
+      html += td(fmtR(r.venda), 'color:' + pctColor + ';font-weight:700');
+      html += td(r.venda > 0 ? (r.pct*100).toFixed(1)+'%' : '0%', 'color:' + pctColor + ';font-weight:700');
+      html += td(pcPedido > 0 ? Math.round(pcPedido) : '—');
+      html += td(pedMedio > 0 ? fmtR(pedMedio) : '—');
+      html += td(r.clisA > 0 ? r.clisA : '—');
+      html += td(r.novos > 0 ? r.novos : '—', 'color:var(--green)');
+      html += td(r.mantidos > 0 ? r.mantidos : '—', 'color:#4C9EF1');
+      html += td(naoRep > 0 ? naoRep : '—', 'color:var(--amber)');
+      html += td(r.exClientes > 0 ? r.exClientes : '—', 'color:#E84A4A');
+      html += td(r.valorNovos > 0 ? fmtR(r.valorNovos) : '—', 'color:var(--green)');
+      html += '</tr>';
 
       // Sub-linhas por marca (inicialmente ocultas)
       if (hasMarcas) {
@@ -1441,52 +1443,53 @@ function renderDashboard(data) {
           const mPct   = r.venda > 0 ? m.venda / r.venda : 0; // % do rep
           const mPcPed = m.pedidos > 0 ? m.pecas / m.pedidos : 0;
           const mPedM  = m.clisA > 0 ? m.venda / m.clisA : 0;
-          html += `<tr class="gc-marca-row gc-marca-${repId}" style="display:none;background:${bg}">
-            ${tdC('', 'color:var(--muted)')}
-            ${tdC('', '')}
-            ${tdL(`<span style="display:flex;align-items:center;gap:6px;padding-left:24px">
-              <span style="width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0;opacity:.5"></span>
-              <span style="font-size:12px;color:var(--muted)">${m.marca}</span>
-              <span style="font-size:10px;color:var(--muted);opacity:.7">${mPct > 0 ? (mPct*100).toFixed(0)+'%' : ''}</span>
-            </span>`)}
-            ${tdC('', '')}
-            ${td(m.pecas > 0 ? fmtN(m.pecas) : '—', 'color:var(--muted)')}
-            ${td('—', 'color:var(--muted)')}
-            ${td(fmtR(m.venda), 'color:var(--muted)')}
-            ${td('—', 'color:var(--muted)')}
-            ${td(mPcPed > 0 ? Math.round(mPcPed) : '—', 'color:var(--muted)')}
-            ${td(mPedM > 0 ? fmtR(mPedM) : '—', 'color:var(--muted)')}
-            ${td(m.clisA > 0 ? m.clisA : '—', 'color:var(--muted)')}
-            ${td('—', 'color:var(--muted)')}
-            ${td('—', 'color:var(--muted)')}
-            ${td('—', 'color:var(--muted)')}
-            ${td('—', 'color:var(--muted)')}
-            ${td('—', 'color:var(--muted)')}
-          </tr>`;
+          const marcaLabel = '<span style="display:flex;align-items:center;gap:6px;padding-left:24px">'
+            + '<span style="width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0;opacity:.5"></span>'
+            + '<span style="font-size:12px;color:var(--muted)">' + m.marca + '</span>'
+            + '<span style="font-size:10px;color:var(--muted);opacity:.7">' + (mPct > 0 ? (mPct*100).toFixed(0)+'%' : '') + '</span>'
+            + '</span>';
+          html += '<tr class="gc-marca-row gc-marca-' + repId + '" style="display:none;background:' + bg + '">';
+          html += tdC('', 'color:var(--muted)');
+          html += tdC('', '');
+          html += tdL(marcaLabel);
+          html += tdC('', '');
+          html += td(m.pecas > 0 ? fmtN(m.pecas) : '—', 'color:var(--muted)');
+          html += td('—', 'color:var(--muted)');
+          html += td(fmtR(m.venda), 'color:var(--muted)');
+          html += td('—', 'color:var(--muted)');
+          html += td(mPcPed > 0 ? Math.round(mPcPed) : '—', 'color:var(--muted)');
+          html += td(mPedM > 0 ? fmtR(mPedM) : '—', 'color:var(--muted)');
+          html += td(m.clisA > 0 ? m.clisA : '—', 'color:var(--muted)');
+          html += td('—', 'color:var(--muted)');
+          html += td('—', 'color:var(--muted)');
+          html += td('—', 'color:var(--muted)');
+          html += td('—', 'color:var(--muted)');
+          html += td('—', 'color:var(--muted)');
+          html += '</tr>';
         });
       }
     });
 
     const totNaoRep   = Math.max(0, tot.mantidos - tot.novos);
     const totCarteira = tot.clisA + tot.exClientes;
-    html += `</tbody>
-    <tfoot><tr style="background:var(--sidebar);font-weight:700;border-top:2px solid var(--border)">
-      ${tdC('')}${tdC('')}
-      ${tdL('<span style="font-size:12px;color:var(--muted)">Total</span>')}
-      ${tdC('')}
-      ${td(fmtN(tot.pecas))}
-      ${td(fmtR(tot.meta))}
-      ${td(fmtR(tot.venda), `color:${colorPct(totPct)}`)}
-      ${td((totPct*100).toFixed(1)+'%', `color:${colorPct(totPct)}`)}
-      ${td('—')}${td('—')}
-      ${td(tot.clisA > 0 ? tot.clisA : '—')}
-      ${td(tot.novos > 0 ? tot.novos : '—', 'color:var(--green)')}
-      ${td(tot.mantidos > 0 ? tot.mantidos : '—', 'color:#4C9EF1')}
-      ${td(totNaoRep > 0 ? totNaoRep : '—', 'color:var(--amber)')}
-      ${td(tot.exClientes > 0 ? tot.exClientes : '—', 'color:#E84A4A')}
-      ${td(tot.valorNovos > 0 ? fmtR(tot.valorNovos) : '—', 'color:var(--green)')}
-    </tr></tfoot>
-    </table></div>`;
+    const totColor    = colorPct(totPct);
+    html += '</tbody>';
+    html += '<tfoot><tr style="background:var(--sidebar);font-weight:700;border-top:2px solid var(--border)">';
+    html += tdC('') + tdC('');
+    html += tdL('<span style="font-size:12px;color:var(--muted)">Total</span>');
+    html += tdC('');
+    html += td(fmtN(tot.pecas));
+    html += td(fmtR(tot.meta));
+    html += td(fmtR(tot.venda), 'color:' + totColor);
+    html += td((totPct*100).toFixed(1)+'%', 'color:' + totColor);
+    html += td('—') + td('—');
+    html += td(tot.clisA > 0 ? tot.clisA : '—');
+    html += td(tot.novos > 0 ? tot.novos : '—', 'color:var(--green)');
+    html += td(tot.mantidos > 0 ? tot.mantidos : '—', 'color:#4C9EF1');
+    html += td(totNaoRep > 0 ? totNaoRep : '—', 'color:var(--amber)');
+    html += td(tot.exClientes > 0 ? tot.exClientes : '—', 'color:#E84A4A');
+    html += td(tot.valorNovos > 0 ? fmtR(tot.valorNovos) : '—', 'color:var(--green)');
+    html += '</tr></tfoot></table></div>';
 
     return html;
   }
