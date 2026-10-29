@@ -1769,45 +1769,53 @@ function renderDashboard(data) {
       s.id = 'cli-sticky-css';
       s.textContent = `
         /* METAS ADMIN TABLE */
-        .metas-tbl { border-collapse:collapse; font-size:12px; }
+        .metas-tbl { border-collapse:separate; border-spacing:0; font-size:12px; }
         .metas-tbl th, .metas-tbl td { padding:7px 11px; border-bottom:1px solid var(--border); white-space:nowrap; }
-        .metas-tbl thead tr:first-child th { background:var(--sidebar); position:sticky; top:0; z-index:4; font-size:11px; font-weight:700; color:var(--tx); text-align:center; border-bottom:1px solid var(--border); }
-        .metas-tbl thead tr:nth-child(2) th { background:var(--sidebar); position:sticky; top:33px; z-index:4; font-size:10px; font-weight:600; color:var(--muted); text-align:right; border-bottom:2px solid var(--border); }
-        .metas-tbl tfoot td { background:var(--surface2)!important; border-top:2px solid var(--border); font-weight:700; }
-        .metas-row:hover td { background:var(--surface2); }
-        .metas-row:hover .ma-nome-cell { background:var(--surface2)!important; }
-        .ma-nome-cell { position:sticky; left:0; z-index:2; background:var(--surface); min-width:200px; max-width:220px; font-weight:500; color:var(--tx); border-right:1px solid var(--border); }
-        .metas-tbl thead tr:first-child .ma-nome-cell { z-index:6; top:0; text-align:left; background:var(--sidebar); }
-        .metas-tbl thead tr:nth-child(2) .ma-nome-cell { z-index:5; top:33px; text-align:left; color:var(--muted); background:var(--sidebar); }
-        .metas-tbl tfoot .ma-nome-cell { background:var(--surface2)!important; }
-        .ma-marca-row td { background:rgba(76,158,241,.06)!important; font-weight:700; color:#4C9EF1; font-size:11px; padding:5px 11px; border-top:1px solid rgba(76,158,241,.2); }
-        .ma-marca-row .ma-nome-cell { color:#4C9EF1; background:rgba(76,158,241,.06)!important; }
-        .ma-val { text-align:right; color:var(--muted); min-width:90px; }
-        .ma-edit-cell { min-width:110px; text-align:right; }
-        .ma-input { font-family:var(--font); font-size:12px; background:var(--surface2); border:1px solid var(--border); color:var(--tx); border-radius:5px; padding:4px 7px; width:95px; outline:none; transition:border-color .15s; text-align:right; }
+        /* sticky: linha 1 do header (nome da coleção) */
+        .metas-tbl thead tr:first-child th { background:var(--sidebar); position:sticky; top:0; z-index:3; font-size:11px; font-weight:700; color:var(--tx); text-align:center; border-bottom:1px solid var(--border); }
+        /* sticky: linha 2 do header (sub-colunas) */
+        .metas-tbl thead tr:nth-child(2) th { background:var(--sidebar); position:sticky; top:32px; z-index:3; font-size:10px; font-weight:600; color:var(--muted); text-align:right; border-bottom:2px solid var(--border); }
+        .metas-tbl tfoot td { background:var(--surface2)!important; border-top:2px solid var(--border); font-weight:700; position:sticky; bottom:0; z-index:2; }
+        .metas-row:hover td { background:rgba(255,255,255,.04); }
+        /* sticky: coluna Representante */
+        .ma-nome-cell { position:sticky; left:0; background:var(--surface); min-width:195px; max-width:215px; font-weight:500; color:var(--tx); border-right:2px solid var(--border); z-index:2; }
+        /* sticky + sticky: canto superior esquerdo nos headers */
+        .metas-tbl thead tr:first-child .ma-nome-cell { z-index:5; background:var(--sidebar); text-align:left; }
+        .metas-tbl thead tr:nth-child(2) .ma-nome-cell { z-index:4; background:var(--sidebar); text-align:left; color:var(--muted); }
+        /* sticky + sticky: canto inferior esquerdo no footer */
+        .metas-tbl tfoot .ma-nome-cell { background:var(--surface2)!important; z-index:3; }
+        /* linha de marca */
+        .ma-marca-row td { background:rgba(76,158,241,.07)!important; font-weight:700; color:#4C9EF1; font-size:11px; padding:5px 11px; border-top:1px solid rgba(76,158,241,.18); }
+        .ma-marca-row .ma-nome-cell { color:#4C9EF1; background:rgba(76,158,241,.07)!important; letter-spacing:.02em; }
+        /* sub-total de marca */
+        .ma-subtotal-row td { background:rgba(76,158,241,.03)!important; }
+        .ma-subtotal-row .ma-nome-cell { background:rgba(76,158,241,.03)!important; font-size:11px; color:#4C9EF1; }
+        .ma-val { text-align:right; color:var(--muted); min-width:88px; }
+        .ma-edit-cell { min-width:106px; text-align:right; }
+        .ma-input { font-family:var(--font); font-size:12px; background:var(--surface2); border:1px solid var(--border); color:var(--tx); border-radius:5px; padding:4px 7px; width:92px; outline:none; transition:border-color .15s; text-align:right; box-sizing:border-box; }
         .ma-input:focus { border-color:var(--green); }
-        .ma-pct-cell { min-width:90px; }
+        .ma-pct-cell { min-width:88px; }
         .ma-bar-wrap { display:flex; align-items:center; gap:6px; }
-        .ma-bar { height:5px; border-radius:3px; min-width:2px; transition:width .3s; flex-shrink:0; }
+        .ma-bar { height:5px; border-radius:3px; min-width:2px; transition:width .3s; flex-shrink:0; max-width:50px; }
         .ma-pct-label { font-size:11px; font-weight:700; min-width:30px; }
         .ma-badge-edit { display:inline-block; margin-left:6px; font-size:10px; font-weight:600; color:var(--amber); background:var(--amber-bg); border-radius:4px; padding:1px 5px; vertical-align:middle; }
         .ma-input-edited { border-color:var(--amber) !important; }
         .ma-col-sep { border-left:2px solid var(--border) !important; }
-        /* Modal cadastro futuro */
-        .ma-modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center; }
+        /* Modal cadastro */
+        .ma-modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:1000; align-items:center; justify-content:center; }
         .ma-modal-overlay.open { display:flex; }
-        .ma-modal { background:var(--surface); border:1px solid var(--border); border-radius:12px; width:480px; max-width:95vw; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.4); }
-        .ma-modal-head { padding:18px 20px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
-        .ma-modal-head h3 { font-size:15px; font-weight:700; color:var(--tx); margin:0; }
-        .ma-modal-body { padding:20px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:16px; }
-        .ma-modal-foot { padding:14px 20px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end; }
-        .ma-field label { display:block; font-size:11px; font-weight:600; color:var(--muted); margin-bottom:6px; }
-        .ma-field input[type=text], .ma-field select { font-family:var(--font); font-size:13px; background:var(--surface2); border:1px solid var(--border); color:var(--tx); border-radius:7px; padding:8px 12px; width:100%; outline:none; box-sizing:border-box; }
-        .ma-field input[type=text]:focus, .ma-field select:focus { border-color:var(--green); }
-        .ma-reps-list { display:flex; flex-direction:column; gap:4px; max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:7px; padding:8px; background:var(--surface2); }
-        .ma-rep-chk { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:5px; cursor:pointer; font-size:12px; color:var(--tx); }
-        .ma-rep-chk:hover { background:var(--surface); }
-        .ma-rep-chk input[type=checkbox] { accent-color:var(--green); width:14px; height:14px; cursor:pointer; }
+        .ma-modal { background:var(--surface); border:1px solid var(--border); border-radius:12px; width:460px; max-width:95vw; max-height:82vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+        .ma-modal-head { padding:16px 20px 12px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+        .ma-modal-head h3 { font-size:14px; font-weight:700; color:var(--tx); margin:0; }
+        .ma-modal-body { padding:18px 20px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:14px; }
+        .ma-modal-foot { padding:12px 20px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end; flex-shrink:0; }
+        .ma-field label { display:block; font-size:11px; font-weight:600; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:.04em; }
+        .ma-field select { font-family:var(--font); font-size:13px; background:var(--surface2); border:1px solid var(--border); color:var(--tx); border-radius:7px; padding:8px 12px; width:100%; outline:none; box-sizing:border-box; cursor:pointer; }
+        .ma-field select:focus { border-color:var(--green); }
+        .ma-reps-list { display:flex; flex-direction:column; gap:2px; max-height:190px; overflow-y:auto; border:1px solid var(--border); border-radius:7px; padding:6px; background:var(--surface2); }
+        .ma-rep-chk { display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:5px; cursor:pointer; font-size:12px; color:var(--tx); user-select:none; }
+        .ma-rep-chk:hover { background:rgba(255,255,255,.06); }
+        .ma-rep-chk input[type=checkbox] { accent-color:var(--green); width:14px; height:14px; cursor:pointer; flex-shrink:0; }
         .ma-btn { font-family:var(--font); font-size:12px; font-weight:600; padding:8px 16px; border-radius:7px; border:none; cursor:pointer; transition:opacity .15s; }
         .ma-btn-primary { background:var(--green); color:#000; }
         .ma-btn-primary:hover { opacity:.85; }
@@ -3448,7 +3456,8 @@ function _renderMetasGrid() {
         const colEsc   = c.replace(/'/g,"\\'").replace(/"/g,'&quot;');
         const p        = pct(h.venda, metaVig);
         const cor      = bc(p);
-        const editavel = colecoesAtivas.has(c);
+        // Somente coleções puramente locais (não existem em PBI hist nem em cachedData) são editáveis
+        const editavel = colecoesLocais.includes(c) && !colecoesData.includes(c) && !colecoesHist.includes(c);
         const sep      = i===0 ? '' : 'ma-col-sep';
         totais[c].venda         += h.venda;
         totais[c].meta          += metaVig;
@@ -3518,18 +3527,50 @@ function _renderMetasGrid() {
   }
 }
 
-// ===== MODAL: CADASTRAR NOVA COLEÇÃO FUTURA =====
+// ===== MODAL: CADASTRAR NOVA META (COLEÇÃO FUTURA) =====
 window._abrirModalNovaColecao = function() {
-  const hist = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
-  const gK   = (r,c) => Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c;
   const metasLocais = _getMetasLocais();
 
-  // Reps disponíveis: do Power BI (hist + cachedData) para o usuário selecionar
+  // Coleções já existentes (PBI hist + cachedData + locais) → excluir do seletor
+  const hist = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
+  const gK   = (r,c) => Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c;
+  const colecoesExist = new Set([
+    ...hist.map(r=>r[gK(r,'COLECAO')]).filter(Boolean),
+    ...(typeof cachedData !== 'undefined' && cachedData ? cachedData.map(d=>d.col).filter(Boolean) : []),
+    ...Object.keys(metasLocais)
+  ]);
+
+  // Coleções do PBI (tabela COLECOES) ainda não cadastradas
+  const cols = (typeof cachedColecoesDatas !== 'undefined' && cachedColecoesDatas && cachedColecoesDatas.length)
+    ? cachedColecoesDatas
+    : [];
+  const colGK = cols.length ? (r,c)=> Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c : null;
+
+  const colsDisponiveis = cols
+    .map(r => ({
+      nome:  colGK ? r[colGK(r,'COLECAO')] : '',
+      ini:   colGK ? r[colGK(r,'DT_INICIO')] : '',
+      fim:   colGK ? r[colGK(r,'DT_FINAL')] : ''
+    }))
+    .filter(c => c.nome && !colecoesExist.has(c.nome))
+    .sort((a,b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+  const fmtDt = s => {
+    if (!s) return '';
+    const m = String(s).match(/(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : String(s).slice(0,10);
+  };
+
+  const colOptions = colsDisponiveis.length
+    ? colsDisponiveis.map(c=>`<option value="${c.nome.replace(/"/g,'&quot;')}">${c.nome}${c.ini ? ' · ' + fmtDt(c.ini) + '–' + fmtDt(c.fim) : ''}</option>`).join('')
+    : '<option value="" disabled>Nenhuma coleção disponível no Power BI</option>';
+
+  // Reps: do cachedData (atual) + hist PBI
   const repsHist = [...new Set(hist.map(r=>r[gK(r,'NOME')]).filter(Boolean))];
   const repsData = (typeof cachedData !== 'undefined' && cachedData && cachedData.length)
     ? [...new Set(cachedData.map(d=>d.rep).filter(Boolean))]
     : [];
-  const reps = [...new Set([...repsHist,...repsData])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const reps = [...new Set([...repsData,...repsHist])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
 
   const repItems = reps.map(r=>`
     <label class="ma-rep-chk">
@@ -3549,13 +3590,16 @@ window._abrirModalNovaColecao = function() {
   modal.innerHTML = `
     <div class="ma-modal" onclick="event.stopPropagation()">
       <div class="ma-modal-head">
-        <h3>＋ Nova coleção futura</h3>
+        <h3>＋ Cadastrar meta futura</h3>
         <button class="ma-btn ma-btn-cancel" style="padding:4px 10px;font-size:12px" onclick="window._fecharModalNovaColecao()">✕</button>
       </div>
       <div class="ma-modal-body">
         <div class="ma-field">
-          <label>Nome da coleção</label>
-          <input type="text" id="maModalColNome" placeholder="Ex: 69-VERÃO 2028 MY ROCK" autocomplete="off"/>
+          <label>Coleção (Power BI)</label>
+          <select id="maModalColNome">
+            <option value="">— Selecione uma coleção —</option>
+            ${colOptions}
+          </select>
         </div>
         <div class="ma-field">
           <label>Representantes <span style="font-weight:400;color:var(--muted)">(desmarque quem não participar)</span></label>
@@ -3571,7 +3615,7 @@ window._abrirModalNovaColecao = function() {
       </div>
       <div class="ma-modal-foot">
         <button class="ma-btn ma-btn-cancel" onclick="window._fecharModalNovaColecao()">Cancelar</button>
-        <button class="ma-btn ma-btn-primary" onclick="window._salvarNovaColecao()">Criar coleção</button>
+        <button class="ma-btn ma-btn-primary" onclick="window._salvarNovaColecao()">Criar meta</button>
       </div>
     </div>`;
   modal.classList.add('open');
@@ -3588,9 +3632,9 @@ window._salvarNovaColecao = function() {
   const erroEl = document.getElementById('maModalErro');
   const nome   = (nomeEl ? nomeEl.value.trim() : '');
   if (!nome) {
-    erroEl.textContent = 'Informe o nome da coleção.';
+    erroEl.textContent = 'Selecione uma coleção.';
     erroEl.style.display = 'block';
-    nomeEl.focus();
+    if (nomeEl) nomeEl.focus();
     return;
   }
   // Reps selecionados
@@ -3637,7 +3681,7 @@ function _initMetasTab() {
           style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;width:190px"/>
         <button onclick="window._abrirModalNovaColecao()"
           style="font-family:var(--font);font-size:12px;font-weight:600;background:var(--green);color:#000;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:5px">
-          ＋ Nova coleção
+          ＋ Nova meta
         </button>
         <span style="flex:1"></span>
         <span id="metasAdmin_status" style="font-size:11px;color:var(--muted)"></span>
