@@ -1257,6 +1257,8 @@ function renderDashboard(data) {
       const cliColAnter = {}; // rep -> Set(codcli)
       // 3) Valor por cliente na col vigente
       const valorPorCliRep = {}; // rep -> Map(codcli -> valor)
+      // 4) Clientes por rep por coleção (para carteira = últimas 3 cols antes da vigente)
+      const cliPorRepCol = {}; // rep -> col -> Set(codcli)
 
       cachedClientes2.forEach(r => {
         const rep    = String(gV(r,'REP')||'').trim();
@@ -1264,6 +1266,10 @@ function renderDashboard(data) {
         const col    = String(gV(r,'COLECAO')||'').trim();
         const venda  = parseFloat(gV(r,'VENDA')||0) || 0;
         if (!rep || !codcli) return;
+        // índice por col para carteira
+        if (!cliPorRepCol[rep]) cliPorRepCol[rep] = {};
+        if (!cliPorRepCol[rep][col]) cliPorRepCol[rep][col] = new Set();
+        cliPorRepCol[rep][col].add(codcli);
         if (colVigSet.has(col)) {
           if (!cliColVig[rep]) cliColVig[rep] = new Set();
           cliColVig[rep].add(codcli);
@@ -1275,6 +1281,9 @@ function renderDashboard(data) {
         }
       });
 
+      // Coleções anteriores ordenadas desc (para pegar as 3 mais recentes)
+      const colsAnter = todasCols.filter(c => !colVigSet.has(c)).sort().reverse();
+
       // Consolidar stats por rep
       const todosReps = new Set([...Object.keys(metaPorRep), ...Object.keys(cliColVig||{})]);
       todosReps.forEach(rep => {
@@ -1284,13 +1293,17 @@ function renderDashboard(data) {
 
         const atendidos   = vigSet.size;
         const novos       = [...vigSet].filter(c => !anterSet.has(c)).length;
-        const recuperados = [...vigSet].filter(c => anterSet.has(c) && /* só voltaram */ true).length - (atendidos - novos - novos); // simplificado
         const mantidos    = [...vigSet].filter(c => anterSet.has(c)).length;
         const exClientes  = [...anterSet].filter(c => !vigSet.has(c)).length;
-        // valor dos novos
         const valorNovos  = [...vigSet].filter(c => !anterSet.has(c)).reduce((s,c) => s + (valorMap[c]||0), 0);
 
-        repStats[rep] = { atendidos, novos, mantidos, exClientes, valorNovos };
+        // Carteira = clientes distintos nas últimas 3 coleções antes da vigente
+        const colsRep = Object.keys(cliPorRepCol[rep] || {}).filter(c => !colVigSet.has(c)).sort().reverse();
+        const cols3 = colsRep.slice(0, 3);
+        const carteira = new Set();
+        cols3.forEach(c => (cliPorRepCol[rep][c] || new Set()).forEach(cli => carteira.add(cli)));
+
+        repStats[rep] = { atendidos, novos, mantidos, exClientes, valorNovos, carteira: carteira.size };
       });
     }
 
@@ -1388,6 +1401,9 @@ function renderDashboard(data) {
         <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
           <span style="font-weight:600;color:#E84A4A">Ex-clientes</span> — clientes sem compra há 2 ou mais coleções
         </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
+          <span style="font-weight:600;color:#9B8FFF">Carteira</span> — clientes distintos comprados nas últimas 3 coleções (excl. atual)
+        </span>
       </div>`;
 
     let html = '<div style="padding:16px 20px 8px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">'
@@ -1410,12 +1426,12 @@ function renderDashboard(data) {
       let repRows = Object.entries(repsNaMarca).map(([rep, rd]) => {
         const meta   = metaDestaMarca[rep] || 0;
         const pct    = meta > 0 ? rd.venda / meta : 0;
-        const st     = repStats[rep] || { novos:0, mantidos:0, exClientes:0, valorNovos:0 };
+        const st     = repStats[rep] || { novos:0, mantidos:0, exClientes:0, carteira:0, valorNovos:0 };
         const pcPed  = rd.pedidos > 0 ? rd.pecas / rd.pedidos : 0;
         const pedMed = rd.clisA > 0 ? rd.venda / rd.clisA : 0;
         const naoRep = Math.max(0, st.mantidos - st.novos);
         return { rep, ...rd, meta, pct, pcPed, pedMed, naoRep,
-                 novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, valorNovos: st.valorNovos };
+                 novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, carteira: st.carteira||0, valorNovos: st.valorNovos };
       }).sort((a,b) => b.venda - a.venda);
 
       // Adicionar reps com meta nesta marca mas sem venda (mesmo critério da Visão Geral)
@@ -1425,14 +1441,15 @@ function renderDashboard(data) {
         const st   = repStats[rep] || { novos:0, mantidos:0, exClientes:0, valorNovos:0 };
         repRows.push({ rep, codRep: ufPorRep[rep]?.cod||'', uf: ufPorRep[rep]?.uf||'',
                        pecas:0, pedidos:0, clisA:0, venda:0, meta, pct:0, pcPed:0, pedMed:0,
-                       naoRep:0, novos:st.novos, mantidos:st.mantidos, exClientes:st.exClientes, valorNovos:st.valorNovos });
+                       naoRep:0, novos:st.novos, mantidos:st.mantidos, exClientes:st.exClientes,
+                       carteira:st.carteira||0, valorNovos:st.valorNovos });
       });
 
       // Totais da marca
       const totM = repRows.reduce((a,r)=>({ pecas:a.pecas+r.pecas, meta:a.meta+r.meta, venda:a.venda+r.venda,
         clisA:a.clisA+r.clisA, novos:a.novos+r.novos, mantidos:a.mantidos+r.mantidos,
-        exClientes:a.exClientes+r.exClientes, valorNovos:a.valorNovos+r.valorNovos }),
-        {pecas:0,meta:0,venda:0,clisA:0,novos:0,mantidos:0,exClientes:0,valorNovos:0});
+        exClientes:a.exClientes+r.exClientes, carteira:a.carteira+r.carteira, valorNovos:a.valorNovos+r.valorNovos }),
+        {pecas:0,meta:0,venda:0,clisA:0,novos:0,mantidos:0,exClientes:0,carteira:0,valorNovos:0});
       const totPctM = totM.meta > 0 ? totM.venda / totM.meta : 0;
       const totNaoRepM = Math.max(0, totM.mantidos - totM.novos);
       const totColor = colorPct(totPctM);
@@ -1462,6 +1479,7 @@ function renderDashboard(data) {
         + '<th class="r" style="color:#4C9EF1">Mantidos</th>'
         + '<th class="r" style="color:var(--amber)">Não rep.</th>'
         + '<th class="r" style="color:#E84A4A">Ex-clientes</th>'
+        + '<th class="r" style="color:#9B8FFF">Carteira</th>'
         + '<th class="r" style="color:var(--green)">Valor novos</th>'
         + '</tr></thead><tbody>';
 
@@ -1484,6 +1502,7 @@ function renderDashboard(data) {
         html += td(r.mantidos > 0 ? r.mantidos : '—', 'color:#4C9EF1');
         html += td(r.naoRep > 0 ? r.naoRep : '—', 'color:var(--amber)');
         html += td(r.exClientes > 0 ? r.exClientes : '—', 'color:#E84A4A');
+        html += td(r.carteira > 0 ? r.carteira : '—', 'color:#9B8FFF');
         html += td(r.valorNovos > 0 ? fmtR(r.valorNovos) : '—', 'color:var(--green)');
         html += '</tr>';
       });
@@ -1501,6 +1520,7 @@ function renderDashboard(data) {
       html += td(totM.mantidos > 0 ? totM.mantidos : '—', 'color:#4C9EF1');
       html += td(totNaoRepM > 0 ? totNaoRepM : '—', 'color:var(--amber)');
       html += td(totM.exClientes > 0 ? totM.exClientes : '—', 'color:#E84A4A');
+      html += td(totM.carteira > 0 ? totM.carteira : '—', 'color:#9B8FFF');
       html += td(totM.valorNovos > 0 ? fmtR(totM.valorNovos) : '—', 'color:var(--green)');
       html += '</tr></tfoot></table></div></div>';
     });
