@@ -1693,7 +1693,7 @@ function renderDashboard(data) {
     // Coleções por marca ordenadas
     const colsPorMarca = {};
     todasMarcas.forEach(m => {
-      colsPorMarca[m] = [...new Set(cachedClientes2.filter(r=>String(gV(r,'MARCA')||'')===m).map(r=>String(gV(r,'COLECAO')||'')))].filter(Boolean).sort();
+      colsPorMarca[m] = [...new Set(cachedClientes2.filter(r=>String(gV(r,'MARCA')||'')===m).map(r=>String(gV(r,'COLECAO')||'')))].filter(Boolean).sort().reverse();
     });
 
     // Reps únicos
