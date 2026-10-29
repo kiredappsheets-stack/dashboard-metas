@@ -2155,6 +2155,12 @@ function renderDashboard(data) {
   const now = new Date();
   document.getElementById('lastUpdate').textContent =
     'Atualizado: ' + now.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+
+  // Se a aba Metas já estiver visível (ex: refresh com tab aberta), atualizar
+  const tabMetas = document.getElementById('tab-metas-admin');
+  if (tabMetas && !tabMetas.classList.contains('hidden')) {
+    if (typeof _initMetasTab === 'function') _initMetasTab();
+  }
 }
 
 // ════════════════════════════════════════════
@@ -3382,26 +3388,24 @@ function _renderMetasGrid() {
   }
 }
 
-// Inicializar aba de metas quando clicada (lazy — injeta HTML na primeira vez)
-let _metasTabInited = false;
-document.addEventListener('click', function(e) {
-  const btn = e.target.closest('[data-tab="metas-admin"]');
-  if (!btn) return;
+// Inicializar aba de metas quando clicada (lazy — injeta HTML e atualiza coleções)
+function _initMetasTab() {
   const tab = document.getElementById('tab-metas-admin');
   if (!tab) return;
-  if (!_metasTabInited) {
-    _metasTabInited = true;
-    // Injeta a estrutura HTML da aba
-    const hist = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
-    const gK2 = (r,c) => Object.keys(r).find(k=>k.toUpperCase()===c)||c;
-    const colecoes = [...new Set(hist.map(r=>r[gK2(r,'COLECAO')]).filter(Boolean))].sort().reverse();
-    const colOpts = colecoes.map(c=>`<option value="${c}">${c}</option>`).join('');
+  const hist = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
+  const gK2 = (r,c) => Object.keys(r).find(k=>k.toUpperCase()===c)||c;
+  const colecoes = [...new Set(hist.map(r=>r[gK2(r,'COLECAO')]).filter(Boolean))].sort().reverse();
+
+  const colEl = document.getElementById('metasAdmin_col');
+  if (!colEl) {
+    // Primeira vez: injeta o HTML completo
+    const colOpts = colecoes.map(c=>`<option value="${c}">${c}</option>`).join('') || '<option value="">Carregando…</option>';
     tab.innerHTML = `
     <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--sidebar);flex-shrink:0">
         <label style="font-size:12px;color:var(--muted);font-weight:600">Coleção:</label>
         <select id="metasAdmin_col" style="font-family:var(--font);font-size:13px;font-weight:600;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 12px;outline:none;cursor:pointer">
-          ${colOpts || '<option value="">Sem dados</option>'}
+          ${colOpts}
         </select>
         <input id="metasAdmin_busca" type="text" placeholder="Buscar representante…" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;width:200px"/>
         <span style="flex:1"></span>
@@ -3411,8 +3415,19 @@ document.addEventListener('click', function(e) {
         <div id="metasAdmin_grid"></div>
       </div>
     </div>`;
+  } else if (colecoes.length > 0) {
+    // Já existe: atualizar o select se ainda estiver vazio/carregando
+    const curVal = colEl.value;
+    const newOpts = colecoes.map(c=>`<option value="${c}">${c}</option>`).join('');
+    colEl.innerHTML = newOpts;
+    if (curVal && colecoes.includes(curVal)) colEl.value = curVal;
   }
   setTimeout(_renderMetasGrid, 30);
+}
+
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('[data-tab="metas-admin"]');
+  if (btn) _initMetasTab();
 });
 // Também ligar eventos de change/input depois que o DOM existir
 document.addEventListener('change', function(e) {
