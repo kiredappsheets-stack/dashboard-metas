@@ -1370,10 +1370,31 @@ function renderDashboard(data) {
       document.head.appendChild(s);
     }
 
+    const legendaHtml = `
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 20px 10px;border-bottom:1px solid var(--border);font-size:11px">
+        <span style="color:var(--muted);font-weight:600;margin-right:4px">Legenda:</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
+          <span style="font-weight:600;color:var(--tx)">Atendidos</span> — clientes comprados nesta coleção
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
+          <span style="font-weight:600;color:var(--green)">Novos</span> — clientes que não compraram na coleção anterior
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
+          <span style="font-weight:600;color:#4C9EF1">Mantidos</span> — clientes que repetiram da coleção anterior
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
+          <span style="font-weight:600;color:var(--amber)">Não rep.</span> — clientes da coleção anterior que não repetiram
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
+          <span style="font-weight:600;color:#E84A4A">Ex-clientes</span> — clientes sem compra há 2 ou mais coleções
+        </span>
+      </div>`;
+
     let html = '<div style="padding:16px 20px 8px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">'
       + '<div style="font-size:15px;font-weight:700;color:var(--tx)">Gestão Comercial</div>'
       + '<div style="font-size:12px;color:var(--muted)">Coleção vigente: ' + colLabel + '</div>'
       + '</div>'
+      + legendaHtml
       + '<div style="overflow-y:auto;flex:1;padding:0 16px 24px;display:flex;flex-direction:column;gap:24px">';
 
     // ── Uma seção por marca ──
