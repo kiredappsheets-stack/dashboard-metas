@@ -323,10 +323,8 @@ SELECTCOLUMNS(
   "COLECAO", METAS[COLECAO],
   "NOME",    METAS[NOME],
   "META",    METAS[META],
-  "VENDA",   METAS[Soma de PEDIDO.FAT_LIQ],
-  "PCT",     METAS[%META]
+  "VENDA",   METAS[Soma de PEDIDO.FAT_LIQ]
 )
-ORDER BY METAS[COLECAO] DESC
 `;
 
 // Query para clientes ativos
@@ -2171,9 +2169,9 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v21';
+const CACHE_KEY = 'dashCache_v22';
 // Limpar versões antigas do cache
-try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14','dashCache_v15'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
+try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14','dashCache_v15','dashCache_v16','dashCache_v17','dashCache_v18','dashCache_v19','dashCache_v20','dashCache_v21'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
@@ -3435,7 +3433,7 @@ function _initMetasTab() {
         <input id="metasAdmin_busca" type="text" placeholder="Buscar representante…" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;width:200px"/>
         <span style="flex:1"></span>
         <span id="metasAdmin_status" style="font-size:11px;color:var(--muted)"></span>
-        <button onclick="localStorage.removeItem('dashCache_v21');location.reload()" style="font-family:var(--font);font-size:11px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:4px 10px;cursor:pointer" title="Limpar cache e recarregar">🔄 Atualizar dados</button>
+        <button onclick="localStorage.removeItem('dashCache_v22');location.reload()" style="font-family:var(--font);font-size:11px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:4px 10px;cursor:pointer" title="Limpar cache e recarregar">🔄 Atualizar dados</button>
       </div>
       <div style="flex:1;overflow:auto;padding:20px">
         <div id="metasAdmin_grid"></div>
