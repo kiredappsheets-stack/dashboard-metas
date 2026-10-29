@@ -1778,10 +1778,8 @@ function renderDashboard(data) {
         .ma-tbl-right th, .ma-tbl-right td { padding:7px 11px; border-bottom:1px solid var(--border); white-space:nowrap; }
         /* header esquerdo */
         .ma-tbl-left thead th { background:var(--sidebar); font-size:11px; font-weight:700; color:var(--tx); text-align:left; border-bottom:2px solid var(--border); }
-        /* header direito linha 1 (coleção) */
-        .ma-tbl-right thead tr:first-child th { background:var(--sidebar); font-size:11px; font-weight:700; color:var(--tx); text-align:center; border-bottom:1px solid var(--border); }
-        /* header direito linha 2 (sub) */
-        .ma-tbl-right thead tr:nth-child(2) th { background:var(--sidebar); font-size:10px; font-weight:600; color:var(--muted); text-align:right; border-bottom:2px solid var(--border); }
+        /* header direito */
+        .ma-tbl-right thead tr th { background:var(--sidebar); font-size:11px; font-weight:700; color:var(--tx); text-align:right; border-bottom:2px solid var(--border); }
         /* footer */
         .ma-tbl-left tfoot td, .ma-tbl-right tfoot td { background:var(--surface2)!important; border-top:2px solid var(--border); font-weight:700; }
         /* hover sincronizado via JS */
@@ -3369,12 +3367,11 @@ function _renderMetasGrid() {
   const gK   = (r,c) => Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c;
   const bc   = p => p>=100?'var(--green)':p>=70?'var(--amber)':'var(--red)';
 
-  // ---------- coleções (colunas) ----------
+  // ---------- coleções ----------
   const colecoesHist = [...new Set(hist.map(r=>r[gK(r,'COLECAO')]).filter(Boolean))];
   const colecoesData = (typeof cachedData !== 'undefined' && cachedData && cachedData.length)
     ? [...new Set(cachedData.map(d=>d.col).filter(Boolean))]
     : [];
-  // inclui coleções cadastradas localmente (futuras)
   const colecoesLocais = Object.keys(metasLocaisTodos);
   const colecoes = [...new Set([...colecoesHist,...colecoesData,...colecoesLocais])].sort().reverse();
 
@@ -3383,38 +3380,32 @@ function _renderMetasGrid() {
     return;
   }
 
-  // Coleções ativas = existem em cachedData OU são futuras (só local)
-  // Coleções passadas = só hist PBI, sem dados atuais
   const colecoesAtivas = new Set([...colecoesData, ...colecoesLocais]);
 
-  // ---------- índice hist[colecao][rep] = {meta, venda, marca} ----------
+  // ---------- índice hist[colecao][rep] = {meta, venda} ----------
   const histIdx = {};
   hist.forEach(r => {
-    const col   = r[gK(r,'COLECAO')];
-    const nom   = r[gK(r,'NOME')];
-    const m     = parseFloat(r[gK(r,'META')])||0;
-    const v     = parseFloat(r[gK(r,'VENDA')])||0;
+    const col = r[gK(r,'COLECAO')];
+    const nom = r[gK(r,'NOME')];
+    const m   = parseFloat(r[gK(r,'META')])||0;
+    const v   = parseFloat(r[gK(r,'VENDA')])||0;
     if (col && nom) {
       if (!histIdx[col]) histIdx[col]={};
       histIdx[col][nom]={meta:m,venda:v};
     }
   });
 
-  // ---------- representantes e marcas de cachedData ----------
-  // rep -> marca (usa a primeira marca encontrada para cada rep)
+  // ---------- rep -> marca ----------
   const repMarca = {};
   if (typeof cachedData !== 'undefined' && cachedData && cachedData.length) {
-    cachedData.forEach(d => {
-      if (d.rep && d.marca && !repMarca[d.rep]) repMarca[d.rep] = d.marca;
-    });
+    cachedData.forEach(d => { if (d.rep && d.marca && !repMarca[d.rep]) repMarca[d.rep] = d.marca; });
   }
-  // reps do hist que não têm marca em cachedData: sem marca definida
   hist.forEach(r => {
     const nom = r[gK(r,'NOME')];
     if (nom && !repMarca[nom]) repMarca[nom] = r[gK(r,'MARCA')] || '';
   });
 
-  // ---------- todos os reps, agrupados por marca ----------
+  // ---------- todos os reps ----------
   const repsHist   = [...new Set(hist.map(r=>r[gK(r,'NOME')]).filter(Boolean))];
   const repsData   = (typeof cachedData !== 'undefined' && cachedData && cachedData.length)
     ? [...new Set(cachedData.map(d=>d.rep).filter(Boolean))]
@@ -3428,7 +3419,7 @@ function _renderMetasGrid() {
     return;
   }
 
-  // Agrupa reps por marca, ordena marca A→Z e reps A→Z dentro
+  // ---------- agrupa reps por marca ----------
   const marcaMap = {};
   reps.forEach(rep => {
     const m = repMarca[rep] || '(Sem marca)';
@@ -3443,142 +3434,161 @@ function _renderMetasGrid() {
   });
   marcas.forEach(m => marcaMap[m].sort((a,b)=>a.localeCompare(b,'pt-BR')));
 
-  // ---------- header ----------
-  let thGroup = '';
-  let thSub   = '';
-  colecoes.forEach((c,i) => {
-    const sep = i===0 ? '' : 'ma-col-sep';
-    thGroup += `<th colspan="3" class="${sep}" style="text-align:center;padding:6px 8px;font-size:11px;white-space:nowrap;font-weight:700">${c}${colecoesAtivas.has(c) ? '' : ' <span style="font-size:9px;opacity:.5;font-weight:400">(hist)</span>'}</th>`;
-    thSub   += `<th class="ma-val ${sep}">Venda</th><th class="ma-edit-cell">Meta</th><th class="ma-pct-cell">%</th>`;
-  });
+  // ============================================================
+  // Renderiza um painel por COLEÇÃO (mesmo padrão de buildClientes por marca)
+  // ============================================================
+  let paineis = '';
 
-  // ---------- totais por coleção e por marca/coleção ----------
-  const totais = {};
-  colecoes.forEach(c => { totais[c]={venda:0,meta:0}; });
-  const totaisMarca = {};
-  marcas.forEach(m => { totaisMarca[m]={}; colecoes.forEach(c=>{ totaisMarca[m][c]={venda:0,meta:0}; }); });
+  colecoes.forEach(colecao => {
+    const ehAtiva = colecoesAtivas.has(colecao);
+    const acento  = ehAtiva ? 'var(--green)' : 'var(--blue)';
 
-  // ---------- build body: duas listas paralelas (esquerda=nomes, direita=dados) ----------
-  let tbodyL = ''; // tabela esquerda (nomes)
-  let tbodyR = ''; // tabela direita  (dados)
+    // Totais gerais desta coleção
+    let totalVenda = 0, totalMeta = 0;
 
-  marcas.forEach(marca => {
-    const repsM = marcaMap[marca];
-    const ncols = colecoes.length * 3;
+    // ---------- split-panel: tabelas paralelas por coleção ----------
+    let tbodyL = '';
+    let tbodyR = '';
 
-    // Linha de cabeçalho de marca
-    tbodyL += `<tr class="ma-marca-row"><td class="ma-nome-cell">${marca}</td></tr>`;
-    tbodyR += `<tr class="ma-marca-row"><td colspan="${ncols}" style="padding:5px 11px">&nbsp;</td></tr>`;
+    marcas.forEach(marca => {
+      const repsM = marcaMap[marca];
+      const isMY  = marca.toUpperCase().includes('MYROCK');
+      const acentoMarca = isMY ? 'var(--green)' : 'var(--blue)';
 
-    // Linhas de reps
-    repsM.forEach(rep => {
-      const repEsc = rep.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-      let cells = '';
-      colecoes.forEach((c,i) => {
-        const h        = (histIdx[c]||{})[rep]||{meta:0,venda:0};
-        const metaLoc  = (metasLocaisTodos[c]||{})[rep]!=null ? (metasLocaisTodos[c]||{})[rep] : null;
+      let marcaVenda = 0, marcaMeta = 0;
+      let rowsL = '', rowsR = '';
+
+      repsM.forEach(rep => {
+        const h        = (histIdx[colecao]||{})[rep]||{meta:0,venda:0};
+        const metaLoc  = (metasLocaisTodos[colecao]||{})[rep]!=null ? (metasLocaisTodos[colecao]||{})[rep] : null;
         const metaVig  = metaLoc!=null ? metaLoc : h.meta;
-        const colEsc   = c.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+        const colEsc   = colecao.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+        const repEsc   = rep.replace(/'/g,"\\'").replace(/"/g,'&quot;');
         const p        = pct(h.venda, metaVig);
         const cor      = bc(p);
-        const sep      = i===0 ? '' : 'ma-col-sep';
-        totais[c].venda         += h.venda;
-        totais[c].meta          += metaVig;
-        totaisMarca[marca][c].venda += h.venda;
-        totaisMarca[marca][c].meta  += metaVig;
+        marcaVenda    += h.venda;
+        marcaMeta     += metaVig;
 
-        // Todas as coleções são editáveis — clique no lápis abre inline input
-        const editado = metaLoc != null;
+        const editado  = metaLoc != null;
         const metaDisp = fmt(metaVig);
-        const iv = metaVig > 0 ? metaVig : '';
+        const iv       = metaVig > 0 ? metaVig : '';
         const metaCell = `<td class="ma-edit-cell">
-          <div class="ma-inline-wrap" id="maw-${encodeURIComponent(c+'\x00'+rep)}">
+          <div class="ma-inline-wrap" id="maw-${encodeURIComponent(colecao+'\x00'+rep)}">
             <span class="ma-val-disp${editado?' ma-val-editado':''}" style="cursor:default">${metaDisp}</span>
             <button class="ma-edit-btn" title="Editar meta"
               onclick="window._iniciarEditMeta(this,'${colEsc}','${repEsc}',${iv||0})">✎</button>
           </div></td>`;
-        cells += `<td class="ma-val ${sep}">${fmt(h.venda)}</td>${metaCell}<td class="ma-pct-cell">
-          <div class="ma-bar-wrap"><div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
-          <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
+        rowsL += `<tr class="metas-row"><td class="ma-nome-cell">${rep}</td></tr>`;
+        rowsR += `<tr class="metas-row">
+          <td class="ma-val">${fmt(h.venda)}</td>${metaCell}
+          <td class="ma-pct-cell"><div class="ma-bar-wrap">
+            <div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
+            <span class="ma-pct-label" style="color:${cor}">${p}%</span>
+          </div></td></tr>`;
       });
-      tbodyL += `<tr class="metas-row"><td class="ma-nome-cell">${rep}</td></tr>`;
-      tbodyR += `<tr class="metas-row">${cells}</tr>`;
+
+      totalVenda += marcaVenda;
+      totalMeta  += marcaMeta;
+
+      const pm  = pct(marcaVenda, marcaMeta);
+      const cor = bc(pm);
+
+      // Linha cabeçalho de marca
+      tbodyL += `<tr class="ma-marca-row"><td class="ma-nome-cell">${marca}</td></tr>`;
+      tbodyR += `<tr class="ma-marca-row"><td colspan="3" style="padding:5px 11px">&nbsp;</td></tr>`;
+      tbodyL += rowsL;
+      tbodyR += rowsR;
+      // Sub-total de marca
+      tbodyL += `<tr class="metas-row" style="background:rgba(76,158,241,.04)!important"><td class="ma-nome-cell" style="color:${acentoMarca};font-size:11px">Total ${marca}</td></tr>`;
+      tbodyR += `<tr class="metas-row" style="background:rgba(76,158,241,.04)!important">
+        <td class="ma-val" style="color:var(--tx)">${fmt(marcaVenda)}</td>
+        <td class="ma-edit-cell" style="color:var(--tx)">${fmt(marcaMeta)}</td>
+        <td class="ma-pct-cell"><div class="ma-bar-wrap">
+          <div class="ma-bar" style="width:${Math.min(pm,100)}%;background:${cor}"></div>
+          <span class="ma-pct-label" style="color:${cor}">${pm}%</span>
+        </div></td></tr>`;
     });
 
-    // Sub-total da marca
-    let subCells = '';
-    colecoes.forEach((c,i) => {
-      const tm = totaisMarca[marca][c];
-      const p  = pct(tm.venda, tm.meta);
-      const cor = bc(p);
-      const sep = i===0 ? '' : 'ma-col-sep';
-      subCells += `<td class="ma-val ${sep}" style="color:var(--tx)">${fmt(tm.venda)}</td>
-        <td class="ma-edit-cell" style="color:var(--tx)">${fmt(tm.meta)}</td>
-        <td class="ma-pct-cell"><div class="ma-bar-wrap"><div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
-        <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
-    });
-    tbodyL += `<tr class="metas-row" style="background:rgba(76,158,241,.04)!important"><td class="ma-nome-cell" style="color:#4C9EF1;font-size:11px">Total ${marca}</td></tr>`;
-    tbodyR += `<tr class="metas-row" style="background:rgba(76,158,241,.04)!important">${subCells}</tr>`;
+    const pt  = pct(totalVenda, totalMeta);
+    const corT = bc(pt);
+
+    const histTag = !ehAtiva ? ' <span style="font-size:10px;font-weight:400;opacity:.5;margin-left:4px">(histórico)</span>' : '';
+    const countReps = reps.filter(r => {
+      const h = (histIdx[colecao]||{})[r]||{meta:0,venda:0};
+      const ml = (metasLocaisTodos[colecao]||{})[r];
+      return h.meta>0 || h.venda>0 || ml!=null;
+    }).length;
+
+    paineis += `
+    <div style="margin-bottom:24px">
+      <div style="font-size:13px;font-weight:700;padding:9px 14px;background:var(--surface2);border-radius:8px;border-left:3px solid ${acento};margin-bottom:10px;display:flex;align-items:center;gap:10px">
+        <span style="color:var(--tx)">${colecao}${histTag}</span>
+        <span style="font-size:11px;font-weight:400;color:var(--muted)">${countReps} rep${countReps!==1?'s':''}</span>
+        <span style="margin-left:auto;font-size:11px;display:flex;align-items:center;gap:8px">
+          <span style="color:var(--muted)">Venda: <strong style="color:var(--tx)">${fmt(totalVenda)}</strong></span>
+          <span style="color:var(--muted)">Meta: <strong style="color:var(--tx)">${fmt(totalMeta)}</strong></span>
+          <span style="font-weight:700;color:${corT}">${pt}%</span>
+        </span>
+      </div>
+      <div class="ma-split" style="max-height:420px;border:1px solid var(--border);border-radius:6px;overflow:hidden" data-panel="${encodeURIComponent(colecao)}">
+        <div class="ma-left">
+          <table class="ma-tbl-left">
+            <thead><tr><th class="ma-nome-cell" style="padding:6px 11px">Representante</th></tr></thead>
+            <tbody>${tbodyL}</tbody>
+            <tfoot><tr><td class="ma-nome-cell" style="font-weight:700">Total geral</td></tr></tfoot>
+          </table>
+        </div>
+        <div class="ma-right">
+          <table class="ma-tbl-right" style="min-width:max-content;width:100%">
+            <thead><tr>
+              <th class="ma-val">Venda</th>
+              <th class="ma-edit-cell">Meta</th>
+              <th class="ma-pct-cell">%</th>
+            </tr></thead>
+            <tbody>${tbodyR}</tbody>
+            <tfoot><tr>
+              <td class="ma-val">${fmt(totalVenda)}</td>
+              <td class="ma-edit-cell">${fmt(totalMeta)}</td>
+              <td class="ma-pct-cell"><div class="ma-bar-wrap">
+                <div class="ma-bar" style="width:${Math.min(pt,100)}%;background:${corT}"></div>
+                <span class="ma-pct-label" style="color:${corT}">${pt}%</span>
+              </div></td>
+            </tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>`;
   });
 
-  // ---------- totais gerais (footer) ----------
-  let footCells = '';
-  colecoes.forEach((c,i) => {
-    const p  = pct(totais[c].venda, totais[c].meta);
-    const cor = bc(p);
-    const sep = i===0 ? '' : 'ma-col-sep';
-    footCells += `<td class="ma-val ${sep}">${fmt(totais[c].venda)}</td>
-      <td class="ma-edit-cell">${fmt(totais[c].meta)}</td>
-      <td class="ma-pct-cell"><div class="ma-bar-wrap"><div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
-      <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
-  });
-
-  // Renderiza layout split: tabela-nome | tabela-dados
-  gridEl.innerHTML = `
-  <div class="ma-split">
-    <div class="ma-left">
-      <table class="ma-tbl-left">
-        <thead><tr><th class="ma-nome-cell" style="height:54px;vertical-align:bottom;padding-bottom:8px">Representante</th></tr></thead>
-        <tbody>${tbodyL}</tbody>
-        <tfoot><tr><td class="ma-nome-cell" style="font-weight:700;background:var(--surface2)!important;border-top:2px solid var(--border)">Total geral</td></tr></tfoot>
-      </table>
-    </div>
-    <div class="ma-right">
-      <table class="ma-tbl-right" style="min-width:max-content">
-        <thead><tr>${thGroup}</tr><tr>${thSub}</tr></thead>
-        <tbody>${tbodyR}</tbody>
-        <tfoot><tr>${footCells}</tr></tfoot>
-      </table>
-    </div>
-  </div>`;
+  gridEl.innerHTML = `<div style="padding:12px 4px">${paineis}</div>`;
 
   if (statEl) {
     const locCount = Object.values(metasLocaisTodos).reduce((acc,obj)=>acc+Object.keys(obj).length,0);
     statEl.textContent = locCount > 0 ? `${locCount} meta${locCount!==1?'s':''} editada${locCount!==1?'s':''} localmente` : '';
   }
 
-  // Sincronizar scroll vertical entre left e right
-  const maLeft  = gridEl.querySelector('.ma-left');
-  const maRight = gridEl.querySelector('.ma-right');
-  if (maLeft && maRight) {
-    maRight.addEventListener('scroll', () => { maLeft.scrollTop = maRight.scrollTop; }, {passive:true});
-    maLeft.addEventListener('scroll',  () => { maRight.scrollTop = maLeft.scrollTop; }, {passive:true});
-  }
-
-  // Hover sincronizado: highlight na linha correspondente em ambas as tabelas
-  const allRowsL = gridEl.querySelectorAll('.ma-tbl-left  tbody tr');
-  const allRowsR = gridEl.querySelectorAll('.ma-tbl-right tbody tr');
-  const syncHover = (rowL, rowR, on) => {
-    if (rowL) rowL.classList.toggle('ma-row-hover', on);
-    if (rowR) rowR.classList.toggle('ma-row-hover', on);
-  };
-  allRowsL.forEach((r, i) => {
-    r.addEventListener('mouseenter', () => syncHover(r, allRowsR[i], true));
-    r.addEventListener('mouseleave', () => syncHover(r, allRowsR[i], false));
-  });
-  allRowsR.forEach((r, i) => {
-    r.addEventListener('mouseenter', () => syncHover(allRowsL[i], r, true));
-    r.addEventListener('mouseleave', () => syncHover(allRowsL[i], r, false));
+  // Sincronizar scroll vertical e hover em cada painel individualmente
+  gridEl.querySelectorAll('[data-panel]').forEach(panel => {
+    const maLeft  = panel.querySelector('.ma-left');
+    const maRight = panel.querySelector('.ma-right');
+    if (maLeft && maRight) {
+      maRight.addEventListener('scroll', () => { maLeft.scrollTop = maRight.scrollTop; }, {passive:true});
+      maLeft.addEventListener('scroll',  () => { maRight.scrollTop = maLeft.scrollTop; }, {passive:true});
+    }
+    const allRowsL = panel.querySelectorAll('.ma-tbl-left  tbody tr');
+    const allRowsR = panel.querySelectorAll('.ma-tbl-right tbody tr');
+    const syncHover = (rowL, rowR, on) => {
+      if (rowL) rowL.classList.toggle('ma-row-hover', on);
+      if (rowR) rowR.classList.toggle('ma-row-hover', on);
+    };
+    allRowsL.forEach((r, i) => {
+      r.addEventListener('mouseenter', () => syncHover(r, allRowsR[i], true));
+      r.addEventListener('mouseleave', () => syncHover(r, allRowsR[i], false));
+    });
+    allRowsR.forEach((r, i) => {
+      r.addEventListener('mouseenter', () => syncHover(allRowsL[i], r, true));
+      r.addEventListener('mouseleave', () => syncHover(allRowsL[i], r, false));
+    });
   });
 }
 
