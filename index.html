@@ -1310,15 +1310,22 @@ function renderDashboard(data) {
 
     // Preencher metas por marca a partir de cachedData:
     // cachedData tem d.col = nome da coleção (ex: "69-INVERNO 2027 MY ROCK")
-    // Extraímos a marca do campo d.col cruzando com as marcas disponíveis nos gcRows
-    // Primeiro coletamos todas as marcas dos gcRows para saber quais existem
-    const marcasConhecidas = [...new Set((gcRows||[]).map(r => String(gV(r,'MARCA')||'').trim()).filter(Boolean))];
+    // Marcas conhecidas vêm dos gcRows; se gcRows ainda não carregou, extrai do nome da coleção
+    const marcasDeGcRows = [...new Set((gcRows||[]).map(r => String(gV(r,'MARCA')||'').trim()).filter(Boolean))];
 
     (cachedData||[]).forEach(d => {
       if (!d.rep || !d.col) return;
-      // Identificar a marca desta coleção: busca a marca cujo nome aparece no nome da coleção
-      const marcaDaCol = marcasConhecidas.find(m => d.col.toUpperCase().includes(m.toUpperCase())) || null;
-      if (!marcaDaCol) return;
+      let marcaDaCol = null;
+      if (marcasDeGcRows.length) {
+        // Cruza com marcas do Power BI (mais preciso)
+        marcaDaCol = marcasDeGcRows.find(m => d.col.toUpperCase().includes(m.toUpperCase())) || null;
+      }
+      if (!marcaDaCol) {
+        // Fallback: extrai última palavra(s) do nome da coleção como marca
+        // Ex: "69-INVERNO 2027 MY ROCK" → palavra após o ano
+        const m = d.col.match(/\d{4}\s+(.+)$/);
+        marcaDaCol = m ? m[1].trim() : d.col;
+      }
       if (!repMetaPorMarca[marcaDaCol]) repMetaPorMarca[marcaDaCol] = {};
       if (!repMetaPorMarca[marcaDaCol][d.rep]) repMetaPorMarca[marcaDaCol][d.rep] = 0;
       repMetaPorMarca[marcaDaCol][d.rep] += d.meta;
@@ -1888,7 +1895,7 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v17';
+const CACHE_KEY = 'dashCache_v18';
 // Limpar versões antigas do cache
 try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14','dashCache_v15'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
