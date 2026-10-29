@@ -1985,6 +1985,7 @@ function renderDashboard(data) {
             <thead><tr>
               <th class="col-nome" style="text-align:left">Cliente</th>
               <th class="col-status">Status</th>
+              <th class="col-crm" title="CRM">💬</th>
               ${cols.map(col=>`<th class="col-val" style="max-width:100px;white-space:normal;line-height:1.3">${colLabel(col)}</th>`).join('')}
               <th class="col-total" style="min-width:110px">Total</th>
             </tr></thead><tbody>`;
@@ -2014,6 +2015,7 @@ function renderDashboard(data) {
           html += `<tr class="rep-row">
             <td class="col-nome"><span class="${repLabelClass}">${repNomeHtml}<span class="rep-badge">${cliDoRep.length} cliente${cliDoRep.length!==1?'s':''}</span></span></td>
             <td class="col-status"></td>
+            <td class="col-crm"></td>
             ${subColsHtml}
             <td class="col-total rep-sub-total" style="color:${acento}">${fmt(subGeral)}</td>
           </tr>`;
@@ -2034,7 +2036,8 @@ function renderDashboard(data) {
                 ${cli.nome}
                 ${loc ? `<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:1px;overflow:hidden;text-overflow:ellipsis">${loc}</span>` : ''}
               </td>
-              <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span></td>`;
+              <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span></td>
+              <td class="col-crm">${crm ? (() => { const crmEstado = getCrmEstado(cod); const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : crmEstado === 'financeiro' ? ' crm-financeiro' : ''; const dtRet = crm.dtRetorno ? crm.dtRetorno.split('T')[0] : (crm.data ? crm.data.split(' ')[0] : ''); const info = encodeURIComponent(JSON.stringify({nome:cli.nome, dtRet, obs:crm.obs||'', dtReg:crm.data?crm.data.split(' ')[0]:'', tipo:crm.colecaoCrm?'retorno':'justif'})); return `<span class="crm-icon${crmClass}" data-cod="${cod}" data-info="${info}" onclick="abrirCrmPopup(this,event)">💬</span>`; })() : ''}</td>`;
             cols.forEach((col,ci) => {
               const v = dm[col]||0;
               totCols[ci] += v;
@@ -2042,27 +2045,14 @@ function renderDashboard(data) {
               const heat = maxVal>0&&v>0 ? Math.round((v/maxVal)*100) : 0;
               const alpha = heat>0 ? (0.08+heat/100*0.55).toFixed(2) : '0';
               const style = v>0 ? `background:rgba(${bgRgb},${alpha});color:${heat>60?'#fff':'var(--tx)'}` : 'color:var(--hint)';
-              // Ícone CRM: mostrar na coluna da coleção correspondente ao DT_RETORNO
-              let crmIcon = '';
-              const crmEstado = getCrmEstado(cod);
-              const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : crmEstado === 'financeiro' ? ' crm-financeiro' : '';
-              if (crm && crm.colecaoCrm && crm.colecaoCrm === col) {
-                const dtRet = crm.dtRetorno ? crm.dtRetorno.split('T')[0] : (crm.data ? crm.data.split(' ')[0] : '');
-                const info = encodeURIComponent(JSON.stringify({nome:cli.nome, dtRet, obs:crm.obs||'', dtReg:crm.data?crm.data.split(' ')[0]:'', tipo:'retorno'}));
-                crmIcon = `<span class="crm-icon${crmClass}" data-cod="${cod}" data-info="${info}" onclick="abrirCrmPopup(this,event)">💬</span>`;
-              } else if (crm && !crm.colecaoCrm && ci === cols.length-1) {
-                const dtRet = crm.dtRetorno ? crm.dtRetorno.split('T')[0] : '';
-                const info = encodeURIComponent(JSON.stringify({nome:cli.nome, dtRet, obs:crm.obs||'', dtReg:crm.data?crm.data.split(' ')[0]:'', tipo:'justif'}));
-                crmIcon = `<span class="crm-icon${crmClass}" data-cod="${cod}" data-info="${info}" onclick="abrirCrmPopup(this,event)">💬</span>`;
-              }
-              html += `<td class="col-val" style="${style}">${fmt(v)}${crmIcon}</td>`;
+              html += `<td class="col-val" style="${style}">${fmt(v)}</td>`;
             });
             html += `<td class="col-total" style="color:${acento}">${fmt(totalCli)}</td></tr>`;
           });
 
         });
 
-        html += `<tr class="tbl-foot"><td class="col-nome">Total</td><td class="col-status"></td>`;
+        html += `<tr class="tbl-foot"><td class="col-nome">Total</td><td class="col-status"></td><td class="col-crm"></td>`;
         totCols.forEach(t=>{ html+=`<td class="col-val">${fmt(t)}</td>`; });
         html += `<td class="col-total">${fmt(totGeral)}</td></tr>`;
         html += `</tbody></table></div></div>`;
