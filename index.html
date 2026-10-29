@@ -1646,12 +1646,27 @@ function renderDashboard(data) {
       });
     }
 
+    // Determinar rep da última coleção por cliente (independente de marca)
+    // cachedClientes2 já vem ordenado por COLECAO ASC, então a última linha é a mais recente
+    const repUltimaVenda = {}; // cod -> rep
+    const nomeUltimaVenda = {}; // cod -> nome
+    cachedClientes2.forEach(r => {
+      const cod  = String(gV(r,'CODCLI')||'');
+      const rep  = String(gV(r,'REP')||'');
+      const nome = String(gV(r,'CLIENTE')||cod);
+      const col  = String(gV(r,'COLECAO')||'');
+      if (!cod || !col) return;
+      // Sobrescreve sempre — como vem ordenado por COLECAO ASC, o último é o mais recente
+      repUltimaVenda[cod] = rep;
+      nomeUltimaVenda[cod] = nome;
+    });
+
     // Indexar: porCliente[cod] = { nome, rep, cidade, estado, marcas:{ marca:{ col: valor } } }
     const porCliente = {};
     cachedClientes2.forEach(r => {
       const cod    = String(gV(r,'CODCLI')||'');
-      const nome   = String(gV(r,'CLIENTE')||cod);
-      const rep    = String(gV(r,'REP')||'');
+      const nome   = nomeUltimaVenda[cod] || String(gV(r,'CLIENTE')||cod);
+      const rep    = repUltimaVenda[cod]  || String(gV(r,'REP')||'');
       const marca  = String(gV(r,'MARCA')||'');
       const col    = String(gV(r,'COLECAO')||'');
       const venda  = parseFloat(gV(r,'VENDA')||0)||0;
