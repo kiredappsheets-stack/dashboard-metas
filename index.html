@@ -1867,8 +1867,8 @@ function renderDashboard(data) {
         .crm-col-icon.crm-financeiro { background:rgba(232,74,74,.5);  box-shadow:0 0 0 1.5px var(--red); }
 
         /* Popup CRM (substituindo hover por click) */
-        .crm-popup { display:none; position:fixed; z-index:99999; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:0; width:320px; box-shadow:0 8px 40px rgba(0,0,0,.6); text-align:left; overflow:hidden; }
-        .crm-popup.open { display:block; }
+        .crm-popup { position:fixed; z-index:99999; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:0; width:320px; box-shadow:0 8px 40px rgba(0,0,0,.6); text-align:left; overflow:hidden; }
+        .crm-popup.open { display:block!important; }
         .crm-popup-header { background:var(--surface2); padding:12px 14px 10px; border-bottom:1px solid var(--border); }
         .crm-popup-header strong { color:var(--amber); font-size:10px; text-transform:uppercase; letter-spacing:.07em; display:block; margin-bottom:3px; }
         .crm-popup-header .crm-cliente { font-size:13px; font-weight:600; color:var(--tx); }
@@ -3215,7 +3215,7 @@ function speakResponse(text) {
 </div>
 
 <!-- ===== POPUP CRM LOCAL ===== -->
-<div id="crmPopup" class="crm-popup" role="dialog" aria-modal="true" style="width:420px">
+<div id="crmPopup" class="crm-popup" role="dialog" aria-modal="true" style="width:420px;display:none">
   <div class="crm-popup-header" style="display:flex;align-items:center;justify-content:space-between">
     <div>
       <strong id="crmPopupLabel" style="color:var(--amber);font-size:10px;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:3px">CRM</strong>
