@@ -318,12 +318,12 @@ ORDER BY METAS[COLECAO] DESC
 // Metas de TODAS as coleções (histórico)
 const DAX_METAS_HIST = `
 EVALUATE
-SUMMARIZECOLUMNS(
-  METAS[COLECAO],
-  METAS[NOME],
-  "META",  SUM(METAS[META]),
-  "VENDA", SUMX(METAS, METAS[VENDA]),
-  "PCT",   CALCULATE(AVERAGE(METAS[%META]))
+SELECTCOLUMNS(
+  METAS,
+  "COLECAO", METAS[COLECAO],
+  "NOME",    METAS[NOME],
+  "META",    METAS[META],
+  "VENDA",   METAS[VENDA]
 )
 ORDER BY METAS[COLECAO] DESC
 `;
@@ -3308,7 +3308,7 @@ function _renderMetasGrid() {
   const fmt = v => v>0 ? 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
   const pct = (v,m) => !m ? 0 : Math.min(Math.round(v/m*100), 999);
 
-  const gK = (r,c) => Object.keys(r).find(k=>k.toUpperCase()===c)||c;
+  const gK = (r,c) => Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c;
 
   const rowsHist = hist.filter(r => r[gK(r,'COLECAO')] === col);
   const repsHist = [...new Set(rowsHist.map(r=>r[gK(r,'NOME')]).filter(Boolean))];
@@ -3399,7 +3399,7 @@ function _initMetasTab() {
   const tab = document.getElementById('tab-metas-admin');
   if (!tab) return;
   const hist = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
-  const gK2 = (r,c) => Object.keys(r).find(k=>k.toUpperCase()===c)||c;
+  const gK2 = (r,c) => Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c;
 
   // Coleções do histórico Power BI
   const colecoesHist = [...new Set(hist.map(r=>r[gK2(r,'COLECAO')]).filter(Boolean))];
