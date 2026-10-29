@@ -1305,16 +1305,26 @@ function renderDashboard(data) {
     const colorPct = p => p >= 1 ? 'var(--green)' : p >= 0.5 ? '#4C9EF1' : p > 0 ? 'var(--amber)' : '#E84A4A';
 
     // ── Montar índice: marcaMap[marca][rep] = { pecas, pedidos, clisA, venda, codRep, uf } ──
-    const marcaMap = {};   // marca -> rep -> agregado
-    const repMeta  = {};   // rep -> meta total
+    const marcaMap = {};          // marca -> rep -> agregado de vendas
+    const repMetaPorMarca = {};   // marca -> rep -> meta (da coleção vigente desta marca)
 
-    // Preencher metas
+    // Preencher metas por marca a partir de cachedData:
+    // cachedData tem d.col = nome da coleção (ex: "69-INVERNO 2027 MY ROCK")
+    // Extraímos a marca do campo d.col cruzando com as marcas disponíveis nos gcRows
+    // Primeiro coletamos todas as marcas dos gcRows para saber quais existem
+    const marcasConhecidas = [...new Set((gcRows||[]).map(r => String(gV(r,'MARCA')||'').trim()).filter(Boolean))];
+
     (cachedData||[]).forEach(d => {
-      if (!repMeta[d.rep]) repMeta[d.rep] = 0;
-      repMeta[d.rep] += d.meta;
+      if (!d.rep || !d.col) return;
+      // Identificar a marca desta coleção: busca a marca cujo nome aparece no nome da coleção
+      const marcaDaCol = marcasConhecidas.find(m => d.col.toUpperCase().includes(m.toUpperCase())) || null;
+      if (!marcaDaCol) return;
+      if (!repMetaPorMarca[marcaDaCol]) repMetaPorMarca[marcaDaCol] = {};
+      if (!repMetaPorMarca[marcaDaCol][d.rep]) repMetaPorMarca[marcaDaCol][d.rep] = 0;
+      repMetaPorMarca[marcaDaCol][d.rep] += d.meta;
     });
 
-    // Preencher vendas por marca+rep
+    // Preencher vendas por marca+rep (gcRows = dados Power BI por REP+MARCA)
     if (gcRows && gcRows.length) {
       gcRows.forEach(r => {
         const rep    = String(gV(r,'REP')||'').trim();
@@ -1341,9 +1351,6 @@ function renderDashboard(data) {
       const vB = Object.values(marcaMap[b]).reduce((s,r)=>s+r.venda,0);
       return vB - vA;
     });
-
-    // Todos os reps com meta (para incluir quem não vendeu)
-    const todosRepsComMeta = Object.keys(repMeta);
 
     // CSS das seções (injetado uma vez)
     if (!document.getElementById('gc-css')) {
@@ -1373,22 +1380,25 @@ function renderDashboard(data) {
       const isMY  = marca.toUpperCase().includes('MYROCK');
       const acento = isMY ? 'var(--green)' : 'var(--blue)';
 
-      // Reps com venda nesta marca, ordenados por venda desc
+      // Metas desta marca por rep (só reps com meta nesta marca/coleção)
+      const metaDestaMarca = repMetaPorMarca[marca] || {};
+
+      // Reps com venda nesta marca
       let repRows = Object.entries(repsNaMarca).map(([rep, rd]) => {
-        const meta    = repMeta[rep] || 0;
-        const pct     = meta > 0 ? rd.venda / meta : 0;
-        const st      = repStats[rep] || { novos:0, mantidos:0, exClientes:0, valorNovos:0 };
-        const pcPed   = rd.pedidos > 0 ? rd.pecas / rd.pedidos : 0;
-        const pedMed  = rd.clisA > 0 ? rd.venda / rd.clisA : 0;
-        const naoRep  = Math.max(0, st.mantidos - st.novos);
+        const meta   = metaDestaMarca[rep] || 0;
+        const pct    = meta > 0 ? rd.venda / meta : 0;
+        const st     = repStats[rep] || { novos:0, mantidos:0, exClientes:0, valorNovos:0 };
+        const pcPed  = rd.pedidos > 0 ? rd.pecas / rd.pedidos : 0;
+        const pedMed = rd.clisA > 0 ? rd.venda / rd.clisA : 0;
+        const naoRep = Math.max(0, st.mantidos - st.novos);
         return { rep, ...rd, meta, pct, pcPed, pedMed, naoRep,
                  novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, valorNovos: st.valorNovos };
       }).sort((a,b) => b.venda - a.venda);
 
-      // Adicionar reps com meta mas sem venda nesta marca
-      todosRepsComMeta.forEach(rep => {
-        if (repsNaMarca[rep]) return; // já está
-        const meta = repMeta[rep] || 0;
+      // Adicionar reps com meta nesta marca mas sem venda (mesmo critério da Visão Geral)
+      Object.keys(metaDestaMarca).forEach(rep => {
+        if (repsNaMarca[rep]) return; // já tem venda, já está na lista
+        const meta = metaDestaMarca[rep] || 0;
         const st   = repStats[rep] || { novos:0, mantidos:0, exClientes:0, valorNovos:0 };
         repRows.push({ rep, codRep: ufPorRep[rep]?.cod||'', uf: ufPorRep[rep]?.uf||'',
                        pecas:0, pedidos:0, clisA:0, venda:0, meta, pct:0, pcPed:0, pedMed:0,
