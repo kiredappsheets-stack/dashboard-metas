@@ -1844,7 +1844,7 @@ function renderDashboard(data) {
         .cli-tbl thead .col-nome { z-index:4; background:var(--sidebar); }
         .cli-tbl .col-status { position:sticky; left:240px; z-index:1; background:var(--surface); min-width:105px; text-align:center; }
         .cli-tbl thead .col-status { z-index:3; background:var(--sidebar); }
-        .cli-tbl .col-crm { position:sticky; left:345px; z-index:10; background:var(--surface); width:36px; text-align:center; pointer-events:all; }
+        .cli-tbl .col-crm { position:sticky; left:345px; z-index:10; background:var(--surface); width:46px; text-align:center; pointer-events:all; }
         .cli-tbl thead .col-crm { z-index:12; background:var(--sidebar); }
         .cli-tbl tbody tr:nth-child(even) .col-nome,
         .cli-tbl tbody tr:nth-child(even) .col-status,
@@ -1854,11 +1854,11 @@ function renderDashboard(data) {
         .cli-tbl .tbl-foot td { background:var(--sidebar)!important; font-weight:700; color:var(--muted); position:sticky; bottom:0; }
         .cli-tbl .tbl-foot .col-nome,
         .cli-tbl .tbl-foot .col-status { background:var(--sidebar)!important; z-index:3; }
-        .crm-icon { display:inline-flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; position:relative; width:22px; height:22px; border-radius:50%; transition:filter .15s; vertical-align:middle; margin-left:5px; }
-        .crm-icon:hover { filter:brightness(1.3); }
-        .crm-icon.crm-validado   { background:rgba(0,200,150,.45); box-shadow:0 0 0 2px var(--green); }
-        .crm-icon.crm-recusado   { background:rgba(245,166,35,.45); box-shadow:0 0 0 2px var(--amber); }
-        .crm-icon.crm-financeiro { background:rgba(232,74,74,.45);  box-shadow:0 0 0 2px var(--red); }
+        .crm-icon { display:inline-flex; align-items:center; justify-content:center; cursor:pointer; font-size:9px; font-weight:700; letter-spacing:.03em; position:relative; width:28px; height:18px; border-radius:4px; border:none; transition:opacity .15s, transform .1s; vertical-align:middle; background:var(--surface2); color:var(--muted); border:1px solid var(--border); font-family:var(--font); }
+        .crm-icon:hover { opacity:.85; transform:scale(1.06); }
+        .crm-icon.crm-validado   { background:rgba(0,200,150,.2); color:var(--green); border-color:var(--green); }
+        .crm-icon.crm-recusado   { background:rgba(245,166,35,.2); color:var(--amber); border-color:var(--amber); }
+        .crm-icon.crm-financeiro { background:rgba(232,74,74,.2);  color:var(--red);   border-color:var(--red); }
         /* Ícone CRM mini dentro das células de coleção */
         .crm-col-icon { display:inline-flex; align-items:center; justify-content:center; cursor:pointer; font-size:10px; width:14px; height:14px; border-radius:50%; vertical-align:middle; margin-left:5px; flex-shrink:0; transition:filter .15s; }
         .crm-col-icon:hover { filter:brightness(1.4); transform:scale(1.15); }
@@ -2044,7 +2044,7 @@ function renderDashboard(data) {
                 ${loc ? `<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:1px;overflow:hidden;text-overflow:ellipsis">${loc}</span>` : ''}
               </td>
               <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span></td>
-              <td class="col-crm">${(() => { const crmEstado = getCrmEstado(cod); const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : crmEstado === 'financeiro' ? ' crm-financeiro' : ''; return `<span class="crm-icon${crmClass}" data-cod="${cod}" data-nome="${cli.nome.replace(/"/g,'&quot;')}">💬</span>`; })()}</td>`;
+              <td class="col-crm">${(() => { const crmEstado = getCrmEstado(cod); const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : crmEstado === 'financeiro' ? ' crm-financeiro' : ''; return `<button class="crm-icon${crmClass}" data-cod="${cod}" data-nome="${cli.nome.replace(/"/g,'&quot;')}">CRM</button>`; })()}</td>`;
             const crmEventosCli = getCrmEventos(cod);
             cols.forEach((col,ci) => {
               const v = dm[col]||0;
