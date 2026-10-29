@@ -1778,8 +1778,10 @@ function renderDashboard(data) {
         .ma-tbl-right th, .ma-tbl-right td { padding:7px 11px; border-bottom:1px solid var(--border); white-space:nowrap; }
         /* header esquerdo */
         .ma-tbl-left thead th { background:var(--sidebar); font-size:11px; font-weight:700; color:var(--tx); text-align:left; border-bottom:2px solid var(--border); }
-        /* header direito */
-        .ma-tbl-right thead tr th { background:var(--sidebar); font-size:11px; font-weight:700; color:var(--tx); text-align:right; border-bottom:2px solid var(--border); }
+        /* header direito linha 1 (coleção) */
+        .ma-tbl-right thead tr:first-child th { background:var(--sidebar); font-size:11px; font-weight:700; color:var(--tx); text-align:center; border-bottom:1px solid var(--border); }
+        /* header direito linha 2 (sub) */
+        .ma-tbl-right thead tr:nth-child(2) th { background:var(--sidebar); font-size:10px; font-weight:600; color:var(--muted); text-align:right; border-bottom:2px solid var(--border); }
         /* footer */
         .ma-tbl-left tfoot td, .ma-tbl-right tfoot td { background:var(--surface2)!important; border-top:2px solid var(--border); font-weight:700; }
         /* hover sincronizado via JS */
@@ -3451,132 +3453,148 @@ function _renderMetasGrid() {
   marcas.forEach(m => marcaMap[m].sort((a,b)=>a.localeCompare(b,'pt-BR')));
 
   // ============================================================
-  // Renderiza um painel por COLEÇÃO (mesmo padrão de buildClientes por marca)
+  // Renderiza um painel por MARCA (mesmo padrão de buildClientes)
+  // dentro de cada painel, coleções são colunas (Venda/Meta/%)
   // ============================================================
+
+  // ---------- header colunas (igual para todos os painéis) ----------
+  let thGroup = '';
+  let thSub   = '';
+  colecoes.forEach((c, i) => {
+    const sep = i === 0 ? '' : 'ma-col-sep';
+    const histTag = colecoesAtivas.has(c) ? '' : ' <span style="font-size:9px;opacity:.5;font-weight:400">(hist)</span>';
+    thGroup += `<th colspan="3" class="${sep}" style="text-align:center;padding:6px 8px;font-size:11px;white-space:nowrap;font-weight:700">${c}${histTag}</th>`;
+    thSub   += `<th class="ma-val ${sep}">Venda</th><th class="ma-edit-cell">Meta</th><th class="ma-pct-cell">%</th>`;
+  });
+
+  // ---------- totais gerais (footer global) ----------
+  const totaisGerais = {};
+  colecoes.forEach(c => { totaisGerais[c] = {venda:0, meta:0}; });
+
   let paineis = '';
 
-  colecoes.forEach(colecao => {
-    const ehAtiva = colecoesAtivas.has(colecao);
-    const acento  = ehAtiva ? 'var(--green)' : 'var(--blue)';
+  marcas.forEach(marca => {
+    const repsM = marcaMap[marca];
+    const isMY  = marca.toUpperCase().includes('MYROCK');
+    const acento = isMY ? 'var(--green)' : 'var(--blue)';
+    const ncols  = colecoes.length * 3;
 
-    // Totais gerais desta coleção
-    let totalVenda = 0, totalMeta = 0;
+    // Totais desta marca por coleção
+    const totaisMarca = {};
+    colecoes.forEach(c => { totaisMarca[c] = {venda:0, meta:0}; });
 
-    // ---------- split-panel: tabelas paralelas por coleção ----------
     let tbodyL = '';
     let tbodyR = '';
 
-    marcas.forEach(marca => {
-      const repsM = marcaMap[marca];
-      const isMY  = marca.toUpperCase().includes('MYROCK');
-      const acentoMarca = isMY ? 'var(--green)' : 'var(--blue)';
-
-      let marcaVenda = 0, marcaMeta = 0;
-      let rowsL = '', rowsR = '';
-
-      repsM.forEach(rep => {
-        const h        = (histIdx[colecao]||{})[rep]||{meta:0,venda:0};
-        const metaLoc  = (metasLocaisTodos[colecao]||{})[rep]!=null ? (metasLocaisTodos[colecao]||{})[rep] : null;
-        const metaVig  = metaLoc!=null ? metaLoc : h.meta;
-        const colEsc   = colecao.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-        const repEsc   = rep.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-        const p        = pct(h.venda, metaVig);
-        const cor      = bc(p);
-        marcaVenda    += h.venda;
-        marcaMeta     += metaVig;
+    repsM.forEach(rep => {
+      const repEsc = rep.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+      let cells = '';
+      colecoes.forEach((c, i) => {
+        const h       = (histIdx[c]||{})[rep]||{meta:0,venda:0};
+        const metaLoc = (metasLocaisTodos[c]||{})[rep]!=null ? (metasLocaisTodos[c]||{})[rep] : null;
+        const metaVig = metaLoc!=null ? metaLoc : h.meta;
+        const colEsc  = c.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+        const p       = pct(h.venda, metaVig);
+        const cor     = bc(p);
+        const sep     = i===0 ? '' : 'ma-col-sep';
+        totaisMarca[c].venda   += h.venda;
+        totaisMarca[c].meta    += metaVig;
+        totaisGerais[c].venda  += h.venda;
+        totaisGerais[c].meta   += metaVig;
 
         const editado  = metaLoc != null;
         const metaDisp = fmt(metaVig);
         const iv       = metaVig > 0 ? metaVig : '';
         const metaCell = `<td class="ma-edit-cell">
-          <div class="ma-inline-wrap" id="maw-${encodeURIComponent(colecao+'\x00'+rep)}">
+          <div class="ma-inline-wrap" id="maw-${encodeURIComponent(c+'\x00'+rep)}">
             <span class="ma-val-disp${editado?' ma-val-editado':''}" style="cursor:default">${metaDisp}</span>
             <button class="ma-edit-btn" title="Editar meta"
               onclick="window._iniciarEditMeta(this,'${colEsc}','${repEsc}',${iv||0})">✎</button>
           </div></td>`;
-        rowsL += `<tr class="metas-row"><td class="ma-nome-cell">${rep}</td></tr>`;
-        rowsR += `<tr class="metas-row">
-          <td class="ma-val">${fmt(h.venda)}</td>${metaCell}
-          <td class="ma-pct-cell"><div class="ma-bar-wrap">
-            <div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
-            <span class="ma-pct-label" style="color:${cor}">${p}%</span>
-          </div></td></tr>`;
+        cells += `<td class="ma-val ${sep}">${fmt(h.venda)}</td>${metaCell}<td class="ma-pct-cell">
+          <div class="ma-bar-wrap"><div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
+          <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
       });
-
-      totalVenda += marcaVenda;
-      totalMeta  += marcaMeta;
-
-      const pm  = pct(marcaVenda, marcaMeta);
-      const cor = bc(pm);
-
-      // Linha cabeçalho de marca
-      tbodyL += `<tr class="ma-marca-row"><td class="ma-nome-cell">${marca}</td></tr>`;
-      tbodyR += `<tr class="ma-marca-row"><td colspan="3" style="padding:5px 11px">&nbsp;</td></tr>`;
-      tbodyL += rowsL;
-      tbodyR += rowsR;
-      // Sub-total de marca
-      tbodyL += `<tr class="metas-row" style="background:rgba(76,158,241,.04)!important"><td class="ma-nome-cell" style="color:${acentoMarca};font-size:11px">Total ${marca}</td></tr>`;
-      tbodyR += `<tr class="metas-row" style="background:rgba(76,158,241,.04)!important">
-        <td class="ma-val" style="color:var(--tx)">${fmt(marcaVenda)}</td>
-        <td class="ma-edit-cell" style="color:var(--tx)">${fmt(marcaMeta)}</td>
-        <td class="ma-pct-cell"><div class="ma-bar-wrap">
-          <div class="ma-bar" style="width:${Math.min(pm,100)}%;background:${cor}"></div>
-          <span class="ma-pct-label" style="color:${cor}">${pm}%</span>
-        </div></td></tr>`;
+      tbodyL += `<tr class="metas-row"><td class="ma-nome-cell">${rep}</td></tr>`;
+      tbodyR += `<tr class="metas-row">${cells}</tr>`;
     });
 
-    const pt  = pct(totalVenda, totalMeta);
-    const corT = bc(pt);
+    // Sub-total da marca (footer do painel)
+    let footCellsMarca = '';
+    colecoes.forEach((c, i) => {
+      const tm  = totaisMarca[c];
+      const p   = pct(tm.venda, tm.meta);
+      const cor = bc(p);
+      const sep = i===0 ? '' : 'ma-col-sep';
+      footCellsMarca += `<td class="ma-val ${sep}">${fmt(tm.venda)}</td>
+        <td class="ma-edit-cell">${fmt(tm.meta)}</td>
+        <td class="ma-pct-cell"><div class="ma-bar-wrap">
+          <div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
+          <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
+    });
 
-    const histTag = !ehAtiva ? ' <span style="font-size:10px;font-weight:400;opacity:.5;margin-left:4px">(histórico)</span>' : '';
-    const countReps = reps.filter(r => {
-      const h = (histIdx[colecao]||{})[r]||{meta:0,venda:0};
-      const ml = (metasLocaisTodos[colecao]||{})[r];
-      return h.meta>0 || h.venda>0 || ml!=null;
-    }).length;
+    const totalVendaMarca = colecoes.reduce((s,c)=>s+totaisMarca[c].venda,0);
+    const totalMetaMarca  = colecoes.reduce((s,c)=>s+totaisMarca[c].meta,0);
+    const ptM = pct(totalVendaMarca, totalMetaMarca);
 
     paineis += `
     <div style="margin-bottom:24px">
       <div style="font-size:13px;font-weight:700;padding:9px 14px;background:var(--surface2);border-radius:8px;border-left:3px solid ${acento};margin-bottom:10px;display:flex;align-items:center;gap:10px">
-        <span style="color:var(--tx)">${colecao}${histTag}</span>
-        <span style="font-size:11px;font-weight:400;color:var(--muted)">${countReps} rep${countReps!==1?'s':''}</span>
+        <span style="color:var(--tx)">${marca}</span>
+        <span style="font-size:11px;font-weight:400;color:var(--muted)">${repsM.length} rep${repsM.length!==1?'s':''}</span>
         <span style="margin-left:auto;font-size:11px;display:flex;align-items:center;gap:8px">
-          <span style="color:var(--muted)">Venda: <strong style="color:var(--tx)">${fmt(totalVenda)}</strong></span>
-          <span style="color:var(--muted)">Meta: <strong style="color:var(--tx)">${fmt(totalMeta)}</strong></span>
-          <span style="font-weight:700;color:${corT}">${pt}%</span>
+          <span style="color:var(--muted)">Venda: <strong style="color:var(--tx)">${fmt(totalVendaMarca)}</strong></span>
+          <span style="color:var(--muted)">Meta: <strong style="color:var(--tx)">${fmt(totalMetaMarca)}</strong></span>
+          <span style="font-weight:700;color:${bc(ptM)}">${ptM}%</span>
         </span>
       </div>
-      <div class="ma-split" style="max-height:420px;border:1px solid var(--border);border-radius:6px;overflow:hidden" data-panel="${encodeURIComponent(colecao)}">
+      <div class="ma-split" style="border:1px solid var(--border);border-radius:6px;overflow:hidden" data-panel="${encodeURIComponent(marca)}">
         <div class="ma-left">
           <table class="ma-tbl-left">
-            <thead><tr><th class="ma-nome-cell" style="padding:6px 11px">Representante</th></tr></thead>
+            <thead><tr><th class="ma-nome-cell" style="height:54px;vertical-align:bottom;padding-bottom:8px">Representante</th></tr></thead>
             <tbody>${tbodyL}</tbody>
-            <tfoot><tr><td class="ma-nome-cell" style="font-weight:700">Total geral</td></tr></tfoot>
+            <tfoot><tr><td class="ma-nome-cell" style="font-weight:700">Total ${marca}</td></tr></tfoot>
           </table>
         </div>
         <div class="ma-right">
-          <table class="ma-tbl-right" style="min-width:max-content;width:100%">
-            <thead><tr>
-              <th class="ma-val">Venda</th>
-              <th class="ma-edit-cell">Meta</th>
-              <th class="ma-pct-cell">%</th>
-            </tr></thead>
+          <table class="ma-tbl-right" style="min-width:max-content">
+            <thead><tr>${thGroup}</tr><tr>${thSub}</tr></thead>
             <tbody>${tbodyR}</tbody>
-            <tfoot><tr>
-              <td class="ma-val">${fmt(totalVenda)}</td>
-              <td class="ma-edit-cell">${fmt(totalMeta)}</td>
-              <td class="ma-pct-cell"><div class="ma-bar-wrap">
-                <div class="ma-bar" style="width:${Math.min(pt,100)}%;background:${corT}"></div>
-                <span class="ma-pct-label" style="color:${corT}">${pt}%</span>
-              </div></td>
-            </tr></tfoot>
+            <tfoot><tr>${footCellsMarca}</tr></tfoot>
           </table>
         </div>
       </div>
     </div>`;
   });
 
-  gridEl.innerHTML = `<div style="padding:12px 4px">${paineis}</div>`;
+  // ---------- footer global (total de todas as marcas) ----------
+  let footGlobal = '';
+  colecoes.forEach((c, i) => {
+    const p   = pct(totaisGerais[c].venda, totaisGerais[c].meta);
+    const cor = bc(p);
+    const sep = i===0 ? '' : 'ma-col-sep';
+    footGlobal += `<td class="ma-val ${sep}">${fmt(totaisGerais[c].venda)}</td>
+      <td class="ma-edit-cell">${fmt(totaisGerais[c].meta)}</td>
+      <td class="ma-pct-cell"><div class="ma-bar-wrap">
+        <div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
+        <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
+  });
+
+  gridEl.innerHTML = `<div style="padding:12px 4px">
+    ${paineis}
+    <div class="ma-split" style="border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--surface2)" data-panel="__total__">
+      <div class="ma-left">
+        <table class="ma-tbl-left">
+          <tfoot><tr><td class="ma-nome-cell" style="font-weight:700;padding:9px 11px">Total geral</td></tr></tfoot>
+        </table>
+      </div>
+      <div class="ma-right">
+        <table class="ma-tbl-right" style="min-width:max-content">
+          <tfoot><tr>${footGlobal}</tr></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>`;
 
   if (statEl) {
     const locCount = Object.values(metasLocaisTodos).reduce((acc,obj)=>acc+Object.keys(obj).length,0);
