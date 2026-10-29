@@ -1709,12 +1709,31 @@ function renderDashboard(data) {
         .cli-tbl tbody tr:nth-child(odd) td { background:var(--surface); }
         .cli-tbl .tbl-foot td { background:var(--sidebar)!important; font-weight:700; color:var(--muted); position:sticky; bottom:0; }
         .cli-tbl .tbl-foot .col-nome,
-        .cli-tbl .tbl-foot .col-status,
-        .cli-tbl .tbl-foot .col-crm { background:var(--sidebar)!important; z-index:3; }
-        .crm-icon { display:inline-block; cursor:pointer; font-size:13px; position:relative; }
-        .crm-tooltip { display:none; position:absolute; left:50%; transform:translateX(-50%); bottom:calc(100% + 6px); background:var(--sidebar); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:11px; color:var(--tx); line-height:1.5; white-space:normal; width:260px; z-index:100; box-shadow:0 4px 20px rgba(0,0,0,.4); text-align:left; }
-        .crm-icon:hover .crm-tooltip { display:block; }
-        .crm-tooltip strong { color:var(--amber); display:block; margin-bottom:4px; font-size:10px; text-transform:uppercase; letter-spacing:.05em; }
+        .cli-tbl .tbl-foot .col-status { background:var(--sidebar)!important; z-index:3; }
+        .crm-icon { display:inline-flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; position:relative; width:22px; height:22px; border-radius:50%; transition:filter .15s; vertical-align:middle; margin-left:5px; }
+        .crm-icon:hover { filter:brightness(1.3); }
+        .crm-icon.crm-validado { filter:sepia(1) saturate(4) hue-rotate(90deg) brightness(1.1); }
+        .crm-icon.crm-recusado { filter:sepia(1) saturate(6) hue-rotate(-10deg) brightness(.9); }
+
+        /* Popup CRM (substituindo hover por click) */
+        .crm-popup { display:none; position:fixed; z-index:9999; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:0; width:320px; box-shadow:0 8px 40px rgba(0,0,0,.6); text-align:left; overflow:hidden; }
+        .crm-popup.open { display:block; }
+        .crm-popup-header { background:var(--surface2); padding:12px 14px 10px; border-bottom:1px solid var(--border); }
+        .crm-popup-header strong { color:var(--amber); font-size:10px; text-transform:uppercase; letter-spacing:.07em; display:block; margin-bottom:3px; }
+        .crm-popup-header .crm-cliente { font-size:13px; font-weight:600; color:var(--tx); }
+        .crm-popup-body { padding:14px; font-size:13px; color:var(--tx); line-height:1.6; }
+        .crm-popup-body .crm-obs { font-size:13px; color:var(--tx); background:var(--bg); border-radius:7px; padding:10px 12px; margin-bottom:12px; line-height:1.6; border:1px solid var(--border); min-height:48px; }
+        .crm-popup-body .crm-meta { font-size:11px; color:var(--muted); margin-bottom:14px; display:flex; flex-direction:column; gap:3px; }
+        .crm-popup-actions { display:flex; gap:8px; }
+        .crm-btn { flex:1; font-family:var(--font); font-size:12px; font-weight:700; padding:9px 12px; border-radius:7px; border:none; cursor:pointer; transition:opacity .15s, transform .1s; display:flex; align-items:center; justify-content:center; gap:5px; letter-spacing:.01em; }
+        .crm-btn:hover { opacity:.85; }
+        .crm-btn:active { transform:scale(.97); }
+        .crm-btn-validar { background:var(--green); color:#000; }
+        .crm-btn-recusar { background:var(--red); color:#fff; }
+        .crm-btn-desfazer { background:var(--surface2); color:var(--muted); border:1px solid var(--border); font-weight:500; flex:0 0 auto; padding:9px 14px; }
+        .crm-status-badge { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; margin-bottom:12px; }
+        .crm-status-badge.validado { background:var(--green-bg); color:var(--green); }
+        .crm-status-badge.recusado { background:var(--red-bg); color:var(--red); }
         .cli-tbl .rep-row td { background:var(--sidebar)!important; font-size:11px; font-weight:700; color:var(--tx); padding:7px 10px; letter-spacing:.04em; border-top:2px solid var(--border); border-bottom:1px solid var(--border); }
         .cli-tbl .rep-row .col-nome,
         .cli-tbl .rep-row .col-status,
@@ -1845,13 +1864,17 @@ function renderDashboard(data) {
               const style = v>0 ? `background:rgba(${bgRgb},${alpha});color:${heat>60?'#fff':'var(--tx)'}` : 'color:var(--hint)';
               // Ícone CRM: mostrar na coluna da coleção correspondente ao DT_RETORNO
               let crmIcon = '';
+              const crmEstado = getCrmEstado(cod);
+              const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : '';
               if (crm && crm.colecaoCrm && crm.colecaoCrm === col) {
                 const dtRet = crm.dtRetorno ? crm.dtRetorno.split('T')[0] : (crm.data ? crm.data.split(' ')[0] : '');
-                crmIcon = `<span class="crm-icon" style="margin-left:4px">💬<span class="crm-tooltip"><strong>Retorno previsto: ${dtRet}</strong><br>${crm.obs || '(sem texto)'}<br><span style="color:var(--muted);margin-top:4px;display:block;font-size:10px">Registro: ${crm.data ? crm.data.split(' ')[0] : ''}</span></span></span>`;
+                const info = encodeURIComponent(JSON.stringify({nome:cli.nome, dtRet, obs:crm.obs||'', dtReg:crm.data?crm.data.split(' ')[0]:'', tipo:'retorno'}));
+                crmIcon = `<span class="crm-icon${crmClass}" data-cod="${cod}" data-info="${info}" onclick="abrirCrmPopup(this,event)">💬</span>`;
               } else if (crm && !crm.colecaoCrm && ci === cols.length-1) {
                 // Sem coleção identificada: cai na última coluna como fallback
                 const dtRet = crm.dtRetorno ? crm.dtRetorno.split('T')[0] : '';
-                crmIcon = `<span class="crm-icon" style="margin-left:4px">💬<span class="crm-tooltip"><strong>Justificativa CRM</strong>${dtRet ? '<br>Retorno: '+dtRet : ''}<br>${crm.obs || '(sem texto)'}<br><span style="color:var(--muted);margin-top:4px;display:block;font-size:10px">Registro: ${crm.data ? crm.data.split(' ')[0] : ''}</span></span></span>`;
+                const info = encodeURIComponent(JSON.stringify({nome:cli.nome, dtRet, obs:crm.obs||'', dtReg:crm.data?crm.data.split(' ')[0]:'', tipo:'justif'}));
+                crmIcon = `<span class="crm-icon${crmClass}" data-cod="${cod}" data-info="${info}" onclick="abrirCrmPopup(this,event)">💬</span>`;
               }
               html += `<td class="col-val" style="${style}">${fmt(v)}${crmIcon}</td>`;
             });
@@ -2986,6 +3009,135 @@ function speakResponse(text) {
     </button>
   </div>
 </div>
+
+<!-- ===== POPUP CRM ===== -->
+<div id="crmPopup" class="crm-popup" role="dialog" aria-modal="true">
+  <div class="crm-popup-header">
+    <strong id="crmPopupLabel">CRM — Justificativa</strong>
+    <span class="crm-cliente" id="crmPopupCliente"></span>
+  </div>
+  <div class="crm-popup-body">
+    <div id="crmPopupStatus"></div>
+    <div class="crm-obs" id="crmPopupObs"></div>
+    <div class="crm-meta" id="crmPopupMeta"></div>
+    <div class="crm-popup-actions" id="crmPopupActions"></div>
+  </div>
+</div>
+
+<script>
+// ===== CRM VALIDAÇÃO =====
+const CRM_ESTADOS_KEY = 'crmEstados_v1';
+
+function getCrmEstados() {
+  try { return JSON.parse(localStorage.getItem(CRM_ESTADOS_KEY) || '{}'); } catch(e) { return {}; }
+}
+function getCrmEstado(cod) {
+  return getCrmEstados()[String(cod)] || null;
+}
+function setCrmEstado(cod, estado) {
+  const estados = getCrmEstados();
+  if (estado === null) delete estados[String(cod)];
+  else estados[String(cod)] = estado;
+  localStorage.setItem(CRM_ESTADOS_KEY, JSON.stringify(estados));
+}
+
+let _crmPopupCod = null;
+let _crmPopupIconEl = null;
+
+function abrirCrmPopup(iconEl, event) {
+  event.stopPropagation();
+  const popup = document.getElementById('crmPopup');
+
+  // Se já está aberto para este ícone, fecha
+  if (popup.classList.contains('open') && _crmPopupIconEl === iconEl) {
+    fecharCrmPopup();
+    return;
+  }
+
+  const cod = iconEl.dataset.cod;
+  const info = JSON.parse(decodeURIComponent(iconEl.dataset.info));
+  _crmPopupCod = cod;
+  _crmPopupIconEl = iconEl;
+
+  // Preencher conteúdo
+  document.getElementById('crmPopupLabel').textContent =
+    info.tipo === 'retorno' ? 'CRM — Retorno previsto' : 'CRM — Justificativa';
+  document.getElementById('crmPopupCliente').textContent = info.nome;
+  document.getElementById('crmPopupObs').textContent = info.obs || '(sem observações)';
+
+  const meta = [];
+  if (info.dtRet) meta.push('📅 Retorno previsto: ' + info.dtRet);
+  if (info.dtReg) meta.push('🕐 Registro: ' + info.dtReg);
+  document.getElementById('crmPopupMeta').innerHTML = meta.map(m=>`<span>${m}</span>`).join('');
+
+  _renderCrmPopupActions(cod);
+
+  // Posicionar
+  popup.classList.add('open');
+  const rect = iconEl.getBoundingClientRect();
+  const pw = 320;
+  const ph = popup.offsetHeight || 260;
+  let left = rect.left + rect.width/2 - pw/2;
+  let top  = rect.top - ph - 8;
+  if (left < 8) left = 8;
+  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+  if (top < 8) top = rect.bottom + 8;
+  popup.style.left = left + 'px';
+  popup.style.top  = top  + 'px';
+}
+
+function _renderCrmPopupActions(cod) {
+  const estado = getCrmEstado(cod);
+  const statusEl = document.getElementById('crmPopupStatus');
+  const actionsEl = document.getElementById('crmPopupActions');
+
+  if (estado === 'validado') {
+    statusEl.innerHTML = '<div class="crm-status-badge validado">✔ Validado</div>';
+    actionsEl.innerHTML = `<button class="crm-btn crm-btn-desfazer" onclick="mudarCrmEstado(null)">↩ Desfazer</button>`;
+  } else if (estado === 'recusado') {
+    statusEl.innerHTML = '<div class="crm-status-badge recusado">✖ Recusado</div>';
+    actionsEl.innerHTML = `<button class="crm-btn crm-btn-desfazer" onclick="mudarCrmEstado(null)">↩ Desfazer</button>`;
+  } else {
+    statusEl.innerHTML = '';
+    actionsEl.innerHTML = `
+      <button class="crm-btn crm-btn-validar" onclick="mudarCrmEstado('validado')">✔ Validar</button>
+      <button class="crm-btn crm-btn-recusar" onclick="mudarCrmEstado('recusado')">✖ Recusar</button>
+    `;
+  }
+}
+
+function mudarCrmEstado(novoEstado) {
+  if (!_crmPopupCod) return;
+  setCrmEstado(_crmPopupCod, novoEstado);
+
+  // Atualiza o ícone sem re-renderizar tudo
+  if (_crmPopupIconEl) {
+    _crmPopupIconEl.classList.remove('crm-validado','crm-recusado');
+    if (novoEstado === 'validado') _crmPopupIconEl.classList.add('crm-validado');
+    else if (novoEstado === 'recusado') _crmPopupIconEl.classList.add('crm-recusado');
+  }
+
+  _renderCrmPopupActions(_crmPopupCod);
+}
+
+function fecharCrmPopup() {
+  document.getElementById('crmPopup').classList.remove('open');
+  _crmPopupCod = null;
+  _crmPopupIconEl = null;
+}
+
+// Fechar ao clicar fora
+document.addEventListener('click', function(e) {
+  const popup = document.getElementById('crmPopup');
+  if (popup && popup.classList.contains('open') && !popup.contains(e.target)) {
+    fecharCrmPopup();
+  }
+});
+// Fechar com Escape
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') fecharCrmPopup();
+});
+</script>
 
 </body>
 </html>
