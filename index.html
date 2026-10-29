@@ -1768,28 +1768,29 @@ function renderDashboard(data) {
       const s = document.createElement('style');
       s.id = 'cli-sticky-css';
       s.textContent = `
-        /* METAS ADMIN TABLE */
-        .metas-tbl { border-collapse:separate; border-spacing:0; font-size:12px; }
-        .metas-tbl th, .metas-tbl td { padding:7px 11px; border-bottom:1px solid var(--border); white-space:nowrap; }
-        /* sticky: linha 1 do header (nome da coleção) */
-        .metas-tbl thead tr:first-child th { background:var(--sidebar); position:sticky; top:0; z-index:3; font-size:11px; font-weight:700; color:var(--tx); text-align:center; border-bottom:1px solid var(--border); }
-        /* sticky: linha 2 do header (sub-colunas) */
-        .metas-tbl thead tr:nth-child(2) th { background:var(--sidebar); position:sticky; top:32px; z-index:3; font-size:10px; font-weight:600; color:var(--muted); text-align:right; border-bottom:2px solid var(--border); }
-        .metas-tbl tfoot td { background:var(--surface2)!important; border-top:2px solid var(--border); font-weight:700; position:sticky; bottom:0; z-index:2; }
-        .metas-row:hover td { background:rgba(255,255,255,.04); }
-        /* sticky: coluna Representante */
-        .ma-nome-cell { position:sticky; left:0; background:var(--surface); min-width:195px; max-width:215px; font-weight:500; color:var(--tx); border-right:2px solid var(--border); z-index:2; }
-        /* sticky + sticky: canto superior esquerdo nos headers */
-        .metas-tbl thead tr:first-child .ma-nome-cell { z-index:5; background:var(--sidebar); text-align:left; }
-        .metas-tbl thead tr:nth-child(2) .ma-nome-cell { z-index:4; background:var(--sidebar); text-align:left; color:var(--muted); }
-        /* sticky + sticky: canto inferior esquerdo no footer */
-        .metas-tbl tfoot .ma-nome-cell { background:var(--surface2)!important; z-index:3; }
-        /* linha de marca */
+        /* METAS ADMIN — layout split: nomes fixos à esquerda, dados scroll à direita */
+        .ma-split { display:flex; height:100%; overflow:hidden; }
+        .ma-left  { flex-shrink:0; overflow:hidden; display:flex; flex-direction:column; border-right:2px solid var(--border); background:var(--surface); }
+        .ma-right { flex:1; overflow:auto; display:flex; flex-direction:column; }
+        /* tabelas gêmeas — mesma altura de linha garantida por JS */
+        .ma-tbl-left, .ma-tbl-right { border-collapse:collapse; font-size:12px; }
+        .ma-tbl-left th,  .ma-tbl-left td  { padding:7px 11px; border-bottom:1px solid var(--border); white-space:nowrap; }
+        .ma-tbl-right th, .ma-tbl-right td { padding:7px 11px; border-bottom:1px solid var(--border); white-space:nowrap; }
+        /* header esquerdo */
+        .ma-tbl-left thead th { background:var(--sidebar); font-size:11px; font-weight:700; color:var(--tx); text-align:left; border-bottom:2px solid var(--border); }
+        /* header direito linha 1 (coleção) */
+        .ma-tbl-right thead tr:first-child th { background:var(--sidebar); font-size:11px; font-weight:700; color:var(--tx); text-align:center; border-bottom:1px solid var(--border); }
+        /* header direito linha 2 (sub) */
+        .ma-tbl-right thead tr:nth-child(2) th { background:var(--sidebar); font-size:10px; font-weight:600; color:var(--muted); text-align:right; border-bottom:2px solid var(--border); }
+        /* footer */
+        .ma-tbl-left tfoot td, .ma-tbl-right tfoot td { background:var(--surface2)!important; border-top:2px solid var(--border); font-weight:700; }
+        /* hover sincronizado via JS */
+        .ma-row-hover td { background:rgba(255,255,255,.04)!important; }
+        /* célula nome */
+        .ma-nome-cell { min-width:210px; max-width:230px; font-weight:500; color:var(--tx); }
+        /* linhas de marca */
         .ma-marca-row td { background:rgba(76,158,241,.07)!important; font-weight:700; color:#4C9EF1; font-size:11px; padding:5px 11px; border-top:1px solid rgba(76,158,241,.18); }
-        .ma-marca-row .ma-nome-cell { color:#4C9EF1; background:rgba(76,158,241,.07)!important; letter-spacing:.02em; }
-        /* sub-total de marca */
-        .ma-subtotal-row td { background:rgba(76,158,241,.03)!important; }
-        .ma-subtotal-row .ma-nome-cell { background:rgba(76,158,241,.03)!important; font-size:11px; color:#4C9EF1; }
+        /* colunas */
         .ma-val { text-align:right; color:var(--muted); min-width:88px; }
         .ma-edit-cell { min-width:106px; text-align:right; }
         .ma-input { font-family:var(--font); font-size:12px; background:var(--surface2); border:1px solid var(--border); color:var(--tx); border-radius:5px; padding:4px 7px; width:92px; outline:none; transition:border-color .15s; text-align:right; box-sizing:border-box; }
@@ -1798,7 +1799,6 @@ function renderDashboard(data) {
         .ma-bar-wrap { display:flex; align-items:center; gap:6px; }
         .ma-bar { height:5px; border-radius:3px; min-width:2px; transition:width .3s; flex-shrink:0; max-width:50px; }
         .ma-pct-label { font-size:11px; font-weight:700; min-width:30px; }
-        .ma-badge-edit { display:inline-block; margin-left:6px; font-size:10px; font-weight:600; color:var(--amber); background:var(--amber-bg); border-radius:4px; padding:1px 5px; vertical-align:middle; }
         .ma-input-edited { border-color:var(--amber) !important; }
         .ma-col-sep { border-left:2px solid var(--border) !important; }
         /* Modal cadastro */
@@ -3417,8 +3417,8 @@ function _renderMetasGrid() {
   });
   marcas.forEach(m => marcaMap[m].sort((a,b)=>a.localeCompare(b,'pt-BR')));
 
-  // ---------- header duplo (travado) ----------
-  let thGroup = `<th class="ma-nome-cell" rowspan="2" style="text-align:left;z-index:6!important">Representante</th>`;
+  // ---------- header ----------
+  let thGroup = '';
   let thSub   = '';
   colecoes.forEach((c,i) => {
     const sep = i===0 ? '' : 'ma-col-sep';
@@ -3432,18 +3432,17 @@ function _renderMetasGrid() {
   const totaisMarca = {};
   marcas.forEach(m => { totaisMarca[m]={}; colecoes.forEach(c=>{ totaisMarca[m][c]={venda:0,meta:0}; }); });
 
-  // ---------- build body por marca ----------
-  let tbody = '';
+  // ---------- build body: duas listas paralelas (esquerda=nomes, direita=dados) ----------
+  let tbodyL = ''; // tabela esquerda (nomes)
+  let tbodyR = ''; // tabela direita  (dados)
 
   marcas.forEach(marca => {
     const repsM = marcaMap[marca];
+    const ncols = colecoes.length * 3;
 
     // Linha de cabeçalho de marca
-    const ncols = colecoes.length * 3;
-    tbody += `<tr class="ma-marca-row">
-      <td class="ma-nome-cell">${marca}</td>
-      <td colspan="${ncols}"></td>
-    </tr>`;
+    tbodyL += `<tr class="ma-marca-row"><td class="ma-nome-cell">${marca}</td></tr>`;
+    tbodyR += `<tr class="ma-marca-row"><td colspan="${ncols}" style="padding:5px 11px">&nbsp;</td></tr>`;
 
     // Linhas de reps
     repsM.forEach(rep => {
@@ -3456,7 +3455,6 @@ function _renderMetasGrid() {
         const colEsc   = c.replace(/'/g,"\\'").replace(/"/g,'&quot;');
         const p        = pct(h.venda, metaVig);
         const cor      = bc(p);
-        // Somente coleções puramente locais (não existem em PBI hist nem em cachedData) são editáveis
         const editavel = colecoesLocais.includes(c) && !colecoesData.includes(c) && !colecoesHist.includes(c);
         const sep      = i===0 ? '' : 'ma-col-sep';
         totais[c].venda         += h.venda;
@@ -3475,12 +3473,12 @@ function _renderMetasGrid() {
         } else {
           metaCell = `<td class="ma-edit-cell" style="color:var(--muted)">${fmt(metaVig)}</td>`;
         }
-
         cells += `<td class="ma-val ${sep}">${fmt(h.venda)}</td>${metaCell}<td class="ma-pct-cell">
-          <div class="ma-bar-wrap"><div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor};flex-basis:${Math.min(p,100)}%"></div>
+          <div class="ma-bar-wrap"><div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
           <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
       });
-      tbody += `<tr class="metas-row"><td class="ma-nome-cell">${rep}</td>${cells}</tr>`;
+      tbodyL += `<tr class="metas-row"><td class="ma-nome-cell">${rep}</td></tr>`;
+      tbodyR += `<tr class="metas-row">${cells}</tr>`;
     });
 
     // Sub-total da marca
@@ -3495,8 +3493,8 @@ function _renderMetasGrid() {
         <td class="ma-pct-cell"><div class="ma-bar-wrap"><div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
         <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
     });
-    tbody += `<tr class="metas-row" style="background:rgba(76,158,241,.04)!important">
-      <td class="ma-nome-cell" style="color:#4C9EF1;font-size:11px">Total ${marca}</td>${subCells}</tr>`;
+    tbodyL += `<tr class="metas-row" style="background:rgba(76,158,241,.04)!important"><td class="ma-nome-cell" style="color:#4C9EF1;font-size:11px">Total ${marca}</td></tr>`;
+    tbodyR += `<tr class="metas-row" style="background:rgba(76,158,241,.04)!important">${subCells}</tr>`;
   });
 
   // ---------- totais gerais (footer) ----------
@@ -3511,19 +3509,53 @@ function _renderMetasGrid() {
       <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
   });
 
+  // Renderiza layout split: tabela-nome | tabela-dados
   gridEl.innerHTML = `
-  <table class="metas-tbl" style="min-width:max-content">
-    <thead><tr>${thGroup}</tr><tr>${thSub}</tr></thead>
-    <tbody>${tbody}</tbody>
-    <tfoot><tr>
-      <td class="ma-nome-cell">Total geral</td>${footCells}
-    </tr></tfoot>
-  </table>`;
+  <div class="ma-split">
+    <div class="ma-left">
+      <table class="ma-tbl-left">
+        <thead><tr><th class="ma-nome-cell" style="height:54px;vertical-align:bottom;padding-bottom:8px">Representante</th></tr></thead>
+        <tbody>${tbodyL}</tbody>
+        <tfoot><tr><td class="ma-nome-cell" style="font-weight:700;background:var(--surface2)!important;border-top:2px solid var(--border)">Total geral</td></tr></tfoot>
+      </table>
+    </div>
+    <div class="ma-right">
+      <table class="ma-tbl-right" style="min-width:max-content">
+        <thead><tr>${thGroup}</tr><tr>${thSub}</tr></thead>
+        <tbody>${tbodyR}</tbody>
+        <tfoot><tr>${footCells}</tr></tfoot>
+      </table>
+    </div>
+  </div>`;
 
   if (statEl) {
     const locCount = Object.values(metasLocaisTodos).reduce((acc,obj)=>acc+Object.keys(obj).length,0);
     statEl.textContent = locCount > 0 ? `${locCount} meta${locCount!==1?'s':''} editada${locCount!==1?'s':''} localmente` : '';
   }
+
+  // Sincronizar scroll vertical entre left e right
+  const maLeft  = gridEl.querySelector('.ma-left');
+  const maRight = gridEl.querySelector('.ma-right');
+  if (maLeft && maRight) {
+    maRight.addEventListener('scroll', () => { maLeft.scrollTop = maRight.scrollTop; }, {passive:true});
+    maLeft.addEventListener('scroll',  () => { maRight.scrollTop = maLeft.scrollTop; }, {passive:true});
+  }
+
+  // Hover sincronizado: highlight na linha correspondente em ambas as tabelas
+  const allRowsL = gridEl.querySelectorAll('.ma-tbl-left  tbody tr');
+  const allRowsR = gridEl.querySelectorAll('.ma-tbl-right tbody tr');
+  const syncHover = (rowL, rowR, on) => {
+    if (rowL) rowL.classList.toggle('ma-row-hover', on);
+    if (rowR) rowR.classList.toggle('ma-row-hover', on);
+  };
+  allRowsL.forEach((r, i) => {
+    r.addEventListener('mouseenter', () => syncHover(r, allRowsR[i], true));
+    r.addEventListener('mouseleave', () => syncHover(r, allRowsR[i], false));
+  });
+  allRowsR.forEach((r, i) => {
+    r.addEventListener('mouseenter', () => syncHover(allRowsL[i], r, true));
+    r.addEventListener('mouseleave', () => syncHover(allRowsL[i], r, false));
+  });
 }
 
 // ===== MODAL: CADASTRAR NOVA META (COLEÇÃO FUTURA) =====
