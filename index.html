@@ -1486,18 +1486,17 @@ function renderDashboard(data) {
       ${td(tot.exClientes > 0 ? tot.exClientes : '—', 'color:#E84A4A')}
       ${td(tot.valorNovos > 0 ? fmtR(tot.valorNovos) : '—', 'color:var(--green)')}
     </tr></tfoot>
-    </table></div>
-    <script>
-    function gcToggle(id) {
-      const rows = document.querySelectorAll('.gc-marca-' + id);
-      const chev = document.getElementById('chev-' + id);
-      const open = rows.length && rows[0].style.display !== 'none';
-      rows.forEach(r => r.style.display = open ? 'none' : '');
-      if (chev) chev.style.transform = open ? '' : 'rotate(90deg)';
-    }
-    <\/script>`;
+    </table></div>`;
 
     return html;
+  }
+
+  function gcToggle(id) {
+    const rows = document.querySelectorAll('.gc-marca-' + id);
+    const chev = document.getElementById('chev-' + id);
+    const open = rows.length && rows[0].style.display !== 'none';
+    rows.forEach(r => r.style.display = open ? 'none' : '');
+    if (chev) chev.style.transform = open ? '' : 'rotate(90deg)';
   }
 
   function buildClientes() {
