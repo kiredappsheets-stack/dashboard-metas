@@ -1551,6 +1551,59 @@ function renderDashboard(data) {
     return html;
   }
 
+  // ════════════════════════════════════════════
+  //  ABA METAS — grid editável por coleção/rep
+  // ════════════════════════════════════════════
+  function buildMetasAdmin() {
+    const gMt = (r,c) => { const k=Object.keys(r).find(k2=>k2.toUpperCase()===c.toUpperCase())||c; return r[k]??null; };
+    const gM  = (r,c) => { const v=gMt(r,c); return typeof v==='number'?v:(parseFloat(String(v||'0').replace(',','.'))||0); };
+    const fmt = v => v>0?'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
+
+    const METAS_LOCAL_KEY = 'metasEditaveis_v1';
+    function getMetasLocais() { try { return JSON.parse(localStorage.getItem(METAS_LOCAL_KEY)||'{}'); } catch(e){return {};} }
+    function salvarMetaLocal(col,rep,val) {
+      const all=getMetasLocais();
+      if(!all[col])all[col]={};
+      all[col][rep]=val;
+      try{localStorage.setItem(METAS_LOCAL_KEY,JSON.stringify(all));}catch(e){}
+    }
+
+    // Coleções disponíveis do histórico Power BI
+    const hist = cachedMetasHist||[];
+    const colecoes = [...new Set(hist.map(r=>gMt(r,'COLECAO')).filter(Boolean))].sort().reverse();
+
+    if (!colecoes.length) return '<div class="loading-tab"><div class="spinner"></div>Carregando dados de metas…</div>';
+
+    // Todos os reps do histórico (union de todos)
+    const todosRepsHist = [...new Set(hist.map(r=>gMt(r,'NOME')).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+
+    const uid2 = 'metasAdmin';
+
+    // Grid HTML
+    let html = `
+    <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+      <!-- Toolbar -->
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--sidebar);flex-shrink:0">
+        <label style="font-size:12px;color:var(--muted);font-weight:600">Coleção:</label>
+        <select id="${uid2}_col" style="font-family:var(--font);font-size:13px;font-weight:600;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 12px;outline:none;cursor:pointer">
+          ${colecoes.map(c=>`<option value="${c}">${c}</option>`).join('')}
+        </select>
+        <input id="${uid2}_busca" type="text" placeholder="Buscar representante…" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;width:200px"/>
+        <span style="flex:1"></span>
+        <span id="${uid2}_status" style="font-size:11px;color:var(--muted)"></span>
+      </div>
+      <!-- Grid -->
+      <div style="flex:1;overflow:auto;padding:20px">
+        <div id="${uid2}_grid"></div>
+      </div>
+    </div>`;
+
+    // A lógica de render será ativada via window._initMetasAdmin() após o tab ser clicado
+    html += `<div id="${uid2}_init_marker" style="display:none"></div>`;
+
+    return html;
+  }
+
   function buildClientes() {
     if (!cachedClientes2 || !cachedClientes2.length) return '<div class="empty-state">Dados de clientes não disponíveis.</div>';
 
@@ -1716,6 +1769,23 @@ function renderDashboard(data) {
       const s = document.createElement('style');
       s.id = 'cli-sticky-css';
       s.textContent = `
+        /* METAS ADMIN TABLE */
+        .metas-tbl { border-collapse:collapse; font-size:12px; width:100%; }
+        .metas-tbl th, .metas-tbl td { padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+        .metas-tbl thead th { background:var(--sidebar); position:sticky; top:0; z-index:2; font-size:11px; font-weight:600; color:var(--muted); text-align:left; }
+        .metas-tbl tfoot td { background:var(--surface2); border-top:2px solid rgba(255,255,255,.1); }
+        .metas-row:hover td { background:var(--surface2); }
+        .ma-nome { min-width:220px; font-weight:500; color:var(--tx); }
+        .ma-val { text-align:right; color:var(--muted); min-width:150px; }
+        .ma-hist { color:var(--hint); }
+        .ma-edit-cell { min-width:160px; }
+        .ma-input { font-family:var(--font); font-size:12px; background:var(--surface2); border:1px solid var(--border); color:var(--tx); border-radius:5px; padding:5px 8px; width:140px; outline:none; transition:border-color .15s; }
+        .ma-input:focus { border-color:var(--green); }
+        .ma-pct-cell { min-width:180px; }
+        .ma-bar-wrap { display:flex; align-items:center; gap:8px; }
+        .ma-bar { height:6px; border-radius:3px; min-width:2px; transition:width .3s; }
+        .ma-pct-label { font-size:11px; font-weight:700; min-width:36px; }
+        .ma-badge-edit { display:inline-block; margin-left:6px; font-size:10px; font-weight:600; color:var(--amber); background:var(--amber-bg); border-radius:4px; padding:1px 5px; vertical-align:middle; }
         .cli-tbl { border-collapse:collapse; font-size:12px; }
         .cli-tbl th, .cli-tbl td { padding:6px 10px; white-space:nowrap; border-bottom:1px solid var(--border); }
         .cli-tbl thead th { background:var(--sidebar); position:sticky; top:0; z-index:2; font-size:11px; font-weight:600; color:var(--muted); }
@@ -2062,6 +2132,7 @@ function renderDashboard(data) {
       <button class="tab-btn" data-tab="historico">Histórico Mensal</button>
       <button class="tab-btn" data-tab="periodo">Histórico Semanal</button>
       <button class="tab-btn" data-tab="restricoes">Restrições <span class="tab-badge">${cachedRestricoes?cachedRestricoes.length:0}</span></button>
+      <button class="tab-btn" data-tab="metas-admin">⚙ Metas</button>
     </div>
     <div class="tab-content" id="tab-overview">${buildOverview()}${buildMetas()}</div>
     <div class="tab-content hidden" id="tab-gestao" style="padding:0">${buildGestaoCom()}</div>
@@ -2069,6 +2140,7 @@ function renderDashboard(data) {
     <div class="tab-content hidden" id="tab-periodo">${buildHistoricoPeriodo()}</div>
     <div class="tab-content hidden" id="tab-clientes">${buildClientes()}</div>
     <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
+    <div class="tab-content hidden" id="tab-metas-admin" style="padding:0;height:100%;overflow:hidden">${buildMetasAdmin()}</div>
   `;
 
   container.querySelectorAll('.tab-btn').forEach(btn => {
@@ -3202,6 +3274,125 @@ document.addEventListener('click', function(e) {
 // Fechar com Escape
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') fecharCrmPopup();
+});
+
+// ===== METAS ADMIN =====
+const METAS_LOCAL_KEY = 'metasEditaveis_v1';
+function _getMetasLocais(){ try{return JSON.parse(localStorage.getItem(METAS_LOCAL_KEY)||'{}')}catch(e){return{}} }
+function _saveMetaLocal(col,rep,v){ const a=_getMetasLocais();if(!a[col])a[col]={};a[col][rep]=v;try{localStorage.setItem(METAS_LOCAL_KEY,JSON.stringify(a))}catch(e){} }
+
+window._saveMeta = function(col, rep, rawVal) {
+  const v = parseFloat(String(rawVal).replace(/[R$\s.]/g,'').replace(',','.'))||0;
+  _saveMetaLocal(col, rep, v);
+  _renderMetasGrid();
+};
+
+function _renderMetasGrid() {
+  const colEl  = document.getElementById('metasAdmin_col');
+  const buscaEl= document.getElementById('metasAdmin_busca');
+  const gridEl = document.getElementById('metasAdmin_grid');
+  const statEl = document.getElementById('metasAdmin_status');
+  if (!colEl || !gridEl) return;
+
+  const col   = colEl.value;
+  const busca = (buscaEl.value||'').toLowerCase();
+  const hist  = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
+  const metasLocais = _getMetasLocais()[col] || {};
+
+  const fmt = v => v>0 ? 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+  const pct = (v,m) => !m ? 0 : Math.min(Math.round(v/m*100), 999);
+
+  const gK = (r,c) => Object.keys(r).find(k=>k.toUpperCase()===c)||c;
+
+  const rowsHist = hist.filter(r => r[gK(r,'COLECAO')] === col);
+  const repsHist = [...new Set(rowsHist.map(r=>r[gK(r,'NOME')]).filter(Boolean))];
+  const repsLocais = Object.keys(metasLocais);
+  let reps = [...new Set([...repsHist,...repsLocais])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  if (busca) reps = reps.filter(r=>r.toLowerCase().includes(busca));
+
+  if (!reps.length) {
+    gridEl.innerHTML = '<div style="padding:32px;color:var(--muted);text-align:center;font-size:13px">Nenhum representante encontrado.</div>';
+    return;
+  }
+
+  const histIdx = {};
+  rowsHist.forEach(r => {
+    const nom = r[gK(r,'NOME')];
+    const m   = parseFloat(r[gK(r,'META')])||0;
+    const v   = parseFloat(r[gK(r,'VENDA')])||0;
+    if (nom) histIdx[nom] = {meta:m, venda:v};
+  });
+
+  let totalMeta=0, totalVenda=0, totalLocal=0;
+  let rows='';
+  reps.forEach(rep => {
+    const h = histIdx[rep]||{meta:0,venda:0};
+    const metaLocal = metasLocais[rep]!=null ? metasLocais[rep] : null;
+    const metaVig = metaLocal!=null ? metaLocal : h.meta;
+    totalMeta  += h.meta;
+    totalVenda += h.venda;
+    totalLocal += metaVig;
+    const p = pct(h.venda, metaVig);
+    const bc = p>=100?'var(--green)':p>=70?'var(--amber)':'var(--red)';
+    const repEsc = rep.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    const colEsc = col.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    const inputVal = metaVig > 0 ? metaVig : '';
+    rows += `<tr class="metas-row">
+      <td class="ma-nome">${rep}${metaLocal!=null?'<span class="ma-badge-edit">editado</span>':''}</td>
+      <td class="ma-val">${fmt(h.venda)}</td>
+      <td class="ma-val ma-hist">${fmt(h.meta)}</td>
+      <td class="ma-edit-cell">
+        <input class="ma-input" type="text" value="${inputVal}" placeholder="0"
+          onchange="window._saveMeta('${colEsc}','${repEsc}',this.value)"
+          onkeydown="if(event.key==='Enter')this.blur()"/>
+      </td>
+      <td class="ma-pct-cell">
+        <div class="ma-bar-wrap">
+          <div class="ma-bar" style="width:${Math.min(p,100)}%;background:${bc}"></div>
+          <span class="ma-pct-label" style="color:${bc}">${p}%</span>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  const gP = pct(totalVenda, totalLocal||totalMeta);
+  const gc = gP>=100?'var(--green)':gP>=70?'var(--amber)':'var(--red)';
+  gridEl.innerHTML = `
+  <table class="metas-tbl">
+    <thead><tr>
+      <th class="ma-nome">Representante</th>
+      <th class="ma-val">Venda (PBI)</th>
+      <th class="ma-val ma-hist">Meta (PBI)</th>
+      <th class="ma-edit-cell">Meta definida</th>
+      <th class="ma-pct-cell">% Atingimento</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr>
+      <td class="ma-nome" style="font-weight:700;color:var(--tx)">Total</td>
+      <td class="ma-val" style="font-weight:700;color:var(--tx)">${fmt(totalVenda)}</td>
+      <td class="ma-val ma-hist" style="font-weight:700;color:var(--muted)">${fmt(totalMeta)}</td>
+      <td class="ma-edit-cell" style="font-weight:700;color:var(--tx)">${fmt(totalLocal)}</td>
+      <td class="ma-pct-cell"><div class="ma-bar-wrap"><div class="ma-bar" style="width:${Math.min(gP,100)}%;background:${gc}"></div><span class="ma-pct-label" style="color:${gc}">${gP}%</span></div></td>
+    </tr></tfoot>
+  </table>`;
+
+  if (statEl) {
+    const locCount = Object.keys(_getMetasLocais()[col]||{}).length;
+    statEl.textContent = locCount > 0 ? `${locCount} meta${locCount!==1?'s':''} definida${locCount!==1?'s':''} localmente` : '';
+  }
+}
+
+// Inicializar grid quando tab de metas for clicado
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('[data-tab="metas-admin"]');
+  if (btn) setTimeout(_renderMetasGrid, 50);
+});
+// Também ligar eventos de change/input depois que o DOM existir
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.id === 'metasAdmin_col') _renderMetasGrid();
+});
+document.addEventListener('input', function(e) {
+  if (e.target && e.target.id === 'metasAdmin_busca') _renderMetasGrid();
 });
 </script>
 
