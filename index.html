@@ -1785,6 +1785,7 @@ function renderDashboard(data) {
         .ma-bar { height:6px; border-radius:3px; min-width:2px; transition:width .3s; }
         .ma-pct-label { font-size:11px; font-weight:700; min-width:36px; }
         .ma-badge-edit { display:inline-block; margin-left:6px; font-size:10px; font-weight:600; color:var(--amber); background:var(--amber-bg); border-radius:4px; padding:1px 5px; vertical-align:middle; }
+        .ma-input-edited { border-color:var(--amber) !important; }
         .cli-tbl { border-collapse:collapse; font-size:12px; }
         .cli-tbl th, .cli-tbl td { padding:6px 10px; white-space:nowrap; border-bottom:1px solid var(--border); }
         .cli-tbl thead th { background:var(--sidebar); position:sticky; top:0; z-index:2; font-size:11px; font-weight:600; color:var(--muted); }
@@ -3360,6 +3361,10 @@ function _renderMetasGrid() {
                 <th style="width:${COL_W_PCT}"  class="ma-pct-cell">%</th>`;
   });
 
+  // Coleções ativas = existem em cachedData (período atual, editável)
+  // Coleções passadas = só no hist (somente leitura)
+  const colecoesAtivas = new Set(colecoesData);
+
   // ---------- build rows ----------
   // totais por coleção
   const totais = {};
@@ -3376,17 +3381,27 @@ function _renderMetasGrid() {
       const colEsc     = c.replace(/'/g,"\\'").replace(/"/g,'&quot;');
       const p          = pct(h.venda, metaVig);
       const bc         = p>=100?'var(--green)':p>=70?'var(--amber)':'var(--red)';
-      const inputVal   = metaVig > 0 ? metaVig : '';
-      const edited     = metaLocal!=null ? ' <span class="ma-badge-edit">✎</span>' : '';
+      const editavel   = colecoesAtivas.has(c);
       totais[c].venda += h.venda;
       totais[c].meta  += metaVig;
+
+      let metaCell;
+      if (editavel) {
+        const inputVal = metaVig > 0 ? metaVig : '';
+        const edited   = metaLocal!=null ? ' title="editado"' : '';
+        metaCell = `<td class="ma-edit-cell">
+          <input class="ma-input${metaLocal!=null?' ma-input-edited':''}" type="text" value="${inputVal}" placeholder="—"${edited}
+            onchange="window._saveMeta('${colEsc}','${repEsc}',this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()"/>
+        </td>`;
+      } else {
+        // coleção passada: só exibe o valor, sem input
+        metaCell = `<td class="ma-edit-cell" style="color:var(--muted);font-size:12px">${fmt(metaVig)}</td>`;
+      }
+
       cells += `
         <td class="ma-val" style="border-left:2px solid var(--border)">${fmt(h.venda)}</td>
-        <td class="ma-edit-cell">
-          <input class="ma-input" type="text" value="${inputVal}" placeholder="—"${edited}
-            onchange="window._saveMeta('${colEsc}','${repEsc}',this.value)"
-            onkeydown="if(event.key==='Enter')this.blur()"/>${edited}
-        </td>
+        ${metaCell}
         <td class="ma-pct-cell">
           <div class="ma-bar-wrap" style="min-width:54px">
             <div class="ma-bar" style="width:${Math.min(p,100)}%;background:${bc}"></div>
