@@ -1189,14 +1189,10 @@ function renderDashboard(data) {
 
   function buildGestaoCom() {
     // ── Helpers ──
-    // gV: busca exata — evita confundir COD_REP com REP
     const gV = (r, c) => {
       const cu = c.toUpperCase();
-      // 1) match exato de coluna bracket: [REP] não pega [COD_REP]
       let k = Object.keys(r).find(k => new RegExp('\\[' + cu + '\\]$').test(k.toUpperCase()));
-      // 2) fallback: nome igual (sem brackets)
       if (!k) k = Object.keys(r).find(k => k.toUpperCase() === cu);
-      // 3) fallback: includes (para colunas sem bracket como "UF", "PECAS" etc)
       if (!k) k = Object.keys(r).find(k => k.toUpperCase().includes(cu) && !k.toUpperCase().includes('COD_' + cu));
       return k ? r[k] : null;
     };
@@ -1303,214 +1299,181 @@ function renderDashboard(data) {
     const thStyle  = 'padding:8px 10px;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;text-align:right;border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--sidebar);z-index:2';
     const thStyleL = thStyle.replace('text-align:right','text-align:left');
     const thStyleC = thStyle.replace('text-align:right','text-align:center');
-    const td  = (v, extra='') => `<td style="padding:7px 10px;font-size:12px;text-align:right;white-space:nowrap;${extra}">${v}</td>`;
-    const tdL = (v, extra='') => `<td style="padding:7px 10px;font-size:12px;text-align:left;white-space:nowrap;${extra}">${v}</td>`;
-    const tdC = (v, extra='') => `<td style="padding:7px 10px;font-size:12px;text-align:center;white-space:nowrap;${extra}">${v}</td>`;
+    const td  = (v, extra='') => '<td style="padding:7px 10px;font-size:12px;text-align:right;white-space:nowrap;' + extra + '">' + v + '</td>';
+    const tdL = (v, extra='') => '<td style="padding:7px 10px;font-size:12px;text-align:left;white-space:nowrap;' + extra + '">' + v + '</td>';
+    const tdC = (v, extra='') => '<td style="padding:7px 10px;font-size:12px;text-align:center;white-space:nowrap;' + extra + '">' + v + '</td>';
     const colorPct = p => p >= 1 ? 'var(--green)' : p >= 0.5 ? '#4C9EF1' : p > 0 ? 'var(--amber)' : '#E84A4A';
 
-    // ── Montar linhas por REP+MARCA a partir de gcRows ──
-    // gcRows agora tem uma linha por REP+MARCA
-    // Agrupa em repMap: rep -> { meta, codRep, uf, marcas: [{marca, pecas, pedidos, clisA, venda}] }
-    const repMap = {};
+    // ── Montar índice: marcaMap[marca][rep] = { pecas, pedidos, clisA, venda, codRep, uf } ──
+    const marcaMap = {};   // marca -> rep -> agregado
+    const repMeta  = {};   // rep -> meta total
 
+    // Preencher metas
+    (cachedData||[]).forEach(d => {
+      if (!repMeta[d.rep]) repMeta[d.rep] = 0;
+      repMeta[d.rep] += d.meta;
+    });
+
+    // Preencher vendas por marca+rep
     if (gcRows && gcRows.length) {
       gcRows.forEach(r => {
         const rep    = String(gV(r,'REP')||'').trim();
         const codRep = String(gV(r,'COD_REP')||'').trim();
-        const marca  = String(gV(r,'MARCA')||'').trim() || '—';
+        const marca  = String(gV(r,'MARCA')||'').trim() || '(sem marca)';
         const pecas  = parseFloat(gV(r,'PECAS')||0)||0;
         const pedidos= parseFloat(gV(r,'PEDIDOS')||0)||0;
         const clisA  = parseFloat(gV(r,'CLIENTES_ATEND')||0)||0;
         const venda  = parseFloat(gV(r,'VENDA')||0)||0;
-        const uf     = String(gV(r,'UF')||'').trim();
+        const uf     = String(gV(r,'UF')||'').trim() || ufPorRep[rep]?.uf || '';
         if (!rep) return;
-        if (!repMap[rep]) repMap[rep] = { codRep, uf: uf || ufPorRep[rep]?.uf || '', marcas: [] };
-        if (!repMap[rep].uf && uf) repMap[rep].uf = uf;
-        repMap[rep].marcas.push({ marca, pecas, pedidos, clisA, venda });
-      });
-    } else {
-      // Fallback: sem breakdown de marca, usar cachedData
-      Object.entries(metaPorRep).forEach(([rep, mp]) => {
-        repMap[rep] = {
-          codRep: ufPorRep[rep]?.cod || '',
-          uf: ufPorRep[rep]?.uf || '',
-          marcas: [{ marca: '—', pecas: 0, pedidos: 0, clisA: 0, venda: mp.venda }]
-        };
+        if (!marcaMap[marca]) marcaMap[marca] = {};
+        if (!marcaMap[marca][rep]) marcaMap[marca][rep] = { pecas:0, pedidos:0, clisA:0, venda:0, codRep, uf };
+        marcaMap[marca][rep].pecas   += pecas;
+        marcaMap[marca][rep].pedidos += pedidos;
+        marcaMap[marca][rep].clisA   += clisA;
+        marcaMap[marca][rep].venda   += venda;
       });
     }
 
-    // Adicionar reps com meta mas sem nenhuma venda (não aparecem no gcRows)
-    Object.keys(metaPorRep).forEach(rep => {
-      if (!repMap[rep]) {
-        repMap[rep] = {
-          codRep: ufPorRep[rep]?.cod || '',
-          uf: ufPorRep[rep]?.uf || '',
-          marcas: []   // sem marcas = sem venda
-        };
-      }
+    // Marcas ordenadas por venda total desc
+    const todasMarcas = Object.keys(marcaMap).sort((a,b) => {
+      const vA = Object.values(marcaMap[a]).reduce((s,r)=>s+r.venda,0);
+      const vB = Object.values(marcaMap[b]).reduce((s,r)=>s+r.venda,0);
+      return vB - vA;
     });
 
-    // Agregar totais por rep e cruzar com meta/repStats
-    let rows = Object.entries(repMap).map(([rep, rd]) => {
-      const mp      = metaPorRep[rep] || { meta: 0, venda: 0 };
-      const meta    = mp.meta;
-      const venda   = rd.marcas.reduce((s,m) => s + m.venda, 0);
-      const pecas   = rd.marcas.reduce((s,m) => s + m.pecas, 0);
-      const pedidos = rd.marcas.reduce((s,m) => s + m.pedidos, 0);
-      const clisA   = rd.marcas.reduce((s,m) => s + m.clisA, 0);
-      const pct     = meta > 0 ? venda / meta : 0;
-      const st      = repStats[rep] || { atendidos: clisA, novos: 0, mantidos: 0, exClientes: 0, valorNovos: 0 };
-      return { rep, codRep: rd.codRep, uf: rd.uf, meta, venda, pecas, pedidos, clisA,
-               pct, novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, valorNovos: st.valorNovos,
-               marcas: rd.marcas.sort((a,b) => b.venda - a.venda) };
+    // Todos os reps com meta (para incluir quem não vendeu)
+    const todosRepsComMeta = Object.keys(repMeta);
+
+    // CSS das seções (injetado uma vez)
+    if (!document.getElementById('gc-css')) {
+      const s = document.createElement('style');
+      s.id = 'gc-css';
+      s.textContent = `
+        .gc-tbl { border-collapse:collapse; width:100%; font-size:12px; }
+        .gc-tbl th { padding:8px 10px; font-size:11px; font-weight:600; color:var(--muted); white-space:nowrap; border-bottom:2px solid var(--border); position:sticky; top:0; background:var(--sidebar); z-index:2; }
+        .gc-tbl th.l { text-align:left; }
+        .gc-tbl th.r { text-align:right; }
+        .gc-tbl th.c { text-align:center; }
+        .gc-tbl td { padding:7px 10px; white-space:nowrap; border-bottom:1px solid var(--border); }
+        .gc-tbl .gc-total-row td { background:var(--sidebar)!important; font-weight:700; color:var(--muted); border-top:2px solid var(--border); position:sticky; bottom:0; }
+      `;
+      document.head.appendChild(s);
+    }
+
+    let html = '<div style="padding:16px 20px 8px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">'
+      + '<div style="font-size:15px;font-weight:700;color:var(--tx)">Gestão Comercial</div>'
+      + '<div style="font-size:12px;color:var(--muted)">Coleção vigente: ' + colLabel + '</div>'
+      + '</div>'
+      + '<div style="overflow-y:auto;flex:1;padding:0 16px 24px;display:flex;flex-direction:column;gap:24px">';
+
+    // ── Uma seção por marca ──
+    todasMarcas.forEach(marca => {
+      const repsNaMarca = marcaMap[marca];
+      const isMY  = marca.toUpperCase().includes('MYROCK');
+      const acento = isMY ? 'var(--green)' : 'var(--blue)';
+
+      // Reps com venda nesta marca, ordenados por venda desc
+      let repRows = Object.entries(repsNaMarca).map(([rep, rd]) => {
+        const meta    = repMeta[rep] || 0;
+        const pct     = meta > 0 ? rd.venda / meta : 0;
+        const st      = repStats[rep] || { novos:0, mantidos:0, exClientes:0, valorNovos:0 };
+        const pcPed   = rd.pedidos > 0 ? rd.pecas / rd.pedidos : 0;
+        const pedMed  = rd.clisA > 0 ? rd.venda / rd.clisA : 0;
+        const naoRep  = Math.max(0, st.mantidos - st.novos);
+        return { rep, ...rd, meta, pct, pcPed, pedMed, naoRep,
+                 novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, valorNovos: st.valorNovos };
+      }).sort((a,b) => b.venda - a.venda);
+
+      // Adicionar reps com meta mas sem venda nesta marca
+      todosRepsComMeta.forEach(rep => {
+        if (repsNaMarca[rep]) return; // já está
+        const meta = repMeta[rep] || 0;
+        const st   = repStats[rep] || { novos:0, mantidos:0, exClientes:0, valorNovos:0 };
+        repRows.push({ rep, codRep: ufPorRep[rep]?.cod||'', uf: ufPorRep[rep]?.uf||'',
+                       pecas:0, pedidos:0, clisA:0, venda:0, meta, pct:0, pcPed:0, pedMed:0,
+                       naoRep:0, novos:st.novos, mantidos:st.mantidos, exClientes:st.exClientes, valorNovos:st.valorNovos });
+      });
+
+      // Totais da marca
+      const totM = repRows.reduce((a,r)=>({ pecas:a.pecas+r.pecas, meta:a.meta+r.meta, venda:a.venda+r.venda,
+        clisA:a.clisA+r.clisA, novos:a.novos+r.novos, mantidos:a.mantidos+r.mantidos,
+        exClientes:a.exClientes+r.exClientes, valorNovos:a.valorNovos+r.valorNovos }),
+        {pecas:0,meta:0,venda:0,clisA:0,novos:0,mantidos:0,exClientes:0,valorNovos:0});
+      const totPctM = totM.meta > 0 ? totM.venda / totM.meta : 0;
+      const totNaoRepM = Math.max(0, totM.mantidos - totM.novos);
+      const totColor = colorPct(totPctM);
+
+      html += '<div>';
+      html += '<div style="font-size:13px;font-weight:700;padding:8px 12px;background:var(--surface2);border-radius:6px;border-left:3px solid '
+        + acento + ';margin-bottom:10px;color:var(--tx)">'
+        + marca
+        + '<span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:8px">'
+        + repRows.filter(r=>r.venda>0).length + ' rep' + (repRows.filter(r=>r.venda>0).length!==1?'s':'')+' com venda'
+        + '</span></div>';
+
+      html += '<div style="overflow:auto;border-radius:6px;border:1px solid var(--border)">'
+        + '<table class="gc-tbl">'
+        + '<thead><tr>'
+        + '<th class="c">Cod.</th>'
+        + '<th class="l" style="min-width:160px">Representante</th>'
+        + '<th class="c">UF</th>'
+        + '<th class="r">Peças</th>'
+        + '<th class="r">Meta</th>'
+        + '<th class="r">Realizado</th>'
+        + '<th class="r">% Meta</th>'
+        + '<th class="r">Pc/Pedido</th>'
+        + '<th class="r">Ped. médio</th>'
+        + '<th class="r">Atendidos</th>'
+        + '<th class="r" style="color:var(--green)">Novos</th>'
+        + '<th class="r" style="color:#4C9EF1">Mantidos</th>'
+        + '<th class="r" style="color:var(--amber)">Não rep.</th>'
+        + '<th class="r" style="color:#E84A4A">Ex-clientes</th>'
+        + '<th class="r" style="color:var(--green)">Valor novos</th>'
+        + '</tr></thead><tbody>';
+
+      repRows.forEach((r, i) => {
+        const bg       = i % 2 === 0 ? 'var(--surface)' : 'var(--surface2)';
+        const pctColor = colorPct(r.pct);
+        const semVenda = r.venda === 0;
+        html += '<tr style="background:' + bg + (semVenda?';opacity:.55':'') + '">';
+        html += tdC(r.codRep || '—', 'color:var(--muted);font-family:monospace;font-size:11px');
+        html += tdL('<span title="' + r.rep.replace(/"/g,'&quot;') + '" style="font-weight:600;max-width:200px;display:inline-block;overflow:hidden;text-overflow:ellipsis">' + shortRep(r.rep) + '</span>');
+        html += tdC(r.uf || '—', 'color:var(--muted)');
+        html += td(r.pecas > 0 ? fmtN(r.pecas) : '—');
+        html += td(r.meta > 0 ? fmtR(r.meta) : '—');
+        html += td(fmtR(r.venda), 'color:' + pctColor + ';font-weight:700');
+        html += td(r.meta > 0 ? (r.pct*100).toFixed(1)+'%' : '—', 'color:' + pctColor + ';font-weight:700');
+        html += td(r.pcPed > 0 ? Math.round(r.pcPed) : '—');
+        html += td(r.pedMed > 0 ? fmtR(r.pedMed) : '—');
+        html += td(r.clisA > 0 ? r.clisA : '—');
+        html += td(r.novos > 0 ? r.novos : '—', 'color:var(--green)');
+        html += td(r.mantidos > 0 ? r.mantidos : '—', 'color:#4C9EF1');
+        html += td(r.naoRep > 0 ? r.naoRep : '—', 'color:var(--amber)');
+        html += td(r.exClientes > 0 ? r.exClientes : '—', 'color:#E84A4A');
+        html += td(r.valorNovos > 0 ? fmtR(r.valorNovos) : '—', 'color:var(--green)');
+        html += '</tr>';
+      });
+
+      // Linha de total da marca
+      html += '</tbody><tfoot><tr class="gc-total-row">';
+      html += tdC('') + tdL('Total ' + marca) + tdC('');
+      html += td(fmtN(totM.pecas));
+      html += td(fmtR(totM.meta));
+      html += td(fmtR(totM.venda), 'color:' + totColor);
+      html += td((totPctM*100).toFixed(1)+'%', 'color:' + totColor);
+      html += td('—') + td('—');
+      html += td(totM.clisA > 0 ? totM.clisA : '—');
+      html += td(totM.novos > 0 ? totM.novos : '—', 'color:var(--green)');
+      html += td(totM.mantidos > 0 ? totM.mantidos : '—', 'color:#4C9EF1');
+      html += td(totNaoRepM > 0 ? totNaoRepM : '—', 'color:var(--amber)');
+      html += td(totM.exClientes > 0 ? totM.exClientes : '—', 'color:#E84A4A');
+      html += td(totM.valorNovos > 0 ? fmtR(totM.valorNovos) : '—', 'color:var(--green)');
+      html += '</tr></tfoot></table></div></div>';
     });
 
-    // Ordenar por venda desc
-    rows.sort((a,b) => b.venda !== a.venda ? b.venda - a.venda : b.meta - a.meta);
-
-    // Ranking
-    let rk = 0, lastVenda = null, lastRk = 0;
-    rows = rows.map(r => {
-      if (r.venda !== lastVenda) { rk++; lastRk = rk; }
-      else rk = lastRk;
-      lastVenda = r.venda;
-      return { ...r, rk };
-    });
-
-    // Totais gerais
-    const tot = rows.reduce((a,r) => ({
-      pecas: a.pecas+r.pecas, meta: a.meta+r.meta, venda: a.venda+r.venda,
-      clisA: a.clisA+r.clisA, novos: a.novos+r.novos, mantidos: a.mantidos+r.mantidos,
-      exClientes: a.exClientes+r.exClientes, valorNovos: a.valorNovos+r.valorNovos,
-    }), {pecas:0,meta:0,venda:0,clisA:0,novos:0,mantidos:0,exClientes:0,valorNovos:0});
-    const totPct = tot.meta > 0 ? tot.venda / tot.meta : 0;
-
-    let html = `
-    <div style="padding:16px 20px 8px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
-      <div style="font-size:15px;font-weight:700;color:var(--tx)">Gestão Comercial</div>
-      <div style="font-size:12px;color:var(--muted)">Coleção vigente: ${colLabel}</div>
-    </div>
-    <div style="overflow:auto;flex:1;padding:0 4px 20px">
-    <table style="border-collapse:collapse;width:100%;min-width:1200px">
-      <thead><tr>
-        <th style="${thStyleC}">RK</th>
-        <th style="${thStyleC}">Cod.</th>
-        <th style="${thStyleL};min-width:160px">Representante / Marca</th>
-        <th style="${thStyleC}">UF</th>
-        <th style="${thStyle}">Peças</th>
-        <th style="${thStyle}">Meta</th>
-        <th style="${thStyle}">Realizado</th>
-        <th style="${thStyle}">% Meta</th>
-        <th style="${thStyle}">Pc/Pedido</th>
-        <th style="${thStyle}">Ped. médio</th>
-        <th style="${thStyle}">Atendidos</th>
-        <th style="${thStyle}">Novos</th>
-        <th style="${thStyle}">Mantidos</th>
-        <th style="${thStyle}">Não repetidos</th>
-        <th style="${thStyle}">Ex-clientes</th>
-        <th style="${thStyle}">Valor novos</th>
-      </tr></thead>
-      <tbody id="gc-tbody">`;
-
-    rows.forEach((r, i) => {
-      const repId    = 'gc-rep-' + i;
-      const bg       = i % 2 === 0 ? 'var(--surface)' : 'var(--surface2)';
-      const pctColor = colorPct(r.pct);
-      const semVenda = r.venda === 0;
-      const naoRep   = Math.max(0, r.mantidos - r.novos);
-      const carteira = r.clisA + r.exClientes;
-      const pcPedido = r.pedidos > 0 ? r.pecas / r.pedidos : 0;
-      const pedMedio = r.clisA > 0 ? r.venda / r.clisA : 0;
-      const hasMarcas = r.marcas.length > 1;
-
-      // Linha do representante (clicável para colapsar/expandir marcas)
-      const onclickAttr = hasMarcas ? 'onclick="gcToggle(\'' + repId + '\')"' : '';
-      const titleAttr   = hasMarcas ? 'title="Clique para ocultar marcas"' : '';
-      const chevron     = hasMarcas
-        ? '<span class="gc-chevron" id="chev-' + repId + '" style="font-size:10px;color:var(--muted);transition:transform .2s;transform:rotate(90deg)">▶</span>'
-        : '<span style="width:14px"></span>';
-      html += '<tr class="gc-rep-row" data-id="' + repId + '" style="background:' + bg + ';' + (semVenda?'opacity:.65':'') + 'cursor:' + (hasMarcas?'pointer':'default') + '" ' + onclickAttr + ' ' + titleAttr + '>';
-      html += tdC(r.venda > 0 ? r.rk : '—', 'font-weight:700;color:var(--muted)');
-      html += tdC(r.codRep || '—', 'color:var(--muted);font-family:monospace;font-size:11px');
-      html += tdL('<span style="display:flex;align-items:center;gap:6px">' + chevron + '<span title="' + r.rep.replace(/"/g,'&quot;') + '" style="max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis;font-weight:600">' + shortRep(r.rep) + '</span></span>');
-      html += tdC(r.uf || '—', 'color:var(--muted)');
-      html += td(r.pecas > 0 ? fmtN(r.pecas) : '—');
-      html += td(fmtR(r.meta));
-      html += td(fmtR(r.venda), 'color:' + pctColor + ';font-weight:700');
-      html += td(r.venda > 0 ? (r.pct*100).toFixed(1)+'%' : '0%', 'color:' + pctColor + ';font-weight:700');
-      html += td(pcPedido > 0 ? Math.round(pcPedido) : '—');
-      html += td(pedMedio > 0 ? fmtR(pedMedio) : '—');
-      html += td(r.clisA > 0 ? r.clisA : '—');
-      html += td(r.novos > 0 ? r.novos : '—', 'color:var(--green)');
-      html += td(r.mantidos > 0 ? r.mantidos : '—', 'color:#4C9EF1');
-      html += td(naoRep > 0 ? naoRep : '—', 'color:var(--amber)');
-      html += td(r.exClientes > 0 ? r.exClientes : '—', 'color:#E84A4A');
-      html += td(r.valorNovos > 0 ? fmtR(r.valorNovos) : '—', 'color:var(--green)');
-      html += '</tr>';
-
-      // Sub-linhas por marca (inicialmente ocultas)
-      if (hasMarcas) {
-        r.marcas.forEach(m => {
-          const mPct   = r.venda > 0 ? m.venda / r.venda : 0; // % do rep
-          const mPcPed = m.pedidos > 0 ? m.pecas / m.pedidos : 0;
-          const mPedM  = m.clisA > 0 ? m.venda / m.clisA : 0;
-          const marcaLabel = '<span style="display:flex;align-items:center;gap:6px;padding-left:24px">'
-            + '<span style="width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0;opacity:.5"></span>'
-            + '<span style="font-size:12px;color:var(--muted)">' + m.marca + '</span>'
-            + '<span style="font-size:10px;color:var(--muted);opacity:.7">' + (mPct > 0 ? (mPct*100).toFixed(0)+'%' : '') + '</span>'
-            + '</span>';
-          html += '<tr class="gc-marca-row gc-marca-' + repId + '" style="background:' + bg + '">';
-          html += tdC('', 'color:var(--muted)');
-          html += tdC('', '');
-          html += tdL(marcaLabel);
-          html += tdC('', '');
-          html += td(m.pecas > 0 ? fmtN(m.pecas) : '—', 'color:var(--muted)');
-          html += td('—', 'color:var(--muted)');
-          html += td(fmtR(m.venda), 'color:var(--muted)');
-          html += td('—', 'color:var(--muted)');
-          html += td(mPcPed > 0 ? Math.round(mPcPed) : '—', 'color:var(--muted)');
-          html += td(mPedM > 0 ? fmtR(mPedM) : '—', 'color:var(--muted)');
-          html += td(m.clisA > 0 ? m.clisA : '—', 'color:var(--muted)');
-          html += td('—', 'color:var(--muted)');
-          html += td('—', 'color:var(--muted)');
-          html += td('—', 'color:var(--muted)');
-          html += td('—', 'color:var(--muted)');
-          html += td('—', 'color:var(--muted)');
-          html += '</tr>';
-        });
-      }
-    });
-
-    const totNaoRep   = Math.max(0, tot.mantidos - tot.novos);
-    const totCarteira = tot.clisA + tot.exClientes;
-    const totColor    = colorPct(totPct);
-    html += '</tbody>';
-    html += '<tfoot><tr style="background:var(--sidebar);font-weight:700;border-top:2px solid var(--border)">';
-    html += tdC('') + tdC('');
-    html += tdL('<span style="font-size:12px;color:var(--muted)">Total</span>');
-    html += tdC('');
-    html += td(fmtN(tot.pecas));
-    html += td(fmtR(tot.meta));
-    html += td(fmtR(tot.venda), 'color:' + totColor);
-    html += td((totPct*100).toFixed(1)+'%', 'color:' + totColor);
-    html += td('—') + td('—');
-    html += td(tot.clisA > 0 ? tot.clisA : '—');
-    html += td(tot.novos > 0 ? tot.novos : '—', 'color:var(--green)');
-    html += td(tot.mantidos > 0 ? tot.mantidos : '—', 'color:#4C9EF1');
-    html += td(totNaoRep > 0 ? totNaoRep : '—', 'color:var(--amber)');
-    html += td(tot.exClientes > 0 ? tot.exClientes : '—', 'color:#E84A4A');
-    html += td(tot.valorNovos > 0 ? fmtR(tot.valorNovos) : '—', 'color:var(--green)');
-    html += '</tr></tfoot></table></div>';
-
+    html += '</div>';
     return html;
-  }
-
-  function gcToggle(id) {
-    const rows = document.querySelectorAll('.gc-marca-' + id);
-    const chev = document.getElementById('chev-' + id);
-    const open = rows.length && rows[0].style.display !== 'none';
-    rows.forEach(r => r.style.display = open ? 'none' : '');
-    if (chev) chev.style.transform = open ? '' : 'rotate(90deg)';
   }
 
   function buildClientes() {
