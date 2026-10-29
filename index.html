@@ -1188,7 +1188,17 @@ function renderDashboard(data) {
 
   function buildGestaoCom() {
     // ── Helpers ──
-    const gV = (r, c) => { const k = Object.keys(r).find(k => k.toUpperCase().includes(c.toUpperCase())); return k ? r[k] : null; };
+    // gV: busca exata — evita confundir COD_REP com REP
+    const gV = (r, c) => {
+      const cu = c.toUpperCase();
+      // 1) match exato de coluna bracket: [REP] não pega [COD_REP]
+      let k = Object.keys(r).find(k => new RegExp('\\[' + cu + '\\]$').test(k.toUpperCase()));
+      // 2) fallback: nome igual (sem brackets)
+      if (!k) k = Object.keys(r).find(k => k.toUpperCase() === cu);
+      // 3) fallback: includes (para colunas sem bracket como "UF", "PECAS" etc)
+      if (!k) k = Object.keys(r).find(k => k.toUpperCase().includes(cu) && !k.toUpperCase().includes('COD_' + cu));
+      return k ? r[k] : null;
+    };
     const fmtR = v => v > 0 ? 'R$ ' + Math.round(v).toLocaleString('pt-BR') : 'R$ 0';
     const fmtN = v => v != null && !isNaN(v) ? Number(v).toLocaleString('pt-BR') : '—';
 
@@ -1809,12 +1819,14 @@ function renderDashboard(data) {
   container.innerHTML = `
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="overview">Visão Geral</button>
+      <button class="tab-btn" data-tab="gestao">Gestão Comercial</button>
       <button class="tab-btn" data-tab="historico">Histórico Mensal</button>
       <button class="tab-btn" data-tab="periodo">Histórico Semanal</button>
       <button class="tab-btn" data-tab="clientes">Clientes</button>
       <button class="tab-btn" data-tab="restricoes">Restrições <span class="tab-badge">${cachedRestricoes?cachedRestricoes.length:0}</span></button>
     </div>
     <div class="tab-content" id="tab-overview">${buildOverview()}${buildMetas()}</div>
+    <div class="tab-content hidden" id="tab-gestao" style="padding:0;display:flex;flex-direction:column">${buildGestaoCom()}</div>
     <div class="tab-content hidden" id="tab-historico">${buildHistorico()}</div>
     <div class="tab-content hidden" id="tab-periodo">${buildHistoricoPeriodo()}</div>
     <div class="tab-content hidden" id="tab-clientes">${buildClientes()}</div>
