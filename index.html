@@ -3398,25 +3398,25 @@ function _renderMetasGrid() {
   });
 
   // ---------- rep -> marca ----------
-  // Prioridade: cachedGestaoCom (coleção atual, REP+MARCA) > cachedClientes2 (hist, REP+MARCA) > cachedData (sem marca)
+  // Usa cachedClientes2 (DAX_HIST_CLIENTES: PEDIDO[REP] + PEDIDO[MARCA], todas coleções)
+  // Mesma fonte que buildClientes() usa — não depende de COL_ATUAL
   const repMarca = {};
-  // 1) Gestão comercial (coleção atual): tem REP e MARCA
-  if (typeof cachedGestaoCom !== 'undefined' && cachedGestaoCom && cachedGestaoCom.length) {
-    cachedGestaoCom.forEach(r => {
-      const rep   = String(r[gK(r,'REP')]||'').trim();
-      const marca = String(r[gK(r,'MARCA')]||'').trim();
-      if (rep && marca && !repMarca[rep]) repMarca[rep] = marca;
-    });
-  }
-  // 2) Histórico de clientes: PEDIDO[REP] e PEDIDO[MARCA] (todas as coleções)
   if (typeof cachedClientes2 !== 'undefined' && cachedClientes2 && cachedClientes2.length) {
+    // Conta ocorrências de cada marca por rep e usa a mais frequente
+    const repMarcaCount = {};
     cachedClientes2.forEach(r => {
       const rep   = String(r[gK(r,'REP')]||'').trim();
       const marca = String(r[gK(r,'MARCA')]||'').trim();
-      if (rep && marca && !repMarca[rep]) repMarca[rep] = marca;
+      if (!rep || !marca) return;
+      if (!repMarcaCount[rep]) repMarcaCount[rep] = {};
+      repMarcaCount[rep][marca] = (repMarcaCount[rep][marca]||0) + 1;
+    });
+    Object.keys(repMarcaCount).forEach(rep => {
+      const counts = repMarcaCount[rep];
+      repMarca[rep] = Object.keys(counts).sort((a,b) => counts[b]-counts[a])[0];
     });
   }
-  // 3) Fallback: hist metas (se tiver campo MARCA)
+  // Fallback: hist metas (se tiver campo MARCA)
   hist.forEach(r => {
     const nom   = r[gK(r,'NOME')];
     const marca = r[gK(r,'MARCA')] || '';
