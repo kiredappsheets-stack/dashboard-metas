@@ -3435,6 +3435,7 @@ function _initMetasTab() {
         <input id="metasAdmin_busca" type="text" placeholder="Buscar representante…" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;width:200px"/>
         <span style="flex:1"></span>
         <span id="metasAdmin_status" style="font-size:11px;color:var(--muted)"></span>
+        <button onclick="localStorage.removeItem('dashCache_v21');location.reload()" style="font-family:var(--font);font-size:11px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:4px 10px;cursor:pointer" title="Limpar cache e recarregar">🔄 Atualizar dados</button>
       </div>
       <div style="flex:1;overflow:auto;padding:20px">
         <div id="metasAdmin_grid"></div>
