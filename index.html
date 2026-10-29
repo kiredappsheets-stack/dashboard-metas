@@ -2081,6 +2081,11 @@ function loadCache() {
     if (entry.slot !== currentSlot) return null; // cache expirado
     // Verificar se cache está completo (tem dados da fase 2)
     if (!entry.data || !entry.data.data || !entry.data.restricoes) return null;
+    // Não retornar cache zerado
+    if (!Array.isArray(entry.data.data) || entry.data.data.length === 0) {
+      localStorage.removeItem(CACHE_KEY);
+      return null;
+    }
     return entry.data;
   } catch(e) {
     return null;
@@ -2094,6 +2099,11 @@ function loadCacheStale() {
     if (!raw) return null;
     const entry = JSON.parse(raw);
     if (!entry.data || !entry.data.data || !entry.data.restricoes) return null;
+    // Não retornar cache zerado (dados da query principal vazios)
+    if (!Array.isArray(entry.data.data) || entry.data.data.length === 0) {
+      localStorage.removeItem(CACHE_KEY); // limpar cache inválido
+      return null;
+    }
     return entry.data;
   } catch(e) {
     return null;
@@ -2161,6 +2171,11 @@ async function loadDashboard() {
           safe(() => runDaxQuery(token, DAX_COLECOES_DATAS, true)),
           safe(() => runDaxQuery(token, DAX_CRM_RETORNO, true)),
         ]);
+        if (!data || data.length === 0) {
+          console.warn('DAX_QUERY retornou vazio — não atualiza cache');
+          document.getElementById('lastUpdate').textContent = 'Dados do cache (atualização falhou)';
+          return;
+        }
         cachedData = data; cachedMetasHist = metasHist; cachedRestricoes = restricoes;
         cachedHistMarca = histMarca||[]; cachedHistPeriodo = histPeriodo||[];
         cachedClientes2 = clientes2||[]; cachedCrmJustif = crmJustif||[]; cachedClientesLoc = clientesLoc||[];
@@ -2213,6 +2228,10 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_CRM_RETORNO, true)),
     ]);
     clearTimeout(_loadTimeout);
+    if (!data || data.length === 0) {
+      renderError('Não foi possível carregar dados do Power BI. Verifica se o Power BI Desktop está aberto e tenta novamente.');
+      return;
+    }
     cachedData = data;
     cachedMetasHist = metasHist;
     cachedRestricoes = restricoes;
