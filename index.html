@@ -2037,7 +2037,7 @@ function renderDashboard(data) {
                 ${loc ? `<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:1px;overflow:hidden;text-overflow:ellipsis">${loc}</span>` : ''}
               </td>
               <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span></td>
-              <td class="col-crm">${(() => { const crmEstado = getCrmEstado(cod); const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : crmEstado === 'financeiro' ? ' crm-financeiro' : ''; return `<span class="crm-icon${crmClass}" data-cod="${cod}" data-nome="${cli.nome.replace(/"/g,'&quot;')}" onclick="abrirCrmPopup(this,event)">💬</span>`; })()}</td>`;
+              <td class="col-crm">${(() => { const crmEstado = getCrmEstado(cod); const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : crmEstado === 'financeiro' ? ' crm-financeiro' : ''; return `<span class="crm-icon${crmClass}" data-cod="${cod}" data-nome="${cli.nome.replace(/"/g,'&quot;')}">💬</span>`; })()}</td>`;
             const crmEventosCli = getCrmEventos(cod);
             cols.forEach((col,ci) => {
               const v = dm[col]||0;
@@ -3403,8 +3403,11 @@ function fecharCrmPopup() {
   _crmPopupCod = null; _crmPopupIconEl = null;
 }
 
-// Fechar ao clicar fora
+// Event delegation — clique em ícone CRM
 document.addEventListener('click', function(e) {
+  const icon = e.target.closest('.crm-icon');
+  if (icon) { abrirCrmPopup(icon, e); return; }
+  // Fechar ao clicar fora
   const popup = document.getElementById('crmPopup');
   if (popup && popup.classList.contains('open') && !popup.contains(e.target)) fecharCrmPopup();
 });
