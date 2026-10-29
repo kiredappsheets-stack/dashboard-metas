@@ -3257,7 +3257,16 @@ async function _crmLoadFromSheets() {
   try {
     const r = await fetch(CRM_API_URL + '?action=get');
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    _crmData = await r.json();
+    const raw = await r.json();
+    // Normalizar chaves: o Sheets remove zeros à esquerda (ex: "4376" → "04376")
+    // Detectar o formato usado no DOM e converter as chaves do Sheets para casar
+    _crmData = {};
+    for (const [cod, eventos] of Object.entries(raw)) {
+      // Tentar com zero à esquerda (5 dígitos) e sem zero
+      const padded = cod.padStart(5, '0');
+      const key = document.querySelector(`.crm-icon[data-cod="${padded}"]`) ? padded : cod;
+      _crmData[key] = eventos;
+    }
     // Atualizar todos os ícones após carregar
     Object.keys(_crmData).forEach(cod => _crmAtualizarIcone(cod));
   } catch(e) {
