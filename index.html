@@ -1769,6 +1769,9 @@ function renderDashboard(data) {
         .cli-tbl .rep-row .rep-badge { font-size:10px; font-weight:500; color:var(--muted); background:rgba(255,255,255,.07); border-radius:10px; padding:2px 8px; margin-left:2px; }
         .col-val { text-align:right; font-size:11px; }
         .col-total { text-align:right; font-weight:700; }
+        .cli-tbl .rep-subtotal td { background:#080A0F!important; border-top:1px dashed rgba(255,255,255,.1); border-bottom:2px solid rgba(255,255,255,.06); }
+        .cli-tbl .rep-subtotal .col-nome { background:#080A0F!important; }
+        .cli-tbl .rep-subtotal .col-status { background:#080A0F!important; }
         .col-checkbox-panel { padding:10px 14px; background:var(--surface2); border-radius:6px; border:1px solid var(--border); }
         .col-checkbox-panel label { display:inline-flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); cursor:pointer; margin:3px 6px 3px 0; white-space:nowrap; }
         .col-checkbox-panel label:hover { color:var(--tx); }
@@ -1878,11 +1881,14 @@ function renderDashboard(data) {
           html += `<tr class="rep-row"><td class="col-nome" colspan="${cols.length+3}"><span class="${repLabelClass}">${repNomeHtml}<span class="rep-badge">${cliDoRep.length} cliente${cliDoRep.length!==1?'s':''}</span></span></td></tr>`;
 
           cliDoRep.sort((a,b)=>porCliente[a].nome.localeCompare(porCliente[b].nome,'pt-BR'));
+          const subCols = new Array(cols.length).fill(0);
+          let subGeral = 0;
           cliDoRep.forEach(cod => {
             const cli = porCliente[cod];
             const dm  = cli.marcas[marca]||{};
             const totalCli = cols.reduce((s,col)=>s+(dm[col]||0),0);
             totGeral += totalCli;
+            subGeral += totalCli;
             const st = statusPorMarcaCli[marca]?.[cod] || 'novo';
             const crm = crmPorCliente[cod];
             const loc = [cli.cidade, cli.estado].filter(Boolean).join(' / ');
@@ -1894,6 +1900,7 @@ function renderDashboard(data) {
             cols.forEach((col,ci) => {
               const v = dm[col]||0;
               totCols[ci] += v;
+              subCols[ci] += v;
               const heat = maxVal>0&&v>0 ? Math.round((v/maxVal)*100) : 0;
               const alpha = heat>0 ? (0.08+heat/100*0.55).toFixed(2) : '0';
               const style = v>0 ? `background:rgba(${bgRgb},${alpha});color:${heat>60?'#fff':'var(--tx)'}` : 'color:var(--hint)';
@@ -1906,7 +1913,6 @@ function renderDashboard(data) {
                 const info = encodeURIComponent(JSON.stringify({nome:cli.nome, dtRet, obs:crm.obs||'', dtReg:crm.data?crm.data.split(' ')[0]:'', tipo:'retorno'}));
                 crmIcon = `<span class="crm-icon${crmClass}" data-cod="${cod}" data-info="${info}" onclick="abrirCrmPopup(this,event)">💬</span>`;
               } else if (crm && !crm.colecaoCrm && ci === cols.length-1) {
-                // Sem coleção identificada: cai na última coluna como fallback
                 const dtRet = crm.dtRetorno ? crm.dtRetorno.split('T')[0] : '';
                 const info = encodeURIComponent(JSON.stringify({nome:cli.nome, dtRet, obs:crm.obs||'', dtReg:crm.data?crm.data.split(' ')[0]:'', tipo:'justif'}));
                 crmIcon = `<span class="crm-icon${crmClass}" data-cod="${cod}" data-info="${info}" onclick="abrirCrmPopup(this,event)">💬</span>`;
@@ -1915,6 +1921,17 @@ function renderDashboard(data) {
             });
             html += `<td class="col-total" style="color:${acento}">${fmt(totalCli)}</td></tr>`;
           });
+
+          // Linha de subtotal do representante
+          if (cliDoRep.length > 1) {
+            html += `<tr class="rep-subtotal">
+              <td class="col-nome" style="font-size:11px;color:var(--muted);font-weight:600;padding-left:18px">Subtotal</td>
+              <td class="col-status"></td>`;
+            subCols.forEach(v => {
+              html += `<td class="col-val" style="font-weight:700;color:var(--muted)">${v>0?fmt(v):'—'}</td>`;
+            });
+            html += `<td class="col-total" style="font-weight:700;color:${acento}">${fmt(subGeral)}</td></tr>`;
+          }
         });
 
         html += `<tr class="tbl-foot"><td class="col-nome">Total</td><td class="col-status"></td>`;
