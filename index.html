@@ -1696,8 +1696,9 @@ function renderDashboard(data) {
       colsPorMarca[m] = [...new Set(cachedClientes2.filter(r=>String(gV(r,'MARCA')||'')===m).map(r=>String(gV(r,'COLECAO')||'')))].filter(Boolean).sort().reverse();
     });
 
-    // Reps únicos
+    // Reps únicos (ativos) + flag se há clientes sem rep
     const todosReps = [...new Set(Object.values(porCliente).map(c=>c.rep).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const temSemRep = Object.values(porCliente).some(c => !c.rep);
 
     // Estado dos filtros
     let repFiltro    = '';
@@ -1819,7 +1820,7 @@ function renderDashboard(data) {
     // Render dos painéis
     const renderPaineis = (colsFiltroAtual) => {
       let codigos = Object.keys(porCliente);
-      if (repFiltro)   codigos = codigos.filter(c => porCliente[c].rep === repFiltro);
+      if (repFiltro)   codigos = codigos.filter(c => repFiltro === '__SEM_REP__' ? !porCliente[c].rep : porCliente[c].rep === repFiltro);
       if (buscaFiltro) { const b=buscaFiltro.toLowerCase(); codigos=codigos.filter(c=>porCliente[c].nome.toLowerCase().includes(b)||c.toLowerCase().includes(b)); }
 
       if (!codigos.length) return '<div class="empty-state" style="padding:32px">Nenhum cliente encontrado.</div>';
@@ -1964,6 +1965,7 @@ function renderDashboard(data) {
         <select id="${uid}_rep" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;cursor:pointer">
           <option value="">Todos os representantes</option>
           ${todosReps.map(r=>`<option value="${r}">${r}</option>`).join('')}
+          ${temSemRep ? `<option value="__SEM_REP__">Sem representante</option>` : ''}
         </select>
         <select id="${uid}_status" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;cursor:pointer">
           <option value="">Todos os status</option>
@@ -2028,7 +2030,7 @@ function renderDashboard(data) {
         });
         tableEl.innerHTML = renderPaineis(colsFiltro);
         let n = Object.keys(porCliente).filter(c => {
-          if (repFiltro && porCliente[c].rep !== repFiltro) return false;
+          if (repFiltro) { if (repFiltro === '__SEM_REP__' ? porCliente[c].rep : porCliente[c].rep !== repFiltro) return false; }
           if (buscaFiltro) { const b=buscaFiltro.toLowerCase(); return porCliente[c].nome.toLowerCase().includes(b)||c.toLowerCase().includes(b); }
           return true;
         }).length;
