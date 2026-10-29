@@ -3457,17 +3457,8 @@ function _renderMetasGrid() {
   // ============================================================
   // Renderiza um painel por MARCA (mesmo padrão de buildClientes)
   // dentro de cada painel, coleções são colunas (Venda/Meta/%)
+  // Coleções sem nenhuma meta ou venda para os reps da marca são ocultadas
   // ============================================================
-
-  // ---------- header colunas (igual para todos os painéis) ----------
-  let thGroup = '';
-  let thSub   = '';
-  colecoes.forEach((c, i) => {
-    const sep = i === 0 ? '' : 'ma-col-sep';
-    const histTag = colecoesAtivas.has(c) ? '' : ' <span style="font-size:9px;opacity:.5;font-weight:400">(hist)</span>';
-    thGroup += `<th colspan="3" class="${sep}" style="text-align:center;padding:6px 8px;font-size:11px;white-space:nowrap;font-weight:700">${c}${histTag}</th>`;
-    thSub   += `<th class="ma-val ${sep}">Venda</th><th class="ma-edit-cell">Meta</th><th class="ma-pct-cell">%</th>`;
-  });
 
   // ---------- totais gerais (footer global) ----------
   const totaisGerais = {};
@@ -3479,11 +3470,51 @@ function _renderMetasGrid() {
     const repsM = marcaMap[marca];
     const isMY  = marca.toUpperCase().includes('MYROCK');
     const acento = isMY ? 'var(--green)' : 'var(--blue)';
-    const ncols  = colecoes.length * 3;
 
-    // Totais desta marca por coleção
+    // Totais desta marca por coleção (passagem 1 — para detectar coleções com dados)
     const totaisMarca = {};
     colecoes.forEach(c => { totaisMarca[c] = {venda:0, meta:0}; });
+
+    repsM.forEach(rep => {
+      colecoes.forEach(c => {
+        const h       = (histIdx[c]||{})[rep]||{meta:0,venda:0};
+        const metaLoc = (metasLocaisTodos[c]||{})[rep]!=null ? (metasLocaisTodos[c]||{})[rep] : null;
+        const metaVig = metaLoc!=null ? metaLoc : h.meta;
+        totaisMarca[c].venda += h.venda;
+        totaisMarca[c].meta  += metaVig;
+      });
+    });
+
+    // Filtra coleções que têm pelo menos alguma meta ou venda para esta marca
+    const colsMarca = colecoes.filter(c => totaisMarca[c].venda > 0 || totaisMarca[c].meta > 0);
+
+    // Se não há nenhuma coleção com dados, pula o painel
+    if (!colsMarca.length) return;
+
+    // Reinicia totais para acumular corretamente no footer global
+    repsM.forEach(rep => {
+      colsMarca.forEach(c => {
+        const h       = (histIdx[c]||{})[rep]||{meta:0,venda:0};
+        const metaLoc = (metasLocaisTodos[c]||{})[rep]!=null ? (metasLocaisTodos[c]||{})[rep] : null;
+        const metaVig = metaLoc!=null ? metaLoc : h.meta;
+        totaisGerais[c] = totaisGerais[c] || {venda:0,meta:0};
+        totaisGerais[c].venda += h.venda;
+        totaisGerais[c].meta  += metaVig;
+      });
+    });
+
+    // Header das colunas desta marca (só as coleções com dados)
+    let thGroup = '';
+    let thSub   = '';
+    colsMarca.forEach((c, i) => {
+      const sep = i === 0 ? '' : 'ma-col-sep';
+      const histTag = colecoesAtivas.has(c) ? '' : ' <span style="font-size:9px;opacity:.5;font-weight:400">(hist)</span>';
+      thGroup += `<th colspan="3" class="${sep}" style="text-align:center;padding:6px 8px;font-size:11px;white-space:nowrap;font-weight:700">${c}${histTag}</th>`;
+      thSub   += `<th class="ma-val ${sep}">Venda</th><th class="ma-edit-cell">Meta</th><th class="ma-pct-cell">%</th>`;
+    });
+
+    // Reinicia totais da marca para renderização (passagem 2)
+    colsMarca.forEach(c => { totaisMarca[c] = {venda:0, meta:0}; });
 
     let tbodyL = '';
     let tbodyR = '';
@@ -3491,7 +3522,7 @@ function _renderMetasGrid() {
     repsM.forEach(rep => {
       const repEsc = rep.replace(/'/g,"\\'").replace(/"/g,'&quot;');
       let cells = '';
-      colecoes.forEach((c, i) => {
+      colsMarca.forEach((c, i) => {
         const h       = (histIdx[c]||{})[rep]||{meta:0,venda:0};
         const metaLoc = (metasLocaisTodos[c]||{})[rep]!=null ? (metasLocaisTodos[c]||{})[rep] : null;
         const metaVig = metaLoc!=null ? metaLoc : h.meta;
@@ -3499,10 +3530,8 @@ function _renderMetasGrid() {
         const p       = pct(h.venda, metaVig);
         const cor     = bc(p);
         const sep     = i===0 ? '' : 'ma-col-sep';
-        totaisMarca[c].venda   += h.venda;
-        totaisMarca[c].meta    += metaVig;
-        totaisGerais[c].venda  += h.venda;
-        totaisGerais[c].meta   += metaVig;
+        totaisMarca[c].venda += h.venda;
+        totaisMarca[c].meta  += metaVig;
 
         const editado  = metaLoc != null;
         const metaDisp = fmt(metaVig);
@@ -3523,7 +3552,7 @@ function _renderMetasGrid() {
 
     // Sub-total da marca (footer do painel)
     let footCellsMarca = '';
-    colecoes.forEach((c, i) => {
+    colsMarca.forEach((c, i) => {
       const tm  = totaisMarca[c];
       const p   = pct(tm.venda, tm.meta);
       const cor = bc(p);
@@ -3535,8 +3564,8 @@ function _renderMetasGrid() {
           <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
     });
 
-    const totalVendaMarca = colecoes.reduce((s,c)=>s+totaisMarca[c].venda,0);
-    const totalMetaMarca  = colecoes.reduce((s,c)=>s+totaisMarca[c].meta,0);
+    const totalVendaMarca = colsMarca.reduce((s,c)=>s+totaisMarca[c].venda,0);
+    const totalMetaMarca  = colsMarca.reduce((s,c)=>s+totaisMarca[c].meta,0);
     const ptM = pct(totalVendaMarca, totalMetaMarca);
 
     paineis += `
@@ -3569,14 +3598,16 @@ function _renderMetasGrid() {
     </div>`;
   });
 
-  // ---------- footer global (total de todas as marcas) ----------
+  // ---------- footer global (total de todas as marcas) — só coleções com dados ----------
+  const colecoesComDados = colecoes.filter(c => totaisGerais[c] && (totaisGerais[c].venda > 0 || totaisGerais[c].meta > 0));
   let footGlobal = '';
-  colecoes.forEach((c, i) => {
+  colecoesComDados.forEach((c, i) => {
     const p   = pct(totaisGerais[c].venda, totaisGerais[c].meta);
     const cor = bc(p);
     const sep = i===0 ? '' : 'ma-col-sep';
+    const histTag = colecoesAtivas.has(c) ? '' : ' <span style="font-size:9px;opacity:.5;font-weight:400">(hist)</span>';
     footGlobal += `<td class="ma-val ${sep}">${fmt(totaisGerais[c].venda)}</td>
-      <td class="ma-edit-cell">${fmt(totaisGerais[c].meta)}</td>
+      <td class="ma-edit-cell" style="font-size:10px;color:var(--muted)">${c}${histTag}</td>
       <td class="ma-pct-cell"><div class="ma-bar-wrap">
         <div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
         <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
