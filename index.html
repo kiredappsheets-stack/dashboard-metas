@@ -1859,6 +1859,12 @@ function renderDashboard(data) {
         .crm-icon.crm-validado   { background:rgba(0,200,150,.45); box-shadow:0 0 0 2px var(--green); }
         .crm-icon.crm-recusado   { background:rgba(245,166,35,.45); box-shadow:0 0 0 2px var(--amber); }
         .crm-icon.crm-financeiro { background:rgba(232,74,74,.45);  box-shadow:0 0 0 2px var(--red); }
+        /* Ícone CRM mini dentro das células de coleção */
+        .crm-col-icon { display:inline-flex; align-items:center; justify-content:center; cursor:pointer; font-size:10px; width:14px; height:14px; border-radius:50%; vertical-align:middle; margin-left:5px; flex-shrink:0; transition:filter .15s; }
+        .crm-col-icon:hover { filter:brightness(1.4); transform:scale(1.15); }
+        .crm-col-icon.crm-validado   { background:rgba(0,200,150,.5); box-shadow:0 0 0 1.5px var(--green); }
+        .crm-col-icon.crm-recusado   { background:rgba(245,166,35,.5); box-shadow:0 0 0 1.5px var(--amber); }
+        .crm-col-icon.crm-financeiro { background:rgba(232,74,74,.5);  box-shadow:0 0 0 1.5px var(--red); }
 
         /* Popup CRM (substituindo hover por click) */
         .crm-popup { display:none; position:fixed; z-index:99999; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:0; width:320px; box-shadow:0 8px 40px rgba(0,0,0,.6); text-align:left; overflow:hidden; }
@@ -2047,15 +2053,16 @@ function renderDashboard(data) {
               const heat = maxVal>0&&v>0 ? Math.round((v/maxVal)*100) : 0;
               const alpha = heat>0 ? (0.08+heat/100*0.55).toFixed(2) : '0';
               const style = v>0 ? `background:rgba(${bgRgb},${alpha});color:${heat>60?'#fff':'var(--tx)'}` : 'color:var(--hint)';
-              // Indicador de eventos CRM nesta coleção
+              // Ícone CRM mini na célula desta coleção
               const evCol = crmEventosCli.filter(ev => ev.colecao === col);
-              let colDot = '';
+              let colIcon = '';
               if (evCol.length) {
                 const tipoUlt = evCol[evCol.length-1].tipo;
-                const dotCor = tipoUlt === 'validado' ? 'var(--green)' : tipoUlt === 'recusado' ? 'var(--amber)' : 'var(--red)';
-                colDot = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${dotCor};margin-left:4px;vertical-align:middle" title="${evCol.length} evento(s) CRM"></span>`;
+                const iconClass = tipoUlt === 'validado' ? 'crm-validado' : tipoUlt === 'recusado' ? 'crm-recusado' : 'crm-financeiro';
+                const iconTitle = (tipoUlt === 'validado' ? '✔ Validado' : tipoUlt === 'recusado' ? '✖ Recusado' : '💳 Financeiro') + ` — ${evCol.length} evento(s)`;
+                colIcon = `<span class="crm-col-icon ${iconClass}" data-cod="${cod}" data-nome="${cli.nome.replace(/"/g,'&quot;')}" data-col="${col}" title="${iconTitle}">💬</span>`;
               }
-              html += `<td class="col-val" style="${style}">${fmt(v)}${colDot}</td>`;
+              html += `<td class="col-val" data-cod="${cod}" data-col="${col}" style="${style};white-space:nowrap">${fmt(v)}${colIcon}</td>`;
             });
             html += `<td class="col-total" style="color:${acento}">${fmt(totalCli)}</td></tr>`;
           });
@@ -3266,7 +3273,7 @@ let _crmPopupNome = null;
 let _crmPopupIconEl = null;
 let _crmTipoSelecionado = null;
 
-function abrirCrmPopup(iconEl, event) {
+function abrirCrmPopup(iconEl, event, colPresel) {
   event.stopPropagation();
   const popup = document.getElementById('crmPopup');
 
@@ -3293,6 +3300,8 @@ function abrirCrmPopup(iconEl, event) {
   const _gV = (r,c) => { const k=Object.keys(r).find(k=>k.toUpperCase().includes(c.toUpperCase()))||c; return r[k]??null; };
   const cols = [...new Set((cachedClientes2||[]).map(r=>String(_gV(r,'COLECAO')||'').trim()).filter(Boolean))].sort().reverse();
   cols.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
+  // Pré-seleccionar coleção se clicou no ícone de uma célula específica
+  if (colPresel) sel.value = colPresel;
 
   // Limpar form
   document.getElementById('crmObsInput').value = '';
@@ -3393,14 +3402,55 @@ function crmExcluirEvento(idx) {
 }
 
 function _crmAtualizarIcone(cod) {
-  // Atualiza cor do ícone na tabela sem re-renderizar
+  // Atualiza cor do ícone principal (col-crm) com o estado geral mais recente
   const estado = getCrmEstado(cod);
   const icones = document.querySelectorAll(`.crm-icon[data-cod="${cod}"]`);
   icones.forEach(el => {
     el.classList.remove('crm-validado','crm-recusado','crm-financeiro');
-    if (estado === 'validado')   el.classList.add('crm-validado');
+    if (estado === 'validado')        el.classList.add('crm-validado');
     else if (estado === 'recusado')   el.classList.add('crm-recusado');
     else if (estado === 'financeiro') el.classList.add('crm-financeiro');
+  });
+  // Atualiza (ou cria) ícones mini nas células de coleção
+  const eventos = getCrmEventos(cod);
+  const eventosPorCol = {};
+  eventos.forEach(ev => {
+    if (!eventosPorCol[ev.colecao]) eventosPorCol[ev.colecao] = [];
+    eventosPorCol[ev.colecao].push(ev);
+  });
+  // Actualizar ícones mini que já existem no DOM
+  document.querySelectorAll(`.crm-col-icon[data-cod="${cod}"]`).forEach(el => {
+    const col = el.dataset.col;
+    const evCol = eventosPorCol[col] || [];
+    if (evCol.length) {
+      const tipoUlt = evCol[evCol.length-1].tipo;
+      const cls = tipoUlt === 'validado' ? 'crm-validado' : tipoUlt === 'recusado' ? 'crm-recusado' : 'crm-financeiro';
+      el.classList.remove('crm-validado','crm-recusado','crm-financeiro');
+      el.classList.add(cls);
+    }
+  });
+  // Injetar ícone mini em células que ainda não têm (evento acabado de criar)
+  document.querySelectorAll(`td.col-val[data-cod="${cod}"]`).forEach(td => {
+    const col = td.dataset.col;
+    const evCol = eventosPorCol[col] || [];
+    if (!evCol.length) return;
+    const tipoUlt = evCol[evCol.length-1].tipo;
+    const cls = tipoUlt === 'validado' ? 'crm-validado' : tipoUlt === 'recusado' ? 'crm-recusado' : 'crm-financeiro';
+    const iconTitle = (tipoUlt === 'validado' ? '✔ Validado' : tipoUlt === 'recusado' ? '✖ Recusado' : '💳 Financeiro') + ` — ${evCol.length} evento(s)`;
+    // Actualizar se já existe, caso contrário criar
+    let mini = td.querySelector('.crm-col-icon');
+    if (!mini) {
+      mini = document.createElement('span');
+      mini.className = 'crm-col-icon';
+      mini.dataset.cod = cod;
+      mini.dataset.col = col;
+      mini.dataset.nome = document.querySelector(`.crm-icon[data-cod="${cod}"]`)?.dataset.nome || cod;
+      mini.textContent = '💬';
+      td.appendChild(mini);
+    }
+    mini.classList.remove('crm-validado','crm-recusado','crm-financeiro');
+    mini.classList.add(cls);
+    mini.title = iconTitle;
   });
 }
 
@@ -3413,6 +3463,8 @@ function fecharCrmPopup() {
 document.addEventListener('click', function(e) {
   const icon = e.target.closest('.crm-icon');
   if (icon) { abrirCrmPopup(icon, e); return; }
+  const colIcon = e.target.closest('.crm-col-icon');
+  if (colIcon) { abrirCrmPopup(colIcon, e, colIcon.dataset.col); return; }
   // Fechar ao clicar fora
   const popup = document.getElementById('crmPopup');
   if (popup && popup.classList.contains('open') && !popup.contains(e.target)) fecharCrmPopup();
