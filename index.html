@@ -1474,12 +1474,12 @@ function renderDashboard(data) {
         + '<th class="r">% Meta</th>'
         + '<th class="r">Pc/Pedido</th>'
         + '<th class="r">Ped. médio</th>'
+        + '<th class="r" style="color:#9B8FFF">Carteira</th>'
         + '<th class="r">Atendidos</th>'
         + '<th class="r" style="color:var(--green)">Novos</th>'
         + '<th class="r" style="color:#4C9EF1">Mantidos</th>'
         + '<th class="r" style="color:var(--amber)">Não rep.</th>'
         + '<th class="r" style="color:#E84A4A">Ex-clientes</th>'
-        + '<th class="r" style="color:#9B8FFF">Carteira</th>'
         + '<th class="r" style="color:var(--green)">Valor novos</th>'
         + '</tr></thead><tbody>';
 
@@ -1497,12 +1497,12 @@ function renderDashboard(data) {
         html += td(r.meta > 0 ? (r.pct*100).toFixed(1)+'%' : '—', 'color:' + pctColor + ';font-weight:700');
         html += td(r.pcPed > 0 ? Math.round(r.pcPed) : '—');
         html += td(r.pedMed > 0 ? fmtR(r.pedMed) : '—');
+        html += td(r.carteira > 0 ? r.carteira : '—', 'color:#9B8FFF');
         html += td(r.clisA > 0 ? r.clisA : '—');
         html += td(r.novos > 0 ? r.novos : '—', 'color:var(--green)');
         html += td(r.mantidos > 0 ? r.mantidos : '—', 'color:#4C9EF1');
         html += td(r.naoRep > 0 ? r.naoRep : '—', 'color:var(--amber)');
         html += td(r.exClientes > 0 ? r.exClientes : '—', 'color:#E84A4A');
-        html += td(r.carteira > 0 ? r.carteira : '—', 'color:#9B8FFF');
         html += td(r.valorNovos > 0 ? fmtR(r.valorNovos) : '—', 'color:var(--green)');
         html += '</tr>';
       });
@@ -1515,12 +1515,12 @@ function renderDashboard(data) {
       html += td(fmtR(totM.venda), 'color:' + totColor);
       html += td((totPctM*100).toFixed(1)+'%', 'color:' + totColor);
       html += td('—') + td('—');
+      html += td(totM.carteira > 0 ? totM.carteira : '—', 'color:#9B8FFF');
       html += td(totM.clisA > 0 ? totM.clisA : '—');
       html += td(totM.novos > 0 ? totM.novos : '—', 'color:var(--green)');
       html += td(totM.mantidos > 0 ? totM.mantidos : '—', 'color:#4C9EF1');
       html += td(totNaoRepM > 0 ? totNaoRepM : '—', 'color:var(--amber)');
       html += td(totM.exClientes > 0 ? totM.exClientes : '—', 'color:#E84A4A');
-      html += td(totM.carteira > 0 ? totM.carteira : '—', 'color:#9B8FFF');
       html += td(totM.valorNovos > 0 ? fmtR(totM.valorNovos) : '—', 'color:var(--green)');
       html += '</tr></tfoot></table></div></div>';
     });
