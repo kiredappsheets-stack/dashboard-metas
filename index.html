@@ -2140,7 +2140,7 @@ function renderDashboard(data) {
     <div class="tab-content hidden" id="tab-periodo">${buildHistoricoPeriodo()}</div>
     <div class="tab-content hidden" id="tab-clientes">${buildClientes()}</div>
     <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
-    <div class="tab-content hidden" id="tab-metas-admin" style="padding:0;height:100%;overflow:hidden">${buildMetasAdmin()}</div>
+    <div class="tab-content hidden" id="tab-metas-admin" style="padding:0;height:100%;overflow:hidden"></div>
   `;
 
   container.querySelectorAll('.tab-btn').forEach(btn => {
@@ -3382,10 +3382,37 @@ function _renderMetasGrid() {
   }
 }
 
-// Inicializar grid quando tab de metas for clicado
+// Inicializar aba de metas quando clicada (lazy — injeta HTML na primeira vez)
+let _metasTabInited = false;
 document.addEventListener('click', function(e) {
   const btn = e.target.closest('[data-tab="metas-admin"]');
-  if (btn) setTimeout(_renderMetasGrid, 50);
+  if (!btn) return;
+  const tab = document.getElementById('tab-metas-admin');
+  if (!tab) return;
+  if (!_metasTabInited) {
+    _metasTabInited = true;
+    // Injeta a estrutura HTML da aba
+    const hist = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
+    const gK2 = (r,c) => Object.keys(r).find(k=>k.toUpperCase()===c)||c;
+    const colecoes = [...new Set(hist.map(r=>r[gK2(r,'COLECAO')]).filter(Boolean))].sort().reverse();
+    const colOpts = colecoes.map(c=>`<option value="${c}">${c}</option>`).join('');
+    tab.innerHTML = `
+    <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--sidebar);flex-shrink:0">
+        <label style="font-size:12px;color:var(--muted);font-weight:600">Coleção:</label>
+        <select id="metasAdmin_col" style="font-family:var(--font);font-size:13px;font-weight:600;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 12px;outline:none;cursor:pointer">
+          ${colOpts || '<option value="">Sem dados</option>'}
+        </select>
+        <input id="metasAdmin_busca" type="text" placeholder="Buscar representante…" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;width:200px"/>
+        <span style="flex:1"></span>
+        <span id="metasAdmin_status" style="font-size:11px;color:var(--muted)"></span>
+      </div>
+      <div style="flex:1;overflow:auto;padding:20px">
+        <div id="metasAdmin_grid"></div>
+      </div>
+    </div>`;
+  }
+  setTimeout(_renderMetasGrid, 30);
 });
 // Também ligar eventos de change/input depois que o DOM existir
 document.addEventListener('change', function(e) {
