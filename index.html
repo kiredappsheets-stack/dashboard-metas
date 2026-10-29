@@ -476,6 +476,7 @@ ADDCOLUMNS(
     FILTER(PEDIDO, PEDIDO[COL_ATUAL] = "COL ATUAL"),
     PEDIDO[COD_REP],
     PEDIDO[REP],
+    PEDIDO[MARCA],
     "PECAS",    SUM(PEDIDO[QTDE_ORIG]),
     "PEDIDOS",  COUNTROWS(SUMMARIZE(PEDIDO, PEDIDO[CODCLI], PEDIDO[COLECAO], PEDIDO[DATA])),
     "CLIENTES_ATEND", DISTINCTCOUNT(PEDIDO[CODCLI]),
@@ -486,7 +487,7 @@ ADDCOLUMNS(
     CLIENTES[ESTADO]
   )
 )
-ORDER BY PEDIDO[REP] ASC
+ORDER BY PEDIDO[REP] ASC, PEDIDO[MARCA] ASC
 `;
 
 const DAX_CRM_JUSTIF = `
@@ -1297,72 +1298,81 @@ function renderDashboard(data) {
       });
     }
 
-    // ── Montar linhas: combinar gcRows (do PBI) com metaPorRep e repStats ──
-    // Se gcRows vazio (query falhou), fallback para cachedData
-    let rows = [];
+    // ── Helpers de estilo ──
+    const shortRep = n => n.replace(/\b(REPRESENTACOES|REPRESENTACAO|COMERCIAL|LTDA\.?|LIMITADA|UNIPESSOAL|S\/S|& CIA)\b/gi,'').replace(/\s+/g,' ').trim();
+    const thStyle  = 'padding:8px 10px;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;text-align:right;border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--sidebar);z-index:2';
+    const thStyleL = thStyle.replace('text-align:right','text-align:left');
+    const thStyleC = thStyle.replace('text-align:right','text-align:center');
+    const td  = (v, extra='') => `<td style="padding:7px 10px;font-size:12px;text-align:right;white-space:nowrap;${extra}">${v}</td>`;
+    const tdL = (v, extra='') => `<td style="padding:7px 10px;font-size:12px;text-align:left;white-space:nowrap;${extra}">${v}</td>`;
+    const tdC = (v, extra='') => `<td style="padding:7px 10px;font-size:12px;text-align:center;white-space:nowrap;${extra}">${v}</td>`;
+    const colorPct = p => p >= 1 ? 'var(--green)' : p >= 0.5 ? '#4C9EF1' : p > 0 ? 'var(--amber)' : '#E84A4A';
+
+    // ── Montar linhas por REP+MARCA a partir de gcRows ──
+    // gcRows agora tem uma linha por REP+MARCA
+    // Agrupa em repMap: rep -> { meta, codRep, uf, marcas: [{marca, pecas, pedidos, clisA, venda}] }
+    const repMap = {};
 
     if (gcRows && gcRows.length) {
-      rows = gcRows.map(r => {
-        const rep      = String(gV(r,'REP')||'').trim();
-        const codRep   = String(gV(r,'COD_REP')||'').trim();
-        const pecas    = parseFloat(gV(r,'PECAS')||0)||0;
-        const pedidos  = parseFloat(gV(r,'PEDIDOS')||0)||0;
-        const clisA    = parseFloat(gV(r,'CLIENTES_ATEND')||0)||0;
-        const venda    = parseFloat(gV(r,'VENDA')||0)||0;
-        const uf       = String(gV(r,'UF')||ufPorRep[rep]?.uf||'').trim();
-        const mp       = metaPorRep[rep] || { meta: 0, venda: 0 };
-        const meta     = mp.meta;
-        const pct      = meta > 0 ? venda / meta : 0;
-        const pcPedido = pedidos > 0 ? pecas / pedidos : 0;
-        const pedMedio = clisA > 0 ? venda / clisA : 0;
-        const tickMed  = clisA > 0 ? venda / clisA : 0;
-        const st       = repStats[rep] || { atendidos: clisA, novos: 0, mantidos: clisA, exClientes: 0, valorNovos: 0 };
-        return { rep, codRep, uf, pecas, pedidos, meta, venda, pct, pcPedido, pedMedio, tickMed, clisA, novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, valorNovos: st.valorNovos };
+      gcRows.forEach(r => {
+        const rep    = String(gV(r,'REP')||'').trim();
+        const codRep = String(gV(r,'COD_REP')||'').trim();
+        const marca  = String(gV(r,'MARCA')||'').trim() || '—';
+        const pecas  = parseFloat(gV(r,'PECAS')||0)||0;
+        const pedidos= parseFloat(gV(r,'PEDIDOS')||0)||0;
+        const clisA  = parseFloat(gV(r,'CLIENTES_ATEND')||0)||0;
+        const venda  = parseFloat(gV(r,'VENDA')||0)||0;
+        const uf     = String(gV(r,'UF')||'').trim();
+        if (!rep) return;
+        if (!repMap[rep]) repMap[rep] = { codRep, uf: uf || ufPorRep[rep]?.uf || '', marcas: [] };
+        if (!repMap[rep].uf && uf) repMap[rep].uf = uf;
+        repMap[rep].marcas.push({ marca, pecas, pedidos, clisA, venda });
       });
     } else {
-      // Fallback: usar cachedData
-      rows = Object.entries(metaPorRep).map(([rep, mp]) => {
-        const codRep = ufPorRep[rep]?.cod || '';
-        const uf     = ufPorRep[rep]?.uf  || '';
-        const st     = repStats[rep] || { atendidos: 0, novos: 0, mantidos: 0, exClientes: 0, valorNovos: 0 };
-        const pct    = mp.meta > 0 ? mp.venda / mp.meta : 0;
-        return { rep, codRep, uf, pecas: 0, pedidos: 0, meta: mp.meta, venda: mp.venda, pct, pcPedido: 0, pedMedio: 0, tickMed: 0, clisA: st.atendidos, novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, valorNovos: st.valorNovos };
+      // Fallback: sem breakdown de marca, usar cachedData
+      Object.entries(metaPorRep).forEach(([rep, mp]) => {
+        repMap[rep] = {
+          codRep: ufPorRep[rep]?.cod || '',
+          uf: ufPorRep[rep]?.uf || '',
+          marcas: [{ marca: '—', pecas: 0, pedidos: 0, clisA: 0, venda: mp.venda }]
+        };
       });
     }
 
-    // Ordenar por venda desc, depois sem venda por meta desc
-    rows.sort((a, b) => {
-      if (b.venda !== a.venda) return b.venda - a.venda;
-      return b.meta - a.meta;
+    // Agregar totais por rep e cruzar com meta/repStats
+    let rows = Object.entries(repMap).map(([rep, rd]) => {
+      const mp      = metaPorRep[rep] || { meta: 0, venda: 0 };
+      const meta    = mp.meta;
+      const venda   = rd.marcas.reduce((s,m) => s + m.venda, 0);
+      const pecas   = rd.marcas.reduce((s,m) => s + m.pecas, 0);
+      const pedidos = rd.marcas.reduce((s,m) => s + m.pedidos, 0);
+      const clisA   = rd.marcas.reduce((s,m) => s + m.clisA, 0);
+      const pct     = meta > 0 ? venda / meta : 0;
+      const st      = repStats[rep] || { atendidos: clisA, novos: 0, mantidos: 0, exClientes: 0, valorNovos: 0 };
+      return { rep, codRep: rd.codRep, uf: rd.uf, meta, venda, pecas, pedidos, clisA,
+               pct, novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, valorNovos: st.valorNovos,
+               marcas: rd.marcas.sort((a,b) => b.venda - a.venda) };
     });
 
-    // Ranking (empate → mesmo RK)
+    // Ordenar por venda desc
+    rows.sort((a,b) => b.venda !== a.venda ? b.venda - a.venda : b.meta - a.meta);
+
+    // Ranking
     let rk = 0, lastVenda = null, lastRk = 0;
-    rows = rows.map((r, i) => {
+    rows = rows.map(r => {
       if (r.venda !== lastVenda) { rk++; lastRk = rk; }
       else rk = lastRk;
       lastVenda = r.venda;
       return { ...r, rk };
     });
 
-    // Totais
-    const tot = rows.reduce((a, r) => ({
-      pecas: a.pecas + r.pecas, meta: a.meta + r.meta, venda: a.venda + r.venda,
-      clisA: a.clisA + r.clisA, novos: a.novos + r.novos, mantidos: a.mantidos + r.mantidos,
-      exClientes: a.exClientes + r.exClientes, valorNovos: a.valorNovos + r.valorNovos,
-    }), { pecas:0, meta:0, venda:0, clisA:0, novos:0, mantidos:0, exClientes:0, valorNovos:0 });
+    // Totais gerais
+    const tot = rows.reduce((a,r) => ({
+      pecas: a.pecas+r.pecas, meta: a.meta+r.meta, venda: a.venda+r.venda,
+      clisA: a.clisA+r.clisA, novos: a.novos+r.novos, mantidos: a.mantidos+r.mantidos,
+      exClientes: a.exClientes+r.exClientes, valorNovos: a.valorNovos+r.valorNovos,
+    }), {pecas:0,meta:0,venda:0,clisA:0,novos:0,mantidos:0,exClientes:0,valorNovos:0});
     const totPct = tot.meta > 0 ? tot.venda / tot.meta : 0;
-
-    const shortRep = n => n.replace(/\b(REPRESENTACOES|REPRESENTACAO|COMERCIAL|LTDA\.?|LIMITADA|UNIPESSOAL|S\/S|& CIA)\b/gi,'').replace(/\s+/g,' ').trim();
-
-    const thStyle = 'padding:8px 10px;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;text-align:right;border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--sidebar);z-index:2';
-    const thStyleL = thStyle.replace('text-align:right','text-align:left');
-    const thStyleC = thStyle.replace('text-align:right','text-align:center');
-    const td = (v, extra='') => `<td style="padding:7px 10px;font-size:12px;text-align:right;white-space:nowrap;${extra}">${v}</td>`;
-    const tdL = (v, extra='') => `<td style="padding:7px 10px;font-size:12px;text-align:left;white-space:nowrap;${extra}">${v}</td>`;
-    const tdC = (v, extra='') => `<td style="padding:7px 10px;font-size:12px;text-align:center;white-space:nowrap;${extra}">${v}</td>`;
-
-    const colorPct = p => p >= 1 ? 'var(--green)' : p >= 0.5 ? '#4C9EF1' : p > 0 ? 'var(--amber)' : '#E84A4A';
 
     let html = `
     <div style="padding:16px 20px 8px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
@@ -1370,20 +1380,18 @@ function renderDashboard(data) {
       <div style="font-size:12px;color:var(--muted)">Coleção vigente: ${colLabel}</div>
     </div>
     <div style="overflow:auto;flex:1;padding:0 4px 20px">
-    <table style="border-collapse:collapse;width:100%;min-width:1400px">
+    <table style="border-collapse:collapse;width:100%;min-width:1200px">
       <thead><tr>
         <th style="${thStyleC}">RK</th>
-        <th style="${thStyleC}">Cod. Rep</th>
-        <th style="${thStyleL};min-width:160px">Representante</th>
+        <th style="${thStyleC}">Cod.</th>
+        <th style="${thStyleL};min-width:160px">Representante / Marca</th>
         <th style="${thStyleC}">UF</th>
         <th style="${thStyle}">Peças</th>
         <th style="${thStyle}">Meta</th>
-        <th style="${thStyle}">Valor realizado</th>
+        <th style="${thStyle}">Realizado</th>
         <th style="${thStyle}">% Meta</th>
         <th style="${thStyle}">Pc/Pedido</th>
-        <th style="${thStyle}">Pedido médio</th>
-        <th style="${thStyle}">Ticket médio</th>
-        <th style="${thStyle}">Carteira</th>
+        <th style="${thStyle}">Ped. médio</th>
         <th style="${thStyle}">Atendidos</th>
         <th style="${thStyle}">Novos</th>
         <th style="${thStyle}">Mantidos</th>
@@ -1391,30 +1399,34 @@ function renderDashboard(data) {
         <th style="${thStyle}">Ex-clientes</th>
         <th style="${thStyle}">Valor novos</th>
       </tr></thead>
-      <tbody>`;
+      <tbody id="gc-tbody">`;
 
     rows.forEach((r, i) => {
-      const bg = i % 2 === 0 ? 'var(--surface)' : 'var(--surface2)';
+      const repId    = 'gc-rep-' + i;
+      const bg       = i % 2 === 0 ? 'var(--surface)' : 'var(--surface2)';
       const pctColor = colorPct(r.pct);
       const semVenda = r.venda === 0;
-      const rowStyle = `background:${bg};${semVenda ? 'opacity:.65' : ''}`;
-      const naoRep = Math.max(0, r.mantidos - r.novos); // clientes que compraram antes mas não voltaram nesta col
-      // Calcular carteira = atendidos + exclientes (histórico do rep)
+      const naoRep   = Math.max(0, r.mantidos - r.novos);
       const carteira = r.clisA + r.exClientes;
+      const pcPedido = r.pedidos > 0 ? r.pecas / r.pedidos : 0;
+      const pedMedio = r.clisA > 0 ? r.venda / r.clisA : 0;
+      const hasMarcas = r.marcas.length > 1;
 
-      html += `<tr style="${rowStyle}">
-        ${tdC(r.venda > 0 ? r.rk : '—', 'color:var(--muted);font-weight:700')}
+      // Linha do representante (clicável para expandir marcas)
+      html += `<tr class="gc-rep-row" data-id="${repId}" style="background:${bg};${semVenda?'opacity:.65':''}cursor:${hasMarcas?'pointer':'default'}" onclick="${hasMarcas?`gcToggle('${repId}')`:''}" title="${hasMarcas?'Clique para ver por marca':''}">
+        ${tdC(r.venda > 0 ? r.rk : '—', 'font-weight:700;color:var(--muted)')}
         ${tdC(r.codRep || '—', 'color:var(--muted);font-family:monospace;font-size:11px')}
-        ${tdL(`<span title="${r.rep}" style="max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis">${shortRep(r.rep)}</span>`)}
+        ${tdL(`<span style="display:flex;align-items:center;gap:6px">
+          ${hasMarcas ? `<span class="gc-chevron" id="chev-${repId}" style="font-size:10px;color:var(--muted);transition:transform .2s">▶</span>` : '<span style="width:14px"></span>'}
+          <span title="${r.rep}" style="max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis;font-weight:600">${shortRep(r.rep)}</span>
+        </span>`)}
         ${tdC(r.uf || '—', 'color:var(--muted)')}
         ${td(r.pecas > 0 ? fmtN(r.pecas) : '—')}
         ${td(fmtR(r.meta))}
         ${td(fmtR(r.venda), `color:${pctColor};font-weight:700`)}
-        ${td(r.venda > 0 ? (r.pct*100).toFixed(2)+'%' : '0,00%', `color:${pctColor};font-weight:700`)}
-        ${td(r.pcPedido > 0 ? Math.round(r.pcPedido) : '—')}
-        ${td(r.pedMedio > 0 ? fmtR(r.pedMedio) : '—')}
-        ${td(r.tickMed > 0 ? fmtR(r.tickMed) : '—')}
-        ${td(carteira > 0 ? carteira : '—')}
+        ${td(r.venda > 0 ? (r.pct*100).toFixed(1)+'%' : '0%', `color:${pctColor};font-weight:700`)}
+        ${td(pcPedido > 0 ? Math.round(pcPedido) : '—')}
+        ${td(pedMedio > 0 ? fmtR(pedMedio) : '—')}
         ${td(r.clisA > 0 ? r.clisA : '—')}
         ${td(r.novos > 0 ? r.novos : '—', 'color:var(--green)')}
         ${td(r.mantidos > 0 ? r.mantidos : '—', 'color:#4C9EF1')}
@@ -1422,24 +1434,51 @@ function renderDashboard(data) {
         ${td(r.exClientes > 0 ? r.exClientes : '—', 'color:#E84A4A')}
         ${td(r.valorNovos > 0 ? fmtR(r.valorNovos) : '—', 'color:var(--green)')}
       </tr>`;
+
+      // Sub-linhas por marca (inicialmente ocultas)
+      if (hasMarcas) {
+        r.marcas.forEach(m => {
+          const mPct   = r.venda > 0 ? m.venda / r.venda : 0; // % do rep
+          const mPcPed = m.pedidos > 0 ? m.pecas / m.pedidos : 0;
+          const mPedM  = m.clisA > 0 ? m.venda / m.clisA : 0;
+          html += `<tr class="gc-marca-row gc-marca-${repId}" style="display:none;background:${bg}">
+            ${tdC('', 'color:var(--muted)')}
+            ${tdC('', '')}
+            ${tdL(`<span style="display:flex;align-items:center;gap:6px;padding-left:24px">
+              <span style="width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0;opacity:.5"></span>
+              <span style="font-size:12px;color:var(--muted)">${m.marca}</span>
+              <span style="font-size:10px;color:var(--muted);opacity:.7">${mPct > 0 ? (mPct*100).toFixed(0)+'%' : ''}</span>
+            </span>`)}
+            ${tdC('', '')}
+            ${td(m.pecas > 0 ? fmtN(m.pecas) : '—', 'color:var(--muted)')}
+            ${td('—', 'color:var(--muted)')}
+            ${td(fmtR(m.venda), 'color:var(--muted)')}
+            ${td('—', 'color:var(--muted)')}
+            ${td(mPcPed > 0 ? Math.round(mPcPed) : '—', 'color:var(--muted)')}
+            ${td(mPedM > 0 ? fmtR(mPedM) : '—', 'color:var(--muted)')}
+            ${td(m.clisA > 0 ? m.clisA : '—', 'color:var(--muted)')}
+            ${td('—', 'color:var(--muted)')}
+            ${td('—', 'color:var(--muted)')}
+            ${td('—', 'color:var(--muted)')}
+            ${td('—', 'color:var(--muted)')}
+            ${td('—', 'color:var(--muted)')}
+          </tr>`;
+        });
+      }
     });
 
-    const totNaoRep = Math.max(0, tot.mantidos - tot.novos);
+    const totNaoRep   = Math.max(0, tot.mantidos - tot.novos);
     const totCarteira = tot.clisA + tot.exClientes;
     html += `</tbody>
     <tfoot><tr style="background:var(--sidebar);font-weight:700;border-top:2px solid var(--border)">
-      ${tdC('', 'color:var(--muted)')}
-      ${tdC('')}
-      ${tdL(`<span style="font-size:12px;color:var(--muted)">Total</span>`)}
+      ${tdC('')}${tdC('')}
+      ${tdL('<span style="font-size:12px;color:var(--muted)">Total</span>')}
       ${tdC('')}
       ${td(fmtN(tot.pecas))}
       ${td(fmtR(tot.meta))}
       ${td(fmtR(tot.venda), `color:${colorPct(totPct)}`)}
-      ${td((totPct*100).toFixed(2)+'%', `color:${colorPct(totPct)}`)}
-      ${td('—')}
-      ${td('—')}
-      ${td('—')}
-      ${td(totCarteira > 0 ? totCarteira : '—')}
+      ${td((totPct*100).toFixed(1)+'%', `color:${colorPct(totPct)}`)}
+      ${td('—')}${td('—')}
       ${td(tot.clisA > 0 ? tot.clisA : '—')}
       ${td(tot.novos > 0 ? tot.novos : '—', 'color:var(--green)')}
       ${td(tot.mantidos > 0 ? tot.mantidos : '—', 'color:#4C9EF1')}
@@ -1447,7 +1486,16 @@ function renderDashboard(data) {
       ${td(tot.exClientes > 0 ? tot.exClientes : '—', 'color:#E84A4A')}
       ${td(tot.valorNovos > 0 ? fmtR(tot.valorNovos) : '—', 'color:var(--green)')}
     </tr></tfoot>
-    </table></div>`;
+    </table></div>
+    <script>
+    function gcToggle(id) {
+      const rows = document.querySelectorAll('.gc-marca-' + id);
+      const chev = document.getElementById('chev-' + id);
+      const open = rows.length && rows[0].style.display !== 'none';
+      rows.forEach(r => r.style.display = open ? 'none' : '');
+      if (chev) chev.style.transform = open ? '' : 'rotate(90deg)';
+    }
+    <\/script>`;
 
     return html;
   }
@@ -1820,9 +1868,9 @@ function renderDashboard(data) {
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="overview">Visão Geral</button>
       <button class="tab-btn" data-tab="gestao">Gestão Comercial</button>
+      <button class="tab-btn" data-tab="clientes">Clientes</button>
       <button class="tab-btn" data-tab="historico">Histórico Mensal</button>
       <button class="tab-btn" data-tab="periodo">Histórico Semanal</button>
-      <button class="tab-btn" data-tab="clientes">Clientes</button>
       <button class="tab-btn" data-tab="restricoes">Restrições <span class="tab-badge">${cachedRestricoes?cachedRestricoes.length:0}</span></button>
     </div>
     <div class="tab-content" id="tab-overview">${buildOverview()}${buildMetas()}</div>
@@ -1854,9 +1902,9 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v15';
+const CACHE_KEY = 'dashCache_v16';
 // Limpar versões antigas do cache
-try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
+try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14','dashCache_v15'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
