@@ -3335,16 +3335,129 @@ window._saveMeta = function(col, rep, rawVal) {
   _renderMetasGrid();
 };
 
-// Abre inline input no lugar do valor+botão
+// Abre modal de edição com seletor de coleção + valor
 window._iniciarEditMeta = function(btn, col, rep, valorAtual) {
-  const wrap = btn.closest('.ma-inline-wrap');
-  if (!wrap) return;
-  wrap.innerHTML = `<input class="ma-inline-input" type="text" value="${valorAtual||''}" placeholder="0"
-    onblur="window._confirmarEditMeta(this,'${col.replace(/'/g,"\\'")}','${rep.replace(/'/g,"\\'")}',false)"
-    onkeydown="if(event.key==='Enter'){this.blur()}else if(event.key==='Escape'){window._confirmarEditMeta(this,'${col.replace(/'/g,"\\'")}','${rep.replace(/'/g,"\\'")}',true)}"/>`;
-  const inp = wrap.querySelector('input');
+  // Coletar coleções disponíveis (hist + locais)
+  const hist = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
+  const gKe  = (r,c) => { const k = Object.keys(r).find(k=>k.toUpperCase().includes(c.toUpperCase()))||c; return r[k]??null; };
+  const colsHist  = [...new Set(hist.map(r=>gKe(r,'COLECAO')).filter(Boolean))];
+  const colsLocal = Object.keys(_getMetasLocais());
+  const colsData  = (typeof cachedData !== 'undefined' && cachedData) ? [...new Set(cachedData.map(d=>d.col).filter(Boolean))] : [];
+  const todasCols = [...new Set([...colsData,...colsHist,...colsLocal])].sort().reverse();
+
+  const metasLocais = _getMetasLocais();
+  const fmtNum = v => v > 0 ? v : '';
+
+  // Opções do select de coleção
+  const opts = todasCols.map(c => {
+    const metaAtual = (metasLocais[c]||{})[rep];
+    const metaHist  = ((hist.find(r=>gKe(r,'COLECAO')===c && gKe(r,'NOME')===rep)||{}));
+    const temDado   = metaAtual != null || parseFloat(gKe(metaHist,'META')||0) > 0;
+    const sel       = c === col ? ' selected' : '';
+    return `<option value="${c.replace(/"/g,'&quot;')}"${sel}>${c}${temDado?' ●':''}</option>`;
+  }).join('');
+
+  // Criar/reutilizar modal de edição
+  let modal = document.getElementById('maModalEditMeta');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'maModalEditMeta';
+    modal.className = 'ma-modal-overlay';
+    modal.onclick = e => { if (e.target === modal) window._fecharEditMeta(); };
+    document.body.appendChild(modal);
+    document.addEventListener('keydown', function _escEdit(e) {
+      if (e.key === 'Escape' && document.getElementById('maModalEditMeta')?.classList.contains('open'))
+        window._fecharEditMeta();
+    });
+  }
+
+  modal.innerHTML = `
+    <div class="ma-modal" onclick="event.stopPropagation()" style="width:360px">
+      <div class="ma-modal-head">
+        <h3>✎ Editar meta — ${rep}</h3>
+        <button class="ma-btn ma-btn-cancel" style="padding:4px 10px;font-size:12px" onclick="window._fecharEditMeta()">✕</button>
+      </div>
+      <div class="ma-modal-body" style="gap:12px">
+        <div class="ma-field">
+          <label>Coleção</label>
+          <select id="maEditCol" onchange="window._atualizarValorEditMeta()">${opts}</select>
+        </div>
+        <div class="ma-field">
+          <label>Meta (R$)</label>
+          <input id="maEditVal" class="ma-inline-input" type="text" style="width:100%;font-size:14px;padding:9px 12px"
+            placeholder="0"
+            value="${fmtNum(valorAtual)}"
+            onkeydown="if(event.key==='Enter')window._salvarEditMeta();else if(event.key==='Escape')window._fecharEditMeta()"/>
+        </div>
+        <div id="maEditInfo" style="font-size:11px;color:var(--muted)"></div>
+      </div>
+      <div class="ma-modal-foot">
+        <button class="ma-btn ma-btn-cancel" onclick="window._fecharEditMeta()">Cancelar</button>
+        <button class="ma-btn ma-btn-primary" onclick="window._salvarEditMeta()">Salvar</button>
+      </div>
+    </div>`;
+
+  modal.classList.add('open');
+
+  // Salvar rep original para uso no save
+  modal._repAtual = rep;
+
+  const inp = modal.querySelector('#maEditVal');
   inp.focus();
   inp.select();
+
+  // Mostra info da meta atual da coleção selecionada
+  window._atualizarValorEditMeta();
+};
+
+// Atualiza o campo de valor quando o usuário muda a coleção no select
+window._atualizarValorEditMeta = function() {
+  const modal = document.getElementById('maModalEditMeta');
+  if (!modal) return;
+  const sel  = modal.querySelector('#maEditCol');
+  const inp  = modal.querySelector('#maEditVal');
+  const info = modal.querySelector('#maEditInfo');
+  const rep  = modal._repAtual;
+  if (!sel || !inp || !rep) return;
+  const col = sel.value;
+
+  const hist = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
+  const gKe  = (r,c) => { const k = Object.keys(r).find(k=>k.toUpperCase().includes(c.toUpperCase()))||c; return r[k]??null; };
+  const metasLocais = _getMetasLocais();
+  const metaLoc = (metasLocais[col]||{})[rep];
+  const histRow = hist.find(r=>gKe(r,'COLECAO')===col && gKe(r,'NOME')===rep);
+  const metaHist = parseFloat(gKe(histRow||{},'META')||0)||0;
+  const vendaHist = parseFloat(gKe(histRow||{},'VENDA')||0)||0;
+
+  // Preenche valor com meta existente da coleção selecionada
+  const metaVig = metaLoc != null ? metaLoc : metaHist;
+  inp.value = metaVig > 0 ? metaVig : '';
+
+  if (info) {
+    const parts = [];
+    if (vendaHist > 0) parts.push(`Venda: R$ ${vendaHist.toLocaleString('pt-BR',{minimumFractionDigits:0})}`);
+    if (metaHist  > 0) parts.push(`Meta PBI: R$ ${metaHist.toLocaleString('pt-BR',{minimumFractionDigits:0})}`);
+    if (metaLoc  != null) parts.push(`Meta local: R$ ${metaLoc.toLocaleString('pt-BR',{minimumFractionDigits:0})}`);
+    info.textContent = parts.join(' · ');
+  }
+};
+
+window._fecharEditMeta = function() {
+  const modal = document.getElementById('maModalEditMeta');
+  if (modal) modal.classList.remove('open');
+};
+
+window._salvarEditMeta = function() {
+  const modal = document.getElementById('maModalEditMeta');
+  if (!modal) return;
+  const col = modal.querySelector('#maEditCol')?.value;
+  const rep = modal._repAtual;
+  const raw = modal.querySelector('#maEditVal')?.value || '';
+  const v   = parseFloat(String(raw).replace(/[R$\s.]/g,'').replace(',','.'))||0;
+  if (!col || !rep) return;
+  _saveMetaLocal(col, rep, v);
+  window._fecharEditMeta();
+  _renderMetasGrid();
 };
 
 window._confirmarEditMeta = function(inp, col, rep, cancelar) {
