@@ -82,6 +82,8 @@
   .tab-content.hidden { display:none; }
   #tab-clientes { overflow:hidden; padding:0; display:flex; flex-direction:column; }
   #tab-clientes.hidden { display:none; }
+  #tab-gestao { overflow:hidden; padding:0; display:flex; flex-direction:column; }
+  #tab-gestao.hidden { display:none; }
 
   /* KPI ROW */
   .kpi-row { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
@@ -464,6 +466,27 @@ SELECTCOLUMNS(
   "CIDADE", CLIENTES[CIDADE],
   "ESTADO", CLIENTES[ESTADO]
 )
+`;
+
+// Gestão Comercial — dados por representante na coleção vigente
+const DAX_GESTAO_COMERCIAL = `
+EVALUATE
+ADDCOLUMNS(
+  SUMMARIZE(
+    FILTER(PEDIDO, PEDIDO[COL_ATUAL] = "COL ATUAL"),
+    PEDIDO[COD_REP],
+    PEDIDO[REP],
+    "PECAS",    SUM(PEDIDO[QTDE_ORIG]),
+    "PEDIDOS",  COUNTROWS(SUMMARIZE(PEDIDO, PEDIDO[CODCLI], PEDIDO[COLECAO], PEDIDO[DATA])),
+    "CLIENTES_ATEND", DISTINCTCOUNT(PEDIDO[CODCLI]),
+    "VENDA",    SUM(PEDIDO[FAT_LIQ])
+  ),
+  "UF", MAXX(
+    FILTER(CLIENTES, CLIENTES[REP] = EARLIER(PEDIDO[REP])),
+    CLIENTES[ESTADO]
+  )
+)
+ORDER BY PEDIDO[REP] ASC
 `;
 
 const DAX_CRM_JUSTIF = `
@@ -1163,6 +1186,262 @@ function renderDashboard(data) {
     return html;
   }
 
+  function buildGestaoCom() {
+    // ── Helpers ──
+    const gV = (r, c) => { const k = Object.keys(r).find(k => k.toUpperCase().includes(c.toUpperCase())); return k ? r[k] : null; };
+    const fmtR = v => v > 0 ? 'R$ ' + Math.round(v).toLocaleString('pt-BR') : 'R$ 0';
+    const fmtN = v => v != null && !isNaN(v) ? Number(v).toLocaleString('pt-BR') : '—';
+
+    // ── Montar colecoes vigentes (a partir de cachedData que já é filtrado por COL_ATUAL) ──
+    const colsVigentes = [...new Set((cachedData||[]).map(d=>d.col))];
+    const colLabel = colsVigentes.length ? colsVigentes.join(' / ') : 'Coleção vigente';
+
+    // ── Dados do Power BI para a coleção vigente ──
+    const gcRows = cachedGestaoCom || [];
+
+    // ── Metas por rep (de cachedData) ──
+    const metaPorRep = {};
+    (cachedData||[]).forEach(d => {
+      if (!metaPorRep[d.rep]) metaPorRep[d.rep] = { meta: 0, venda: 0 };
+      metaPorRep[d.rep].meta  += d.meta;
+      metaPorRep[d.rep].venda += d.venda;
+    });
+
+    // ── UF por rep (de cachedClientesLoc + cachedClientes2) ──
+    const ufPorRep = {};
+    if (cachedClientes2 && cachedClientes2.length) {
+      cachedClientes2.forEach(r => {
+        const rep = String(gV(r,'REP')||'').trim();
+        const cod = String(gV(r,'COD_REP')||'').trim();
+        if (!rep) return;
+        if (!ufPorRep[rep]) ufPorRep[rep] = { uf: '', cod: cod };
+      });
+    }
+    // UF: tentar pegar do cachedClientesLoc cruzando com clientes2
+    const ufPorCodcli = {};
+    (cachedClientesLoc||[]).forEach(r => {
+      const cod = String(gV(r,'CODCLI')||'').trim();
+      const uf  = String(gV(r,'ESTADO')||'').trim();
+      if (cod && uf) ufPorCodcli[cod] = uf;
+    });
+    if (cachedClientes2 && cachedClientes2.length) {
+      cachedClientes2.forEach(r => {
+        const rep    = String(gV(r,'REP')||'').trim();
+        const codcli = String(gV(r,'CODCLI')||'').trim();
+        if (!rep) return;
+        if (!ufPorRep[rep]) ufPorRep[rep] = { uf: '', cod: '' };
+        if (!ufPorRep[rep].uf && ufPorCodcli[codcli]) ufPorRep[rep].uf = ufPorCodcli[codcli];
+      });
+    }
+
+    // ── Cálculo de categorias por rep usando cachedClientes2 ──
+    // Coleções vigentes
+    const colVigSet = new Set(colsVigentes);
+    // Todas as coleções disponíveis
+    const todasCols = [...new Set((cachedClientes2||[]).map(r => String(gV(r,'COLECAO')||'').trim()).filter(Boolean))].sort();
+
+    // Para cada rep: clientes que compraram em col vigente e em coleções anteriores
+    const repStats = {};
+
+    if (cachedClientes2 && cachedClientes2.length) {
+      // 1) Coletar clientes por rep em col vigente
+      const cliColVig = {}; // rep -> Set(codcli)
+      // 2) Coletar clientes por rep em coleções anteriores (TODAS exceto vigente)
+      const cliColAnter = {}; // rep -> Set(codcli)
+      // 3) Valor por cliente na col vigente
+      const valorPorCliRep = {}; // rep -> Map(codcli -> valor)
+
+      cachedClientes2.forEach(r => {
+        const rep    = String(gV(r,'REP')||'').trim();
+        const codcli = String(gV(r,'CODCLI')||'').trim();
+        const col    = String(gV(r,'COLECAO')||'').trim();
+        const venda  = parseFloat(gV(r,'VENDA')||0) || 0;
+        if (!rep || !codcli) return;
+        if (colVigSet.has(col)) {
+          if (!cliColVig[rep]) cliColVig[rep] = new Set();
+          cliColVig[rep].add(codcli);
+          if (!valorPorCliRep[rep]) valorPorCliRep[rep] = {};
+          valorPorCliRep[rep][codcli] = (valorPorCliRep[rep][codcli] || 0) + venda;
+        } else {
+          if (!cliColAnter[rep]) cliColAnter[rep] = new Set();
+          cliColAnter[rep].add(codcli);
+        }
+      });
+
+      // Consolidar stats por rep
+      const todosReps = new Set([...Object.keys(metaPorRep), ...Object.keys(cliColVig||{})]);
+      todosReps.forEach(rep => {
+        const vigSet   = cliColVig[rep]    || new Set();
+        const anterSet = cliColAnter[rep]  || new Set();
+        const valorMap = valorPorCliRep[rep] || {};
+
+        const atendidos   = vigSet.size;
+        const novos       = [...vigSet].filter(c => !anterSet.has(c)).length;
+        const recuperados = [...vigSet].filter(c => anterSet.has(c) && /* só voltaram */ true).length - (atendidos - novos - novos); // simplificado
+        const mantidos    = [...vigSet].filter(c => anterSet.has(c)).length;
+        const exClientes  = [...anterSet].filter(c => !vigSet.has(c)).length;
+        // valor dos novos
+        const valorNovos  = [...vigSet].filter(c => !anterSet.has(c)).reduce((s,c) => s + (valorMap[c]||0), 0);
+
+        repStats[rep] = { atendidos, novos, mantidos, exClientes, valorNovos };
+      });
+    }
+
+    // ── Montar linhas: combinar gcRows (do PBI) com metaPorRep e repStats ──
+    // Se gcRows vazio (query falhou), fallback para cachedData
+    let rows = [];
+
+    if (gcRows && gcRows.length) {
+      rows = gcRows.map(r => {
+        const rep      = String(gV(r,'REP')||'').trim();
+        const codRep   = String(gV(r,'COD_REP')||'').trim();
+        const pecas    = parseFloat(gV(r,'PECAS')||0)||0;
+        const pedidos  = parseFloat(gV(r,'PEDIDOS')||0)||0;
+        const clisA    = parseFloat(gV(r,'CLIENTES_ATEND')||0)||0;
+        const venda    = parseFloat(gV(r,'VENDA')||0)||0;
+        const uf       = String(gV(r,'UF')||ufPorRep[rep]?.uf||'').trim();
+        const mp       = metaPorRep[rep] || { meta: 0, venda: 0 };
+        const meta     = mp.meta;
+        const pct      = meta > 0 ? venda / meta : 0;
+        const pcPedido = pedidos > 0 ? pecas / pedidos : 0;
+        const pedMedio = clisA > 0 ? venda / clisA : 0;
+        const tickMed  = clisA > 0 ? venda / clisA : 0;
+        const st       = repStats[rep] || { atendidos: clisA, novos: 0, mantidos: clisA, exClientes: 0, valorNovos: 0 };
+        return { rep, codRep, uf, pecas, pedidos, meta, venda, pct, pcPedido, pedMedio, tickMed, clisA, novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, valorNovos: st.valorNovos };
+      });
+    } else {
+      // Fallback: usar cachedData
+      rows = Object.entries(metaPorRep).map(([rep, mp]) => {
+        const codRep = ufPorRep[rep]?.cod || '';
+        const uf     = ufPorRep[rep]?.uf  || '';
+        const st     = repStats[rep] || { atendidos: 0, novos: 0, mantidos: 0, exClientes: 0, valorNovos: 0 };
+        const pct    = mp.meta > 0 ? mp.venda / mp.meta : 0;
+        return { rep, codRep, uf, pecas: 0, pedidos: 0, meta: mp.meta, venda: mp.venda, pct, pcPedido: 0, pedMedio: 0, tickMed: 0, clisA: st.atendidos, novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, valorNovos: st.valorNovos };
+      });
+    }
+
+    // Ordenar por venda desc, depois sem venda por meta desc
+    rows.sort((a, b) => {
+      if (b.venda !== a.venda) return b.venda - a.venda;
+      return b.meta - a.meta;
+    });
+
+    // Ranking (empate → mesmo RK)
+    let rk = 0, lastVenda = null, lastRk = 0;
+    rows = rows.map((r, i) => {
+      if (r.venda !== lastVenda) { rk++; lastRk = rk; }
+      else rk = lastRk;
+      lastVenda = r.venda;
+      return { ...r, rk };
+    });
+
+    // Totais
+    const tot = rows.reduce((a, r) => ({
+      pecas: a.pecas + r.pecas, meta: a.meta + r.meta, venda: a.venda + r.venda,
+      clisA: a.clisA + r.clisA, novos: a.novos + r.novos, mantidos: a.mantidos + r.mantidos,
+      exClientes: a.exClientes + r.exClientes, valorNovos: a.valorNovos + r.valorNovos,
+    }), { pecas:0, meta:0, venda:0, clisA:0, novos:0, mantidos:0, exClientes:0, valorNovos:0 });
+    const totPct = tot.meta > 0 ? tot.venda / tot.meta : 0;
+
+    const shortRep = n => n.replace(/\b(REPRESENTACOES|REPRESENTACAO|COMERCIAL|LTDA\.?|LIMITADA|UNIPESSOAL|S\/S|& CIA)\b/gi,'').replace(/\s+/g,' ').trim();
+
+    const thStyle = 'padding:8px 10px;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;text-align:right;border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--sidebar);z-index:2';
+    const thStyleL = thStyle.replace('text-align:right','text-align:left');
+    const thStyleC = thStyle.replace('text-align:right','text-align:center');
+    const td = (v, extra='') => `<td style="padding:7px 10px;font-size:12px;text-align:right;white-space:nowrap;${extra}">${v}</td>`;
+    const tdL = (v, extra='') => `<td style="padding:7px 10px;font-size:12px;text-align:left;white-space:nowrap;${extra}">${v}</td>`;
+    const tdC = (v, extra='') => `<td style="padding:7px 10px;font-size:12px;text-align:center;white-space:nowrap;${extra}">${v}</td>`;
+
+    const colorPct = p => p >= 1 ? 'var(--green)' : p >= 0.5 ? '#4C9EF1' : p > 0 ? 'var(--amber)' : '#E84A4A';
+
+    let html = `
+    <div style="padding:16px 20px 8px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <div style="font-size:15px;font-weight:700;color:var(--tx)">Gestão Comercial</div>
+      <div style="font-size:12px;color:var(--muted)">Coleção vigente: ${colLabel}</div>
+    </div>
+    <div style="overflow:auto;flex:1;padding:0 4px 20px">
+    <table style="border-collapse:collapse;width:100%;min-width:1400px">
+      <thead><tr>
+        <th style="${thStyleC}">RK</th>
+        <th style="${thStyleC}">Cod. Rep</th>
+        <th style="${thStyleL};min-width:160px">Representante</th>
+        <th style="${thStyleC}">UF</th>
+        <th style="${thStyle}">Peças</th>
+        <th style="${thStyle}">Meta</th>
+        <th style="${thStyle}">Valor realizado</th>
+        <th style="${thStyle}">% Meta</th>
+        <th style="${thStyle}">Pc/Pedido</th>
+        <th style="${thStyle}">Pedido médio</th>
+        <th style="${thStyle}">Ticket médio</th>
+        <th style="${thStyle}">Carteira</th>
+        <th style="${thStyle}">Atendidos</th>
+        <th style="${thStyle}">Novos</th>
+        <th style="${thStyle}">Mantidos</th>
+        <th style="${thStyle}">Não repetidos</th>
+        <th style="${thStyle}">Ex-clientes</th>
+        <th style="${thStyle}">Valor novos</th>
+      </tr></thead>
+      <tbody>`;
+
+    rows.forEach((r, i) => {
+      const bg = i % 2 === 0 ? 'var(--surface)' : 'var(--surface2)';
+      const pctColor = colorPct(r.pct);
+      const semVenda = r.venda === 0;
+      const rowStyle = `background:${bg};${semVenda ? 'opacity:.65' : ''}`;
+      const naoRep = Math.max(0, r.mantidos - r.novos); // clientes que compraram antes mas não voltaram nesta col
+      // Calcular carteira = atendidos + exclientes (histórico do rep)
+      const carteira = r.clisA + r.exClientes;
+
+      html += `<tr style="${rowStyle}">
+        ${tdC(r.venda > 0 ? r.rk : '—', 'color:var(--muted);font-weight:700')}
+        ${tdC(r.codRep || '—', 'color:var(--muted);font-family:monospace;font-size:11px')}
+        ${tdL(`<span title="${r.rep}" style="max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis">${shortRep(r.rep)}</span>`)}
+        ${tdC(r.uf || '—', 'color:var(--muted)')}
+        ${td(r.pecas > 0 ? fmtN(r.pecas) : '—')}
+        ${td(fmtR(r.meta))}
+        ${td(fmtR(r.venda), `color:${pctColor};font-weight:700`)}
+        ${td(r.venda > 0 ? (r.pct*100).toFixed(2)+'%' : '0,00%', `color:${pctColor};font-weight:700`)}
+        ${td(r.pcPedido > 0 ? Math.round(r.pcPedido) : '—')}
+        ${td(r.pedMedio > 0 ? fmtR(r.pedMedio) : '—')}
+        ${td(r.tickMed > 0 ? fmtR(r.tickMed) : '—')}
+        ${td(carteira > 0 ? carteira : '—')}
+        ${td(r.clisA > 0 ? r.clisA : '—')}
+        ${td(r.novos > 0 ? r.novos : '—', 'color:var(--green)')}
+        ${td(r.mantidos > 0 ? r.mantidos : '—', 'color:#4C9EF1')}
+        ${td(naoRep > 0 ? naoRep : '—', 'color:var(--amber)')}
+        ${td(r.exClientes > 0 ? r.exClientes : '—', 'color:#E84A4A')}
+        ${td(r.valorNovos > 0 ? fmtR(r.valorNovos) : '—', 'color:var(--green)')}
+      </tr>`;
+    });
+
+    const totNaoRep = Math.max(0, tot.mantidos - tot.novos);
+    const totCarteira = tot.clisA + tot.exClientes;
+    html += `</tbody>
+    <tfoot><tr style="background:var(--sidebar);font-weight:700;border-top:2px solid var(--border)">
+      ${tdC('', 'color:var(--muted)')}
+      ${tdC('')}
+      ${tdL(`<span style="font-size:12px;color:var(--muted)">Total</span>`)}
+      ${tdC('')}
+      ${td(fmtN(tot.pecas))}
+      ${td(fmtR(tot.meta))}
+      ${td(fmtR(tot.venda), `color:${colorPct(totPct)}`)}
+      ${td((totPct*100).toFixed(2)+'%', `color:${colorPct(totPct)}`)}
+      ${td('—')}
+      ${td('—')}
+      ${td('—')}
+      ${td(totCarteira > 0 ? totCarteira : '—')}
+      ${td(tot.clisA > 0 ? tot.clisA : '—')}
+      ${td(tot.novos > 0 ? tot.novos : '—', 'color:var(--green)')}
+      ${td(tot.mantidos > 0 ? tot.mantidos : '—', 'color:#4C9EF1')}
+      ${td(totNaoRep > 0 ? totNaoRep : '—', 'color:var(--amber)')}
+      ${td(tot.exClientes > 0 ? tot.exClientes : '—', 'color:#E84A4A')}
+      ${td(tot.valorNovos > 0 ? fmtR(tot.valorNovos) : '—', 'color:var(--green)')}
+    </tr></tfoot>
+    </table></div>`;
+
+    return html;
+  }
+
   function buildClientes() {
     if (!cachedClientes2 || !cachedClientes2.length) return '<div class="empty-state">Dados de clientes não disponíveis.</div>';
 
@@ -1530,12 +1809,14 @@ function renderDashboard(data) {
   container.innerHTML = `
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="overview">Visão Geral</button>
+      <button class="tab-btn" data-tab="gestao">Gestão Comercial</button>
       <button class="tab-btn" data-tab="historico">Histórico Mensal</button>
       <button class="tab-btn" data-tab="periodo">Histórico Semanal</button>
       <button class="tab-btn" data-tab="clientes">Clientes</button>
       <button class="tab-btn" data-tab="restricoes">Restrições <span class="tab-badge">${cachedRestricoes?cachedRestricoes.length:0}</span></button>
     </div>
     <div class="tab-content" id="tab-overview">${buildOverview()}${buildMetas()}</div>
+    <div class="tab-content hidden" id="tab-gestao" style="padding:0;display:flex;flex-direction:column">${buildGestaoCom()}</div>
     <div class="tab-content hidden" id="tab-historico">${buildHistorico()}</div>
     <div class="tab-content hidden" id="tab-periodo">${buildHistoricoPeriodo()}</div>
     <div class="tab-content hidden" id="tab-clientes">${buildClientes()}</div>
@@ -1563,9 +1844,9 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v14';
+const CACHE_KEY = 'dashCache_v15';
 // Limpar versões antigas do cache
-try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
+try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
@@ -1654,6 +1935,7 @@ function applyCache(cached) {
   cachedClientes2       = cached.clientes2       || [];
   cachedCrmJustif       = cached.crmJustif       || [];
   cachedClientesLoc     = cached.clientesLoc     || [];
+  cachedGestaoCom       = cached.gestaoCom       || [];
 }
 
 async function loadDashboard() {
@@ -1687,7 +1969,7 @@ async function loadDashboard() {
       try {
         const token = await getToken();
         const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
-        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc] = await Promise.all([
+        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom] = await Promise.all([
           safe(() => runDaxQuery(token, DAX_QUERY, false)),
           safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
           safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -1698,14 +1980,16 @@ async function loadDashboard() {
           safe(() => runDaxQuery(token, DAX_HIST_CLIENTES, true)),
           safe(() => runDaxQuery(token, DAX_CRM_JUSTIF, true)),
           safe(() => runDaxQuery(token, DAX_CLIENTES_LOC, true)),
+          safe(() => runDaxQuery(token, DAX_GESTAO_COMERCIAL, true)),
         ]);
         cachedData = data; cachedMetasHist = metasHist; cachedRestricoes = restricoes;
         cachedHistMarca = histMarca||[]; cachedHistPeriodo = histPeriodo||[];
         cachedClientes2 = clientes2||[]; cachedCrmJustif = crmJustif||[]; cachedClientesLoc = clientesLoc||[];
+        cachedGestaoCom = gestaoCom||[];
         cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
         if (kpisFat && kpisFat.length > 0) cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
 
-        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc });
+        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom });
         // Reatualizar as abas com dados novos
         renderDashboard(cachedData);
         const now2 = new Date();
@@ -1734,7 +2018,7 @@ async function loadDashboard() {
     if (lu) lu.textContent = 'A carregar dados do Power BI…';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc] = await Promise.all([
+    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -1745,6 +2029,7 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_HIST_CLIENTES, true)),
       safe(() => runDaxQuery(token, DAX_CRM_JUSTIF, true)),
       safe(() => runDaxQuery(token, DAX_CLIENTES_LOC, true)),
+      safe(() => runDaxQuery(token, DAX_GESTAO_COMERCIAL, true)),
     ]);
     clearTimeout(_loadTimeout);
     cachedData = data;
@@ -1755,11 +2040,12 @@ async function loadDashboard() {
     cachedClientes2 = clientes2 || [];
     cachedCrmJustif = crmJustif || [];
     cachedClientesLoc = clientesLoc || [];
+    cachedGestaoCom = gestaoCom || [];
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
-    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc });
+    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom });
     renderDashboard(data);
 
   } catch(e) {
@@ -1822,6 +2108,7 @@ let cachedHistPeriodo = [];
 let cachedClientes2 = [];
 let cachedCrmJustif = [];
 let cachedClientesLoc = [];
+let cachedGestaoCom = [];
 // Variáveis legacy para contexto IA (queries removidas — sempre vazias)
 let cachedPedidos = [], cachedClientes = [], cachedReps = [], cachedVendas = [];
 let cachedMarcas = [], cachedColecoes = [], cachedPedidosDetalhe = [], cachedProdutos = [];
