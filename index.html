@@ -1769,23 +1769,50 @@ function renderDashboard(data) {
       s.id = 'cli-sticky-css';
       s.textContent = `
         /* METAS ADMIN TABLE */
-        .metas-tbl { border-collapse:collapse; font-size:12px; width:100%; }
-        .metas-tbl th, .metas-tbl td { padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
-        .metas-tbl thead th { background:var(--sidebar); position:sticky; top:0; z-index:2; font-size:11px; font-weight:600; color:var(--muted); text-align:left; }
-        .metas-tbl tfoot td { background:var(--surface2); border-top:2px solid rgba(255,255,255,.1); }
+        .metas-tbl { border-collapse:collapse; font-size:12px; }
+        .metas-tbl th, .metas-tbl td { padding:7px 11px; border-bottom:1px solid var(--border); white-space:nowrap; }
+        .metas-tbl thead tr:first-child th { background:var(--sidebar); position:sticky; top:0; z-index:4; font-size:11px; font-weight:700; color:var(--tx); text-align:center; border-bottom:1px solid var(--border); }
+        .metas-tbl thead tr:nth-child(2) th { background:var(--sidebar); position:sticky; top:33px; z-index:4; font-size:10px; font-weight:600; color:var(--muted); text-align:right; border-bottom:2px solid var(--border); }
+        .metas-tbl tfoot td { background:var(--surface2)!important; border-top:2px solid var(--border); font-weight:700; }
         .metas-row:hover td { background:var(--surface2); }
-        .ma-nome { min-width:220px; font-weight:500; color:var(--tx); }
-        .ma-val { text-align:right; color:var(--muted); min-width:150px; }
-        .ma-hist { color:var(--hint); }
-        .ma-edit-cell { min-width:160px; }
-        .ma-input { font-family:var(--font); font-size:12px; background:var(--surface2); border:1px solid var(--border); color:var(--tx); border-radius:5px; padding:5px 8px; width:140px; outline:none; transition:border-color .15s; }
+        .metas-row:hover .ma-nome-cell { background:var(--surface2)!important; }
+        .ma-nome-cell { position:sticky; left:0; z-index:2; background:var(--surface); min-width:200px; max-width:220px; font-weight:500; color:var(--tx); border-right:1px solid var(--border); }
+        .metas-tbl thead tr:first-child .ma-nome-cell { z-index:6; top:0; text-align:left; background:var(--sidebar); }
+        .metas-tbl thead tr:nth-child(2) .ma-nome-cell { z-index:5; top:33px; text-align:left; color:var(--muted); background:var(--sidebar); }
+        .metas-tbl tfoot .ma-nome-cell { background:var(--surface2)!important; }
+        .ma-marca-row td { background:rgba(76,158,241,.06)!important; font-weight:700; color:#4C9EF1; font-size:11px; padding:5px 11px; border-top:1px solid rgba(76,158,241,.2); }
+        .ma-marca-row .ma-nome-cell { color:#4C9EF1; background:rgba(76,158,241,.06)!important; }
+        .ma-val { text-align:right; color:var(--muted); min-width:90px; }
+        .ma-edit-cell { min-width:110px; text-align:right; }
+        .ma-input { font-family:var(--font); font-size:12px; background:var(--surface2); border:1px solid var(--border); color:var(--tx); border-radius:5px; padding:4px 7px; width:95px; outline:none; transition:border-color .15s; text-align:right; }
         .ma-input:focus { border-color:var(--green); }
-        .ma-pct-cell { min-width:180px; }
-        .ma-bar-wrap { display:flex; align-items:center; gap:8px; }
-        .ma-bar { height:6px; border-radius:3px; min-width:2px; transition:width .3s; }
-        .ma-pct-label { font-size:11px; font-weight:700; min-width:36px; }
+        .ma-pct-cell { min-width:90px; }
+        .ma-bar-wrap { display:flex; align-items:center; gap:6px; }
+        .ma-bar { height:5px; border-radius:3px; min-width:2px; transition:width .3s; flex-shrink:0; }
+        .ma-pct-label { font-size:11px; font-weight:700; min-width:30px; }
         .ma-badge-edit { display:inline-block; margin-left:6px; font-size:10px; font-weight:600; color:var(--amber); background:var(--amber-bg); border-radius:4px; padding:1px 5px; vertical-align:middle; }
         .ma-input-edited { border-color:var(--amber) !important; }
+        .ma-col-sep { border-left:2px solid var(--border) !important; }
+        /* Modal cadastro futuro */
+        .ma-modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center; }
+        .ma-modal-overlay.open { display:flex; }
+        .ma-modal { background:var(--surface); border:1px solid var(--border); border-radius:12px; width:480px; max-width:95vw; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.4); }
+        .ma-modal-head { padding:18px 20px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+        .ma-modal-head h3 { font-size:15px; font-weight:700; color:var(--tx); margin:0; }
+        .ma-modal-body { padding:20px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:16px; }
+        .ma-modal-foot { padding:14px 20px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end; }
+        .ma-field label { display:block; font-size:11px; font-weight:600; color:var(--muted); margin-bottom:6px; }
+        .ma-field input[type=text], .ma-field select { font-family:var(--font); font-size:13px; background:var(--surface2); border:1px solid var(--border); color:var(--tx); border-radius:7px; padding:8px 12px; width:100%; outline:none; box-sizing:border-box; }
+        .ma-field input[type=text]:focus, .ma-field select:focus { border-color:var(--green); }
+        .ma-reps-list { display:flex; flex-direction:column; gap:4px; max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:7px; padding:8px; background:var(--surface2); }
+        .ma-rep-chk { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:5px; cursor:pointer; font-size:12px; color:var(--tx); }
+        .ma-rep-chk:hover { background:var(--surface); }
+        .ma-rep-chk input[type=checkbox] { accent-color:var(--green); width:14px; height:14px; cursor:pointer; }
+        .ma-btn { font-family:var(--font); font-size:12px; font-weight:600; padding:8px 16px; border-radius:7px; border:none; cursor:pointer; transition:opacity .15s; }
+        .ma-btn-primary { background:var(--green); color:#000; }
+        .ma-btn-primary:hover { opacity:.85; }
+        .ma-btn-cancel { background:var(--surface2); color:var(--muted); border:1px solid var(--border); }
+        .ma-btn-cancel:hover { color:var(--tx); }
         .cli-tbl { border-collapse:collapse; font-size:12px; }
         .cli-tbl th, .cli-tbl td { padding:6px 10px; white-space:nowrap; border-bottom:1px solid var(--border); }
         .cli-tbl thead th { background:var(--sidebar); position:sticky; top:0; z-index:2; font-size:11px; font-weight:600; color:var(--muted); }
@@ -3294,38 +3321,72 @@ window._saveMeta = function(col, rep, rawVal) {
 };
 
 function _renderMetasGrid() {
-  const buscaEl= document.getElementById('metasAdmin_busca');
-  const gridEl = document.getElementById('metasAdmin_grid');
-  const statEl = document.getElementById('metasAdmin_status');
+  const buscaEl = document.getElementById('metasAdmin_busca');
+  const gridEl  = document.getElementById('metasAdmin_grid');
+  const statEl  = document.getElementById('metasAdmin_status');
   if (!gridEl) return;
 
   const busca = (buscaEl ? buscaEl.value||'' : '').toLowerCase();
   const hist  = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
   const metasLocaisTodos = _getMetasLocais();
 
-  const fmt = v => v>0 ? 'R$\u00a0'+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0}) : '—';
-  const pct = (v,m) => !m ? 0 : Math.min(Math.round(v/m*100), 999);
-  const gK  = (r,c) => Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c;
+  const fmt  = v => v>0 ? 'R$\u00a0'+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0}) : '—';
+  const pct  = (v,m) => !m ? 0 : Math.min(Math.round(v/m*100), 999);
+  const gK   = (r,c) => Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c;
+  const bc   = p => p>=100?'var(--green)':p>=70?'var(--amber)':'var(--red)';
 
   // ---------- coleções (colunas) ----------
   const colecoesHist = [...new Set(hist.map(r=>r[gK(r,'COLECAO')]).filter(Boolean))];
   const colecoesData = (typeof cachedData !== 'undefined' && cachedData && cachedData.length)
     ? [...new Set(cachedData.map(d=>d.col).filter(Boolean))]
     : [];
-  const colecoes = [...new Set([...colecoesHist,...colecoesData])].sort().reverse();
+  // inclui coleções cadastradas localmente (futuras)
+  const colecoesLocais = Object.keys(metasLocaisTodos);
+  const colecoes = [...new Set([...colecoesHist,...colecoesData,...colecoesLocais])].sort().reverse();
 
   if (!colecoes.length) {
     gridEl.innerHTML = '<div style="padding:32px;color:var(--muted);text-align:center;font-size:13px">Aguardando dados…</div>';
     return;
   }
 
-  // ---------- representantes (linhas) ----------
-  const repsHist  = [...new Set(hist.map(r=>r[gK(r,'NOME')]).filter(Boolean))];
-  const repsData  = (typeof cachedData !== 'undefined' && cachedData && cachedData.length)
+  // Coleções ativas = existem em cachedData OU são futuras (só local)
+  // Coleções passadas = só hist PBI, sem dados atuais
+  const colecoesAtivas = new Set([...colecoesData, ...colecoesLocais]);
+
+  // ---------- índice hist[colecao][rep] = {meta, venda, marca} ----------
+  const histIdx = {};
+  hist.forEach(r => {
+    const col   = r[gK(r,'COLECAO')];
+    const nom   = r[gK(r,'NOME')];
+    const m     = parseFloat(r[gK(r,'META')])||0;
+    const v     = parseFloat(r[gK(r,'VENDA')])||0;
+    if (col && nom) {
+      if (!histIdx[col]) histIdx[col]={};
+      histIdx[col][nom]={meta:m,venda:v};
+    }
+  });
+
+  // ---------- representantes e marcas de cachedData ----------
+  // rep -> marca (usa a primeira marca encontrada para cada rep)
+  const repMarca = {};
+  if (typeof cachedData !== 'undefined' && cachedData && cachedData.length) {
+    cachedData.forEach(d => {
+      if (d.rep && d.marca && !repMarca[d.rep]) repMarca[d.rep] = d.marca;
+    });
+  }
+  // reps do hist que não têm marca em cachedData: sem marca definida
+  hist.forEach(r => {
+    const nom = r[gK(r,'NOME')];
+    if (nom && !repMarca[nom]) repMarca[nom] = r[gK(r,'MARCA')] || '';
+  });
+
+  // ---------- todos os reps, agrupados por marca ----------
+  const repsHist   = [...new Set(hist.map(r=>r[gK(r,'NOME')]).filter(Boolean))];
+  const repsData   = (typeof cachedData !== 'undefined' && cachedData && cachedData.length)
     ? [...new Set(cachedData.map(d=>d.rep).filter(Boolean))]
     : [];
-  const repsLocais= [...new Set(Object.values(metasLocaisTodos).flatMap(obj=>Object.keys(obj)))];
-  let reps = [...new Set([...repsHist,...repsData,...repsLocais])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const repsLocais = [...new Set(Object.values(metasLocaisTodos).flatMap(obj=>Object.keys(obj)))];
+  let reps = [...new Set([...repsHist,...repsData,...repsLocais])];
   if (busca) reps = reps.filter(r=>r.toLowerCase().includes(busca));
 
   if (!reps.length) {
@@ -3333,157 +3394,259 @@ function _renderMetasGrid() {
     return;
   }
 
-  // ---------- índice hist[colecao][rep] = {meta, venda} ----------
-  const histIdx = {};
-  hist.forEach(r => {
-    const col = r[gK(r,'COLECAO')];
-    const nom = r[gK(r,'NOME')];
-    const m   = parseFloat(r[gK(r,'META')])||0;
-    const v   = parseFloat(r[gK(r,'VENDA')])||0;
-    if (col && nom) {
-      if (!histIdx[col]) histIdx[col]={};
-      histIdx[col][nom]={meta:m,venda:v};
-    }
+  // Agrupa reps por marca, ordena marca A→Z e reps A→Z dentro
+  const marcaMap = {};
+  reps.forEach(rep => {
+    const m = repMarca[rep] || '(Sem marca)';
+    if (!marcaMap[m]) marcaMap[m] = [];
+    marcaMap[m].push(rep);
   });
+  const marcas = Object.keys(marcaMap).sort((a,b)=>{
+    if(a==='(Sem marca)') return 1; if(b==='(Sem marca)') return -1;
+    if(a.toUpperCase().includes('MYROCK')) return -1;
+    if(b.toUpperCase().includes('MYROCK')) return 1;
+    return a.localeCompare(b,'pt-BR');
+  });
+  marcas.forEach(m => marcaMap[m].sort((a,b)=>a.localeCompare(b,'pt-BR')));
 
-  // ---------- build header ----------
-  // cada coleção ocupa 3 sub-colunas: Venda | Meta definida | %
-  const COL_W_VENDA = '90px';
-  const COL_W_META  = '110px';
-  const COL_W_PCT   = '74px';
-
-  let thGroup = `<th class="ma-nome" rowspan="2">Representante</th>`;
+  // ---------- header duplo (travado) ----------
+  let thGroup = `<th class="ma-nome-cell" rowspan="2" style="text-align:left;z-index:6!important">Representante</th>`;
   let thSub   = '';
-  colecoes.forEach(c => {
-    thGroup += `<th colspan="3" style="text-align:center;border-left:2px solid var(--border);padding:6px 8px;font-size:11px;white-space:nowrap;color:var(--tx)">${c}</th>`;
-    thSub   += `<th style="width:${COL_W_VENDA};border-left:2px solid var(--border)" class="ma-val">Venda</th>
-                <th style="width:${COL_W_META}" class="ma-edit-cell">Meta</th>
-                <th style="width:${COL_W_PCT}"  class="ma-pct-cell">%</th>`;
+  colecoes.forEach((c,i) => {
+    const sep = i===0 ? '' : 'ma-col-sep';
+    thGroup += `<th colspan="3" class="${sep}" style="text-align:center;padding:6px 8px;font-size:11px;white-space:nowrap;font-weight:700">${c}${colecoesAtivas.has(c) ? '' : ' <span style="font-size:9px;opacity:.5;font-weight:400">(hist)</span>'}</th>`;
+    thSub   += `<th class="ma-val ${sep}">Venda</th><th class="ma-edit-cell">Meta</th><th class="ma-pct-cell">%</th>`;
   });
 
-  // Coleções ativas = existem em cachedData (período atual, editável)
-  // Coleções passadas = só no hist (somente leitura)
-  const colecoesAtivas = new Set(colecoesData);
-
-  // ---------- build rows ----------
-  // totais por coleção
+  // ---------- totais por coleção e por marca/coleção ----------
   const totais = {};
   colecoes.forEach(c => { totais[c]={venda:0,meta:0}; });
+  const totaisMarca = {};
+  marcas.forEach(m => { totaisMarca[m]={}; colecoes.forEach(c=>{ totaisMarca[m][c]={venda:0,meta:0}; }); });
 
-  let rows = '';
-  reps.forEach(rep => {
-    const repEsc = rep.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-    let cells = '';
-    colecoes.forEach(c => {
-      const h = (histIdx[c]||{})[rep]||{meta:0,venda:0};
-      const metaLocal  = (metasLocaisTodos[c]||{})[rep]!=null ? (metasLocaisTodos[c]||{})[rep] : null;
-      const metaVig    = metaLocal!=null ? metaLocal : h.meta;
-      const colEsc     = c.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-      const p          = pct(h.venda, metaVig);
-      const bc         = p>=100?'var(--green)':p>=70?'var(--amber)':'var(--red)';
-      const editavel   = colecoesAtivas.has(c);
-      totais[c].venda += h.venda;
-      totais[c].meta  += metaVig;
+  // ---------- build body por marca ----------
+  let tbody = '';
 
-      let metaCell;
-      if (editavel) {
-        const inputVal = metaVig > 0 ? metaVig : '';
-        const edited   = metaLocal!=null ? ' title="editado"' : '';
-        metaCell = `<td class="ma-edit-cell">
-          <input class="ma-input${metaLocal!=null?' ma-input-edited':''}" type="text" value="${inputVal}" placeholder="—"${edited}
+  marcas.forEach(marca => {
+    const repsM = marcaMap[marca];
+
+    // Linha de cabeçalho de marca
+    const ncols = colecoes.length * 3;
+    tbody += `<tr class="ma-marca-row">
+      <td class="ma-nome-cell">${marca}</td>
+      <td colspan="${ncols}"></td>
+    </tr>`;
+
+    // Linhas de reps
+    repsM.forEach(rep => {
+      const repEsc = rep.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+      let cells = '';
+      colecoes.forEach((c,i) => {
+        const h        = (histIdx[c]||{})[rep]||{meta:0,venda:0};
+        const metaLoc  = (metasLocaisTodos[c]||{})[rep]!=null ? (metasLocaisTodos[c]||{})[rep] : null;
+        const metaVig  = metaLoc!=null ? metaLoc : h.meta;
+        const colEsc   = c.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+        const p        = pct(h.venda, metaVig);
+        const cor      = bc(p);
+        const editavel = colecoesAtivas.has(c);
+        const sep      = i===0 ? '' : 'ma-col-sep';
+        totais[c].venda         += h.venda;
+        totais[c].meta          += metaVig;
+        totaisMarca[marca][c].venda += h.venda;
+        totaisMarca[marca][c].meta  += metaVig;
+
+        let metaCell;
+        if (editavel) {
+          const iv  = metaVig > 0 ? metaVig : '';
+          const cls = metaLoc!=null ? 'ma-input ma-input-edited' : 'ma-input';
+          const ttl = metaLoc!=null ? ' title="valor editado manualmente"' : '';
+          metaCell = `<td class="ma-edit-cell"><input class="${cls}" type="text" value="${iv}" placeholder="—"${ttl}
             onchange="window._saveMeta('${colEsc}','${repEsc}',this.value)"
-            onkeydown="if(event.key==='Enter')this.blur()"/>
-        </td>`;
-      } else {
-        // coleção passada: só exibe o valor, sem input
-        metaCell = `<td class="ma-edit-cell" style="color:var(--muted);font-size:12px">${fmt(metaVig)}</td>`;
-      }
+            onkeydown="if(event.key==='Enter')this.blur()"/></td>`;
+        } else {
+          metaCell = `<td class="ma-edit-cell" style="color:var(--muted)">${fmt(metaVig)}</td>`;
+        }
 
-      cells += `
-        <td class="ma-val" style="border-left:2px solid var(--border)">${fmt(h.venda)}</td>
-        ${metaCell}
-        <td class="ma-pct-cell">
-          <div class="ma-bar-wrap" style="min-width:54px">
-            <div class="ma-bar" style="width:${Math.min(p,100)}%;background:${bc}"></div>
-            <span class="ma-pct-label" style="color:${bc}">${p}%</span>
-          </div>
-        </td>`;
+        cells += `<td class="ma-val ${sep}">${fmt(h.venda)}</td>${metaCell}<td class="ma-pct-cell">
+          <div class="ma-bar-wrap"><div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor};flex-basis:${Math.min(p,100)}%"></div>
+          <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
+      });
+      tbody += `<tr class="metas-row"><td class="ma-nome-cell">${rep}</td>${cells}</tr>`;
     });
-    rows += `<tr class="metas-row"><td class="ma-nome">${rep}</td>${cells}</tr>`;
+
+    // Sub-total da marca
+    let subCells = '';
+    colecoes.forEach((c,i) => {
+      const tm = totaisMarca[marca][c];
+      const p  = pct(tm.venda, tm.meta);
+      const cor = bc(p);
+      const sep = i===0 ? '' : 'ma-col-sep';
+      subCells += `<td class="ma-val ${sep}" style="color:var(--tx)">${fmt(tm.venda)}</td>
+        <td class="ma-edit-cell" style="color:var(--tx)">${fmt(tm.meta)}</td>
+        <td class="ma-pct-cell"><div class="ma-bar-wrap"><div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
+        <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
+    });
+    tbody += `<tr class="metas-row" style="background:rgba(76,158,241,.04)!important">
+      <td class="ma-nome-cell" style="color:#4C9EF1;font-size:11px">Total ${marca}</td>${subCells}</tr>`;
   });
 
-  // ---------- totais footer ----------
+  // ---------- totais gerais (footer) ----------
   let footCells = '';
-  colecoes.forEach(c => {
+  colecoes.forEach((c,i) => {
     const p  = pct(totais[c].venda, totais[c].meta);
-    const bc = p>=100?'var(--green)':p>=70?'var(--amber)':'var(--red)';
-    footCells += `
-      <td class="ma-val" style="border-left:2px solid var(--border);font-weight:700;color:var(--tx)">${fmt(totais[c].venda)}</td>
-      <td class="ma-edit-cell" style="font-weight:700;color:var(--tx)">${fmt(totais[c].meta)}</td>
-      <td class="ma-pct-cell"><div class="ma-bar-wrap" style="min-width:54px">
-        <div class="ma-bar" style="width:${Math.min(p,100)}%;background:${bc}"></div>
-        <span class="ma-pct-label" style="color:${bc}">${p}%</span>
-      </div></td>`;
+    const cor = bc(p);
+    const sep = i===0 ? '' : 'ma-col-sep';
+    footCells += `<td class="ma-val ${sep}">${fmt(totais[c].venda)}</td>
+      <td class="ma-edit-cell">${fmt(totais[c].meta)}</td>
+      <td class="ma-pct-cell"><div class="ma-bar-wrap"><div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
+      <span class="ma-pct-label" style="color:${cor}">${p}%</span></div></td>`;
   });
 
   gridEl.innerHTML = `
-  <div style="overflow:auto;max-width:100%">
-  <table class="metas-tbl" style="min-width:max-content">
-    <thead>
-      <tr>${thGroup}</tr>
-      <tr>${thSub}</tr>
-    </thead>
-    <tbody>${rows}</tbody>
+  <div style="overflow:auto;width:100%;height:100%">
+  <table class="metas-tbl" style="min-width:max-content;width:100%">
+    <thead><tr>${thGroup}</tr><tr>${thSub}</tr></thead>
+    <tbody>${tbody}</tbody>
     <tfoot><tr>
-      <td class="ma-nome" style="font-weight:700;color:var(--tx)">Total</td>
-      ${footCells}
+      <td class="ma-nome-cell">Total geral</td>${footCells}
     </tr></tfoot>
-  </table>
-  </div>`;
+  </table></div>`;
 
   if (statEl) {
     const locCount = Object.values(metasLocaisTodos).reduce((acc,obj)=>acc+Object.keys(obj).length,0);
-    statEl.textContent = locCount > 0 ? `${locCount} meta${locCount!==1?'s':''} definida${locCount!==1?'s':''} localmente` : '';
+    statEl.textContent = locCount > 0 ? `${locCount} meta${locCount!==1?'s':''} editada${locCount!==1?'s':''} localmente` : '';
   }
 }
+
+// ===== MODAL: CADASTRAR NOVA COLEÇÃO FUTURA =====
+window._abrirModalNovaColecao = function() {
+  const hist = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
+  const gK   = (r,c) => Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c;
+  const metasLocais = _getMetasLocais();
+
+  // Reps disponíveis: do Power BI (hist + cachedData) para o usuário selecionar
+  const repsHist = [...new Set(hist.map(r=>r[gK(r,'NOME')]).filter(Boolean))];
+  const repsData = (typeof cachedData !== 'undefined' && cachedData && cachedData.length)
+    ? [...new Set(cachedData.map(d=>d.rep).filter(Boolean))]
+    : [];
+  const reps = [...new Set([...repsHist,...repsData])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+
+  const repItems = reps.map(r=>`
+    <label class="ma-rep-chk">
+      <input type="checkbox" value="${r.replace(/"/g,'&quot;')}" checked/>
+      ${r}
+    </label>`).join('');
+
+  // Criar/atualizar modal
+  let modal = document.getElementById('maModalNovaCol');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'maModalNovaCol';
+    modal.className = 'ma-modal-overlay';
+    document.body.appendChild(modal);
+    document.addEventListener('keydown', e => { if(e.key==='Escape') window._fecharModalNovaColecao(); });
+  }
+  modal.innerHTML = `
+    <div class="ma-modal" onclick="event.stopPropagation()">
+      <div class="ma-modal-head">
+        <h3>＋ Nova coleção futura</h3>
+        <button class="ma-btn ma-btn-cancel" style="padding:4px 10px;font-size:12px" onclick="window._fecharModalNovaColecao()">✕</button>
+      </div>
+      <div class="ma-modal-body">
+        <div class="ma-field">
+          <label>Nome da coleção</label>
+          <input type="text" id="maModalColNome" placeholder="Ex: 69-VERÃO 2028 MY ROCK" autocomplete="off"/>
+        </div>
+        <div class="ma-field">
+          <label>Representantes <span style="font-weight:400;color:var(--muted)">(desmarque quem não participar)</span></label>
+          ${reps.length
+            ? `<div style="margin-bottom:6px;display:flex;gap:8px">
+                <button class="ma-btn ma-btn-cancel" style="padding:3px 10px;font-size:11px" onclick="document.querySelectorAll('#maModalReps input').forEach(c=>c.checked=true)">Todos</button>
+                <button class="ma-btn ma-btn-cancel" style="padding:3px 10px;font-size:11px" onclick="document.querySelectorAll('#maModalReps input').forEach(c=>c.checked=false)">Nenhum</button>
+               </div>
+               <div class="ma-reps-list" id="maModalReps">${repItems}</div>`
+            : '<p style="font-size:12px;color:var(--muted)">Nenhum representante encontrado no Power BI.</p>'}
+        </div>
+        <div id="maModalErro" style="color:var(--red);font-size:12px;display:none"></div>
+      </div>
+      <div class="ma-modal-foot">
+        <button class="ma-btn ma-btn-cancel" onclick="window._fecharModalNovaColecao()">Cancelar</button>
+        <button class="ma-btn ma-btn-primary" onclick="window._salvarNovaColecao()">Criar coleção</button>
+      </div>
+    </div>`;
+  modal.classList.add('open');
+  setTimeout(()=>{ const el=document.getElementById('maModalColNome'); if(el) el.focus(); },100);
+};
+
+window._fecharModalNovaColecao = function() {
+  const m = document.getElementById('maModalNovaCol');
+  if (m) m.classList.remove('open');
+};
+
+window._salvarNovaColecao = function() {
+  const nomeEl = document.getElementById('maModalColNome');
+  const erroEl = document.getElementById('maModalErro');
+  const nome   = (nomeEl ? nomeEl.value.trim() : '');
+  if (!nome) {
+    erroEl.textContent = 'Informe o nome da coleção.';
+    erroEl.style.display = 'block';
+    nomeEl.focus();
+    return;
+  }
+  // Reps selecionados
+  const checks = document.querySelectorAll('#maModalReps input[type=checkbox]');
+  const repsSel = [...checks].filter(c=>c.checked).map(c=>c.value);
+  if (!repsSel.length) {
+    erroEl.textContent = 'Selecione ao menos um representante.';
+    erroEl.style.display = 'block';
+    return;
+  }
+  // Salvar: cria entrada para cada rep com meta 0 (editável depois)
+  const todos = _getMetasLocais();
+  if (!todos[nome]) todos[nome] = {};
+  repsSel.forEach(rep => {
+    if (todos[nome][rep] == null) todos[nome][rep] = 0;
+  });
+  try { localStorage.setItem(METAS_LOCAL_KEY, JSON.stringify(todos)); } catch(e) {}
+  window._fecharModalNovaColecao();
+  _renderMetasGrid();
+};
 
 // Inicializar aba de metas — chamada após renderDashboard e ao clicar na aba
 function _initMetasTab() {
   const tab = document.getElementById('tab-metas-admin');
   if (!tab) return;
   const hist = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
-  const gK2 = (r,c) => Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c;
+  const gK2  = (r,c) => Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c;
 
-  // Coleções do histórico Power BI
   const colecoesHist = [...new Set(hist.map(r=>r[gK2(r,'COLECAO')]).filter(Boolean))];
-
-  // Coleções de cachedData (sempre disponível)
   const colecoesData = (typeof cachedData !== 'undefined' && cachedData && cachedData.length)
-    ? [...new Set(cachedData.map(d => d.col).filter(Boolean))]
+    ? [...new Set(cachedData.map(d=>d.col).filter(Boolean))]
     : [];
+  const colecoesLocais = Object.keys(_getMetasLocais());
 
-  // União das duas fontes, ordenada desc
-  let colecoes = [...new Set([...colecoesHist, ...colecoesData])].sort().reverse();
-
-  // Se ainda sem coleções, agendar nova tentativa e sair
-  if (!colecoes.length) {
-    setTimeout(_initMetasTab, 500);
-    return;
-  }
+  let colecoes = [...new Set([...colecoesHist,...colecoesData,...colecoesLocais])].sort().reverse();
+  if (!colecoes.length) { setTimeout(_initMetasTab, 500); return; }
 
   const gridEl = document.getElementById('metasAdmin_grid');
-
   if (!gridEl) {
-    // Primeira vez: injeta HTML completo
     tab.innerHTML = `
     <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--sidebar);flex-shrink:0">
-        <input id="metasAdmin_busca" type="text" placeholder="Buscar representante…" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;width:200px"/>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--sidebar);flex-shrink:0">
+        <input id="metasAdmin_busca" type="text" placeholder="Buscar representante…"
+          style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 10px;outline:none;width:190px"/>
+        <button onclick="window._abrirModalNovaColecao()"
+          style="font-family:var(--font);font-size:12px;font-weight:600;background:var(--green);color:#000;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:5px">
+          ＋ Nova coleção
+        </button>
         <span style="flex:1"></span>
         <span id="metasAdmin_status" style="font-size:11px;color:var(--muted)"></span>
-        <button onclick="localStorage.removeItem('dashCache_v22');location.reload()" style="font-family:var(--font);font-size:11px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:4px 10px;cursor:pointer" title="Limpar cache e recarregar">🔄 Atualizar dados</button>
+        <button onclick="localStorage.removeItem('dashCache_v22');location.reload()"
+          style="font-family:var(--font);font-size:11px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:4px 10px;cursor:pointer">
+          🔄 Atualizar dados
+        </button>
       </div>
-      <div style="flex:1;overflow:auto;padding:20px">
+      <div style="flex:1;overflow:auto;padding:16px 20px">
         <div id="metasAdmin_grid"></div>
       </div>
     </div>`;
@@ -3494,10 +3657,9 @@ function _initMetasTab() {
 document.addEventListener('click', function(e) {
   const btn = e.target.closest('[data-tab="metas-admin"]');
   if (btn) _initMetasTab();
-});
-// Também ligar eventos de change/input depois que o DOM existir
-document.addEventListener('change', function(e) {
-  // select de coleção removido (coleções agora são colunas)
+  // fechar modal ao clicar no overlay
+  const modal = document.getElementById('maModalNovaCol');
+  if (modal && modal.classList.contains('open') && e.target === modal) window._fecharModalNovaColecao();
 });
 document.addEventListener('input', function(e) {
   if (e.target && e.target.id === 'metasAdmin_busca') _renderMetasGrid();
