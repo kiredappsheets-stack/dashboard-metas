@@ -1992,7 +1992,7 @@ function renderDashboard(data) {
             <thead><tr>
               <th class="col-nome" style="text-align:left">Cliente</th>
               <th class="col-status">Status</th>
-              <th class="col-crm" title="CRM">💬</th>
+              <th class="col-crm" style="font-size:10px;font-weight:700;letter-spacing:.04em">CRM</th>
               ${cols.map(col=>`<th class="col-val" style="max-width:100px;white-space:normal;line-height:1.3">${colLabel(col)}</th>`).join('')}
               <th class="col-total" style="min-width:110px">Total</th>
             </tr></thead><tbody>`;
@@ -3387,7 +3387,8 @@ function crmSalvarEvento() {
   document.getElementById('crmObsInput').value  = '';
   _crmTipoSelecionado = null;
   _crmAtualizarBotoesTopo();
-  _crmRenderEventos(cod);
+  // Fechar popup após salvar
+  fecharCrmPopup();
 }
 
 function crmExcluirEvento(idx) {
