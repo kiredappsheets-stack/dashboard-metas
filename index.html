@@ -3366,11 +3366,11 @@ function _renderMetasGrid() {
 
   const fmt  = v => v>0 ? 'R$\u00a0'+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0}) : '—';
   const pct  = (v,m) => !m ? 0 : Math.min(Math.round(v/m*100), 999);
-  const gK   = (r,c) => Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c;
+  const gK   = (r,c) => { const k = Object.keys(r).find(k=>k.toUpperCase().includes(c.toUpperCase()))||c; return r[k]??null; };
   const bc   = p => p>=100?'var(--green)':p>=70?'var(--amber)':'var(--red)';
 
   // ---------- coleções ----------
-  const colecoesHist = [...new Set(hist.map(r=>r[gK(r,'COLECAO')]).filter(Boolean))];
+  const colecoesHist = [...new Set(hist.map(r=>gK(r,'COLECAO')).filter(Boolean))];
   const colecoesData = (typeof cachedData !== 'undefined' && cachedData && cachedData.length)
     ? [...new Set(cachedData.map(d=>d.col).filter(Boolean))]
     : [];
@@ -3387,10 +3387,10 @@ function _renderMetasGrid() {
   // ---------- índice hist[colecao][rep] = {meta, venda} ----------
   const histIdx = {};
   hist.forEach(r => {
-    const col = r[gK(r,'COLECAO')];
-    const nom = r[gK(r,'NOME')];
-    const m   = parseFloat(r[gK(r,'META')])||0;
-    const v   = parseFloat(r[gK(r,'VENDA')])||0;
+    const col = gK(r,'COLECAO');
+    const nom = gK(r,'NOME');
+    const m   = parseFloat(gK(r,'META'))||0;
+    const v   = parseFloat(gK(r,'VENDA'))||0;
     if (col && nom) {
       if (!histIdx[col]) histIdx[col]={};
       histIdx[col][nom]={meta:m,venda:v};
@@ -3400,13 +3400,15 @@ function _renderMetasGrid() {
   // ---------- rep -> marca ----------
   // Usa cachedClientes2 (DAX_HIST_CLIENTES: PEDIDO[REP] + PEDIDO[MARCA], todas coleções)
   // Mesma fonte que buildClientes() usa — não depende de COL_ATUAL
+  // gV usa .includes() igual buildClientes() — campos como PEDIDO[REP] são encontrados corretamente
+  const gV2 = (r,c) => { const k = Object.keys(r).find(k=>k.toUpperCase().includes(c.toUpperCase()))||c; return r[k]??null; };
   const repMarca = {};
   if (typeof cachedClientes2 !== 'undefined' && cachedClientes2 && cachedClientes2.length) {
     // Conta ocorrências de cada marca por rep e usa a mais frequente
     const repMarcaCount = {};
     cachedClientes2.forEach(r => {
-      const rep   = String(r[gK(r,'REP')]||'').trim();
-      const marca = String(r[gK(r,'MARCA')]||'').trim();
+      const rep   = String(gV2(r,'REP')||'').trim();
+      const marca = String(gV2(r,'MARCA')||'').trim();
       if (!rep || !marca) return;
       if (!repMarcaCount[rep]) repMarcaCount[rep] = {};
       repMarcaCount[rep][marca] = (repMarcaCount[rep][marca]||0) + 1;
@@ -3418,13 +3420,13 @@ function _renderMetasGrid() {
   }
   // Fallback: hist metas (se tiver campo MARCA)
   hist.forEach(r => {
-    const nom   = r[gK(r,'NOME')];
-    const marca = r[gK(r,'MARCA')] || '';
+    const nom   = gV2(r,'NOME');
+    const marca = gV2(r,'MARCA') || '';
     if (nom && marca && !repMarca[nom]) repMarca[nom] = marca;
   });
 
   // ---------- todos os reps ----------
-  const repsHist   = [...new Set(hist.map(r=>r[gK(r,'NOME')]).filter(Boolean))];
+  const repsHist   = [...new Set(hist.map(r=>gK(r,'NOME')).filter(Boolean))];
   const repsData   = (typeof cachedData !== 'undefined' && cachedData && cachedData.length)
     ? [...new Set(cachedData.map(d=>d.rep).filter(Boolean))]
     : [];
