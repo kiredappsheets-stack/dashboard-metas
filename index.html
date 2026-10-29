@@ -492,15 +492,29 @@ ORDER BY PEDIDO[REP] ASC, PEDIDO[MARCA] ASC
 
 const DAX_CRM_JUSTIF = `
 EVALUATE
-SUMMARIZE(
+SELECTCOLUMNS(
   FILTER(CRM, NOT ISBLANK(CRM[TIPO_MOTIVO]) && CRM[TIPO_MOTIVO] <> ""),
-  CRM[CODCLI],
-  CRM[TIPO_MOTIVO],
-  CRM[OBSERVACAO],
-  CRM[STATUS],
-  CRM[DATA]
+  "CODCLI",     CRM[CODCLI],
+  "TIPO_MOTIVO",CRM[TIPO_MOTIVO],
+  "OBSERVACAO", CRM[OBSERVACAO],
+  "STATUS",     CRM[STATUS],
+  "DATA",       CRM[DATA],
+  "DT_RETORNO", CRM[DT_RETORNO]
 )
 ORDER BY CRM[CODCLI] ASC, CRM[DATA] DESC
+`;
+
+const DAX_COLECOES_DATAS = `
+EVALUATE
+SELECTCOLUMNS(
+  COLECOES,
+  "COLECAO",    COLECOES[COLECAO],
+  "DESCRICAO",  COLECOES[DESCRICAO],
+  "DT_INICIO",  COLECOES[DT_INICIO],
+  "DT_FINAL",   COLECOES[DT_FINAL],
+  "COL_ATUAL",  COLECOES[COL_ATUAL]
+)
+ORDER BY COLECOES[COLECAO] ASC
 `;
 
 const DAX_HIST_PERIODO = `
@@ -1548,18 +1562,53 @@ function renderDashboard(data) {
         .trim();
     };
 
+    // Índice de coleções com períodos (DT_INICIO e DT_FINAL)
+    // cachedColecoesDatas: [{ COLECAO, DESCRICAO, DT_INICIO, DT_FINAL, COL_ATUAL }]
+    const gCo2 = (r,c) => String(r['COLECOES['+c+']'] || r[c] || '').trim();
+    const colecoesPeriodos = (cachedColecoesDatas||[]).map(r => ({
+      colecao:  gCo2(r,'COLECAO'),
+      dtInicio: gCo2(r,'DT_INICIO'),
+      dtFinal:  gCo2(r,'DT_FINAL'),
+    })).filter(c => c.colecao);
+
+    // Encontra coleção pelo DT_RETORNO
+    function colecaoDaData(dtStr) {
+      if (!dtStr) return null;
+      const dt = new Date(dtStr);
+      if (isNaN(dt)) return null;
+      // Tenta achar coleção cujo período contém a data
+      for (const cp of colecoesPeriodos) {
+        const ini = cp.dtInicio ? new Date(cp.dtInicio) : null;
+        const fim = cp.dtFinal  ? new Date(cp.dtFinal)  : null;
+        if (ini && fim && dt >= ini && dt <= fim) return cp.colecao;
+      }
+      // Fallback: coleção mais próxima pelo DT_FINAL
+      let best = null, bestDiff = Infinity;
+      for (const cp of colecoesPeriodos) {
+        if (!cp.dtFinal) continue;
+        const fim = new Date(cp.dtFinal);
+        const diff = Math.abs(dt - fim);
+        if (diff < bestDiff) { bestDiff = diff; best = cp.colecao; }
+      }
+      return best;
+    }
+
     // Indexar justificativas CRM por CODCLI (mais recente por cliente)
-    const crmPorCliente = {}; // cod -> { motivo, obs, status, data }
+    const crmPorCliente = {}; // cod -> { motivo, obs, status, data, dtRetorno, colecaoCrm }
     if (cachedCrmJustif && cachedCrmJustif.length) {
       cachedCrmJustif.forEach(r => {
-        const cod  = String(gV(r,'CODCLI')||'').trim();
-        const obs  = stripRtf(String(gV(r,'OBSERVACAO')||''));
-        const mot  = String(gV(r,'TIPO_MOTIVO')||'');
-        const st   = String(gV(r,'STATUS')||'');
-        const dt   = String(gV(r,'DATA')||'');
+        const cod        = String(gV(r,'CODCLI')||'').trim();
+        const obs        = stripRtf(String(gV(r,'OBSERVACAO')||''));
+        const mot        = String(gV(r,'TIPO_MOTIVO')||'');
+        const st         = String(gV(r,'STATUS')||'');
+        const dt         = String(gV(r,'DATA')||'');
+        const dtRetorno  = String(gV(r,'DT_RETORNO')||'').trim();
         if (!cod) return;
         // Mantém apenas o registro mais recente (dados já ordenados DESC)
-        if (!crmPorCliente[cod]) crmPorCliente[cod] = { motivo: mot, obs, status: st, data: dt };
+        if (!crmPorCliente[cod]) {
+          const colecaoCrm = colecaoDaData(dtRetorno);
+          crmPorCliente[cod] = { motivo: mot, obs, status: st, data: dt, dtRetorno, colecaoCrm };
+        }
       });
     }
 
@@ -1760,23 +1809,30 @@ function renderDashboard(data) {
             totGeral += totalCli;
             const st = statusPorMarcaCli[marca]?.[cod] || 'novo';
             const crm = crmPorCliente[cod];
-            const crmHtml = crm
-              ? `<span class="crm-icon">💬<span class="crm-tooltip"><strong>Justificativa CRM</strong>${crm.obs || '(sem texto)'}<br><span style="color:var(--muted);margin-top:4px;display:block;font-size:10px">${crm.data ? crm.data.split(' ')[0] : ''}</span></span></span>`
-              : '';
             const loc = [cli.cidade, cli.estado].filter(Boolean).join(' / ');
             html += `<tr><td class="col-nome" title="${cli.nome}${loc?' — '+loc:''}">
                 ${cli.nome}
                 ${loc ? `<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:1px;overflow:hidden;text-overflow:ellipsis">${loc}</span>` : ''}
               </td>
               <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span></td>
-              <td class="col-crm">${crmHtml}</td>`;
+              <td class="col-crm"></td>`;
             cols.forEach((col,ci) => {
               const v = dm[col]||0;
               totCols[ci] += v;
               const heat = maxVal>0&&v>0 ? Math.round((v/maxVal)*100) : 0;
               const alpha = heat>0 ? (0.08+heat/100*0.55).toFixed(2) : '0';
               const style = v>0 ? `background:rgba(${bgRgb},${alpha});color:${heat>60?'#fff':'var(--tx)'}` : 'color:var(--hint)';
-              html += `<td class="col-val" style="${style}">${fmt(v)}</td>`;
+              // Ícone CRM: mostrar na coluna da coleção correspondente ao DT_RETORNO
+              let crmIcon = '';
+              if (crm && crm.colecaoCrm && crm.colecaoCrm === col) {
+                const dtRet = crm.dtRetorno ? crm.dtRetorno.split('T')[0] : (crm.data ? crm.data.split(' ')[0] : '');
+                crmIcon = `<span class="crm-icon" style="margin-left:4px">💬<span class="crm-tooltip"><strong>Retorno previsto: ${dtRet}</strong><br>${crm.obs || '(sem texto)'}<br><span style="color:var(--muted);margin-top:4px;display:block;font-size:10px">Registro: ${crm.data ? crm.data.split(' ')[0] : ''}</span></span></span>`;
+              } else if (crm && !crm.colecaoCrm && ci === cols.length-1) {
+                // Sem coleção identificada: cai na última coluna como fallback
+                const dtRet = crm.dtRetorno ? crm.dtRetorno.split('T')[0] : '';
+                crmIcon = `<span class="crm-icon" style="margin-left:4px">💬<span class="crm-tooltip"><strong>Justificativa CRM</strong>${dtRet ? '<br>Retorno: '+dtRet : ''}<br>${crm.obs || '(sem texto)'}<br><span style="color:var(--muted);margin-top:4px;display:block;font-size:10px">Registro: ${crm.data ? crm.data.split(' ')[0] : ''}</span></span></span>`;
+              }
+              html += `<td class="col-val" style="${style}">${fmt(v)}${crmIcon}</td>`;
             });
             html += `<td class="col-total" style="color:${acento}">${fmt(totalCli)}</td></tr>`;
           });
@@ -1931,7 +1987,7 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v18';
+const CACHE_KEY = 'dashCache_v19';
 // Limpar versões antigas do cache
 try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14','dashCache_v15'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
@@ -2023,6 +2079,7 @@ function applyCache(cached) {
   cachedCrmJustif       = cached.crmJustif       || [];
   cachedClientesLoc     = cached.clientesLoc     || [];
   cachedGestaoCom       = cached.gestaoCom       || [];
+  cachedColecoesDatas   = cached.colecoesDatas   || [];
 }
 
 async function loadDashboard() {
@@ -2056,7 +2113,7 @@ async function loadDashboard() {
       try {
         const token = await getToken();
         const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
-        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom] = await Promise.all([
+        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas] = await Promise.all([
           safe(() => runDaxQuery(token, DAX_QUERY, false)),
           safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
           safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -2068,15 +2125,16 @@ async function loadDashboard() {
           safe(() => runDaxQuery(token, DAX_CRM_JUSTIF, true)),
           safe(() => runDaxQuery(token, DAX_CLIENTES_LOC, true)),
           safe(() => runDaxQuery(token, DAX_GESTAO_COMERCIAL, true)),
+          safe(() => runDaxQuery(token, DAX_COLECOES_DATAS, true)),
         ]);
         cachedData = data; cachedMetasHist = metasHist; cachedRestricoes = restricoes;
         cachedHistMarca = histMarca||[]; cachedHistPeriodo = histPeriodo||[];
         cachedClientes2 = clientes2||[]; cachedCrmJustif = crmJustif||[]; cachedClientesLoc = clientesLoc||[];
-        cachedGestaoCom = gestaoCom||[];
+        cachedGestaoCom = gestaoCom||[]; cachedColecoesDatas = colecoesDatas||[];
         cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
         if (kpisFat && kpisFat.length > 0) cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
 
-        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom });
+        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas });
         // Reatualizar as abas com dados novos
         renderDashboard(cachedData);
         const now2 = new Date();
@@ -2105,7 +2163,7 @@ async function loadDashboard() {
     if (lu) lu.textContent = 'A carregar dados do Power BI…';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom] = await Promise.all([
+    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -2117,6 +2175,7 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_CRM_JUSTIF, true)),
       safe(() => runDaxQuery(token, DAX_CLIENTES_LOC, true)),
       safe(() => runDaxQuery(token, DAX_GESTAO_COMERCIAL, true)),
+      safe(() => runDaxQuery(token, DAX_COLECOES_DATAS, true)),
     ]);
     clearTimeout(_loadTimeout);
     cachedData = data;
@@ -2128,11 +2187,12 @@ async function loadDashboard() {
     cachedCrmJustif = crmJustif || [];
     cachedClientesLoc = clientesLoc || [];
     cachedGestaoCom = gestaoCom || [];
+    cachedColecoesDatas = colecoesDatas || [];
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
-    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom });
+    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas });
     renderDashboard(data);
 
   } catch(e) {
@@ -2196,6 +2256,7 @@ let cachedClientes2 = [];
 let cachedCrmJustif = [];
 let cachedClientesLoc = [];
 let cachedGestaoCom = [];
+let cachedColecoesDatas = [];
 // Variáveis legacy para contexto IA (queries removidas — sempre vazias)
 let cachedPedidos = [], cachedClientes = [], cachedReps = [], cachedVendas = [];
 let cachedMarcas = [], cachedColecoes = [], cachedPedidosDetalhe = [], cachedProdutos = [];
