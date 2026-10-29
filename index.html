@@ -1338,9 +1338,9 @@ function renderDashboard(data) {
     const marcasEmMarcaMap = Object.keys(marcaMap);
     (cachedData||[]).forEach(d => {
       if (!d.rep || !d.col) return;
-      const colUp = d.col.toUpperCase();
-      // Busca a marca cujo nome aparece no nome da coleção
-      const marcaDaCol = marcasEmMarcaMap.find(m => colUp.includes(m.toUpperCase())) || null;
+      const colUp = d.col.toUpperCase().replace(/\s+/g,'');
+      // Busca a marca cujo nome aparece no nome da coleção (ignora espaços em ambos)
+      const marcaDaCol = marcasEmMarcaMap.find(m => colUp.includes(m.toUpperCase().replace(/\s+/g,''))) || null;
       if (!marcaDaCol) return;
       if (!repMetaPorMarca[marcaDaCol]) repMetaPorMarca[marcaDaCol] = {};
       if (!repMetaPorMarca[marcaDaCol][d.rep]) repMetaPorMarca[marcaDaCol][d.rep] = 0;
