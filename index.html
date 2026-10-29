@@ -3312,8 +3312,17 @@ function _renderMetasGrid() {
 
   const rowsHist = hist.filter(r => r[gK(r,'COLECAO')] === col);
   const repsHist = [...new Set(rowsHist.map(r=>r[gK(r,'NOME')]).filter(Boolean))];
+
+  // Fallback: se histórico PBI não tem reps para essa coleção, buscar de cachedData
+  let repsData = [];
+  if (!repsHist.length && typeof cachedData !== 'undefined' && cachedData && cachedData.length) {
+    repsData = [...new Set(
+      cachedData.filter(d => d.col === col).map(d => d.rep).filter(Boolean)
+    )];
+  }
+
   const repsLocais = Object.keys(metasLocais);
-  let reps = [...new Set([...repsHist,...repsLocais])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  let reps = [...new Set([...repsHist,...repsData,...repsLocais])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   if (busca) reps = reps.filter(r=>r.toLowerCase().includes(busca));
 
   if (!reps.length) {
