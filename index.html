@@ -1860,7 +1860,7 @@ function renderDashboard(data) {
         .crm-icon.crm-financeiro { background:rgba(232,74,74,.45);  box-shadow:0 0 0 2px var(--red); }
 
         /* Popup CRM (substituindo hover por click) */
-        .crm-popup { display:none; position:fixed; z-index:9999; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:0; width:320px; box-shadow:0 8px 40px rgba(0,0,0,.6); text-align:left; overflow:hidden; }
+        .crm-popup { display:none; position:fixed; z-index:99999; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:0; width:320px; box-shadow:0 8px 40px rgba(0,0,0,.6); text-align:left; overflow:hidden; }
         .crm-popup.open { display:block; }
         .crm-popup-header { background:var(--surface2); padding:12px 14px 10px; border-bottom:1px solid var(--border); }
         .crm-popup-header strong { color:var(--amber); font-size:10px; text-transform:uppercase; letter-spacing:.07em; display:block; margin-bottom:3px; }
@@ -3268,6 +3268,9 @@ let _crmTipoSelecionado = null;
 function abrirCrmPopup(iconEl, event) {
   event.stopPropagation();
   const popup = document.getElementById('crmPopup');
+
+  // Garantir que o popup está direto no body (fora de qualquer overflow:hidden)
+  if (popup.parentElement !== document.body) document.body.appendChild(popup);
 
   if (popup.classList.contains('open') && _crmPopupIconEl === iconEl) {
     fecharCrmPopup(); return;
