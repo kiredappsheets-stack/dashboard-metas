@@ -1844,8 +1844,8 @@ function renderDashboard(data) {
         .cli-tbl thead .col-nome { z-index:4; background:var(--sidebar); }
         .cli-tbl .col-status { position:sticky; left:240px; z-index:1; background:var(--surface); min-width:105px; text-align:center; }
         .cli-tbl thead .col-status { z-index:3; background:var(--sidebar); }
-        .cli-tbl .col-crm { position:sticky; left:345px; z-index:1; background:var(--surface); width:36px; text-align:center; }
-        .cli-tbl thead .col-crm { z-index:3; background:var(--sidebar); }
+        .cli-tbl .col-crm { position:sticky; left:345px; z-index:10; background:var(--surface); width:36px; text-align:center; pointer-events:all; }
+        .cli-tbl thead .col-crm { z-index:12; background:var(--sidebar); }
         .cli-tbl tbody tr:nth-child(even) .col-nome,
         .cli-tbl tbody tr:nth-child(even) .col-status,
         .cli-tbl tbody tr:nth-child(even) .col-crm { background:var(--surface2); }
@@ -3290,7 +3290,8 @@ function abrirCrmPopup(iconEl, event) {
   const sel = document.getElementById('crmColSelect');
   sel.innerHTML = '<option value="">Selecione a coleção…</option>';
   // Pega coleções disponíveis (cachedClientes2 → COLECAO único, ordenado desc)
-  const cols = [...new Set((cachedClientes2||[]).map(r=>String(gV(r,'COLECAO')||'').trim()).filter(Boolean))].sort().reverse();
+  const _gV = (r,c) => { const k=Object.keys(r).find(k=>k.toUpperCase().includes(c.toUpperCase()))||c; return r[k]??null; };
+  const cols = [...new Set((cachedClientes2||[]).map(r=>String(_gV(r,'COLECAO')||'').trim()).filter(Boolean))].sort().reverse();
   cols.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
 
   // Limpar form
