@@ -2037,7 +2037,8 @@ function renderDashboard(data) {
                 ${loc ? `<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:1px;overflow:hidden;text-overflow:ellipsis">${loc}</span>` : ''}
               </td>
               <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span></td>
-              <td class="col-crm">${crm ? (() => { const crmEstado = getCrmEstado(cod); const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : crmEstado === 'financeiro' ? ' crm-financeiro' : ''; const dtRet = crm.dtRetorno ? crm.dtRetorno.split('T')[0] : (crm.data ? crm.data.split(' ')[0] : ''); const info = encodeURIComponent(JSON.stringify({nome:cli.nome, dtRet, obs:crm.obs||'', dtReg:crm.data?crm.data.split(' ')[0]:'', tipo:crm.colecaoCrm?'retorno':'justif'})); return `<span class="crm-icon${crmClass}" data-cod="${cod}" data-info="${info}" onclick="abrirCrmPopup(this,event)">💬</span>`; })() : ''}</td>`;
+              <td class="col-crm">${(() => { const crmEstado = getCrmEstado(cod); const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : crmEstado === 'financeiro' ? ' crm-financeiro' : ''; return `<span class="crm-icon${crmClass}" data-cod="${cod}" data-nome="${cli.nome.replace(/"/g,'&quot;')}" onclick="abrirCrmPopup(this,event)">💬</span>`; })()}</td>`;
+            const crmEventosCli = getCrmEventos(cod);
             cols.forEach((col,ci) => {
               const v = dm[col]||0;
               totCols[ci] += v;
@@ -2045,7 +2046,15 @@ function renderDashboard(data) {
               const heat = maxVal>0&&v>0 ? Math.round((v/maxVal)*100) : 0;
               const alpha = heat>0 ? (0.08+heat/100*0.55).toFixed(2) : '0';
               const style = v>0 ? `background:rgba(${bgRgb},${alpha});color:${heat>60?'#fff':'var(--tx)'}` : 'color:var(--hint)';
-              html += `<td class="col-val" style="${style}">${fmt(v)}</td>`;
+              // Indicador de eventos CRM nesta coleção
+              const evCol = crmEventosCli.filter(ev => ev.colecao === col);
+              let colDot = '';
+              if (evCol.length) {
+                const tipoUlt = evCol[evCol.length-1].tipo;
+                const dotCor = tipoUlt === 'validado' ? 'var(--green)' : tipoUlt === 'recusado' ? 'var(--amber)' : 'var(--red)';
+                colDot = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${dotCor};margin-left:4px;vertical-align:middle" title="${evCol.length} evento(s) CRM"></span>`;
+              }
+              html += `<td class="col-val" style="${style}">${fmt(v)}${colDot}</td>`;
             });
             html += `<td class="col-total" style="color:${acento}">${fmt(totalCli)}</td></tr>`;
           });
@@ -3197,75 +3206,105 @@ function speakResponse(text) {
   </div>
 </div>
 
-<!-- ===== POPUP CRM ===== -->
-<div id="crmPopup" class="crm-popup" role="dialog" aria-modal="true">
-  <div class="crm-popup-header">
-    <strong id="crmPopupLabel">CRM — Justificativa</strong>
-    <span class="crm-cliente" id="crmPopupCliente"></span>
+<!-- ===== POPUP CRM LOCAL ===== -->
+<div id="crmPopup" class="crm-popup" role="dialog" aria-modal="true" style="width:420px">
+  <div class="crm-popup-header" style="display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <strong id="crmPopupLabel" style="color:var(--amber);font-size:10px;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:3px">CRM</strong>
+      <span class="crm-cliente" id="crmPopupCliente" style="font-size:14px;font-weight:600;color:var(--tx)"></span>
+    </div>
+    <button onclick="fecharCrmPopup()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 8px;line-height:1">✕</button>
   </div>
-  <div class="crm-popup-body">
-    <div id="crmPopupStatus"></div>
-    <div class="crm-obs" id="crmPopupObs"></div>
-    <div class="crm-meta" id="crmPopupMeta"></div>
-    <div class="crm-popup-actions" id="crmPopupActions"></div>
+  <div class="crm-popup-body" style="padding:0">
+    <!-- Lista de eventos -->
+    <div id="crmEventosList" style="max-height:260px;overflow-y:auto;padding:12px 14px 0"></div>
+    <!-- Form novo evento -->
+    <div style="padding:12px 14px 14px;border-top:1px solid var(--border);margin-top:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Novo evento</div>
+      <select id="crmColSelect" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--tx);padding:7px 10px;font-size:12px;font-family:var(--font);margin-bottom:8px">
+        <option value="">Selecione a coleção…</option>
+      </select>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button class="crm-btn crm-btn-validar"    onclick="crmSetTipo('validado')"   id="crmBtnVal" style="flex:1;font-size:11px;padding:6px">✔ Validado</button>
+        <button class="crm-btn crm-btn-recusar"    onclick="crmSetTipo('recusado')"   id="crmBtnRec" style="flex:1;font-size:11px;padding:6px">✖ Recusado</button>
+        <button class="crm-btn crm-btn-financeiro" onclick="crmSetTipo('financeiro')" id="crmBtnFin" style="flex:1;font-size:11px;padding:6px">💳 Financeiro</button>
+      </div>
+      <textarea id="crmObsInput" placeholder="Observação (opcional)…" rows="2" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--tx);padding:7px 10px;font-size:12px;font-family:var(--font);resize:vertical;margin-bottom:8px"></textarea>
+      <button onclick="crmSalvarEvento()" style="width:100%;background:var(--green);color:#000;border:none;border-radius:6px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font)">Salvar evento</button>
+    </div>
   </div>
 </div>
 
 <script>
-// ===== CRM VALIDAÇÃO =====
-const CRM_ESTADOS_KEY = 'crmEstados_v1';
+// ===== CRM LOCAL =====
+const CRM_LOCAL_KEY = 'crmLocal_v1';
+// Estrutura: { [codcli]: [ { colecao, tipo, obs, data } ] }
 
-function getCrmEstados() {
-  try { return JSON.parse(localStorage.getItem(CRM_ESTADOS_KEY) || '{}'); } catch(e) { return {}; }
+function getCrmLocal() {
+  try { return JSON.parse(localStorage.getItem(CRM_LOCAL_KEY) || '{}'); } catch(e) { return {}; }
 }
+function saveCrmLocal(data) {
+  try { localStorage.setItem(CRM_LOCAL_KEY, JSON.stringify(data)); } catch(e) {}
+}
+function getCrmEventos(cod) {
+  return (getCrmLocal()[String(cod)] || []);
+}
+// Retorna o tipo (status) mais recente do cliente, para colorir o ícone
 function getCrmEstado(cod) {
-  return getCrmEstados()[String(cod)] || null;
+  const eventos = getCrmEventos(cod);
+  if (!eventos.length) return null;
+  // Pega o mais recente
+  const ultimo = eventos[eventos.length - 1];
+  return ultimo.tipo || null;
 }
-function setCrmEstado(cod, estado) {
-  const estados = getCrmEstados();
-  if (estado === null) delete estados[String(cod)];
-  else estados[String(cod)] = estado;
-  localStorage.setItem(CRM_ESTADOS_KEY, JSON.stringify(estados));
-}
+// Compatibilidade: getCrmEstados não é mais necessário mas pode ser chamado
+function getCrmEstados() { return {}; }
 
-let _crmPopupCod = null;
+let _crmPopupCod  = null;
+let _crmPopupNome = null;
 let _crmPopupIconEl = null;
+let _crmTipoSelecionado = null;
 
 function abrirCrmPopup(iconEl, event) {
   event.stopPropagation();
   const popup = document.getElementById('crmPopup');
 
-  // Se já está aberto para este ícone, fecha
   if (popup.classList.contains('open') && _crmPopupIconEl === iconEl) {
-    fecharCrmPopup();
-    return;
+    fecharCrmPopup(); return;
   }
 
-  const cod = iconEl.dataset.cod;
-  const info = JSON.parse(decodeURIComponent(iconEl.dataset.info));
-  _crmPopupCod = cod;
-  _crmPopupIconEl = iconEl;
+  const cod  = iconEl.dataset.cod;
+  const nome = iconEl.dataset.nome || cod;
+  _crmPopupCod     = cod;
+  _crmPopupNome    = nome;
+  _crmPopupIconEl  = iconEl;
+  _crmTipoSelecionado = null;
 
-  // Preencher conteúdo
-  document.getElementById('crmPopupLabel').textContent =
-    info.tipo === 'retorno' ? 'CRM — Retorno previsto' : 'CRM — Justificativa';
-  document.getElementById('crmPopupCliente').textContent = info.nome;
-  document.getElementById('crmPopupObs').textContent = info.obs || '(sem observações)';
+  document.getElementById('crmPopupCliente').textContent = nome;
 
-  const meta = [];
-  if (info.dtRet) meta.push('📅 Retorno previsto: ' + info.dtRet);
-  if (info.dtReg) meta.push('🕐 Registro: ' + info.dtReg);
-  document.getElementById('crmPopupMeta').innerHTML = meta.map(m=>`<span>${m}</span>`).join('');
+  // Popular select de coleções
+  const sel = document.getElementById('crmColSelect');
+  sel.innerHTML = '<option value="">Selecione a coleção…</option>';
+  // Pega coleções disponíveis (cachedClientes2 → COLECAO único, ordenado desc)
+  const cols = [...new Set((cachedClientes2||[]).map(r=>String(gV(r,'COLECAO')||'').trim()).filter(Boolean))].sort().reverse();
+  cols.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
 
-  _renderCrmPopupActions(cod);
+  // Limpar form
+  document.getElementById('crmObsInput').value = '';
+  _crmAtualizarBotoesTopo();
+
+  // Renderizar eventos existentes
+  _crmRenderEventos(cod);
 
   // Posicionar
   popup.classList.add('open');
   const rect = iconEl.getBoundingClientRect();
-  const pw = 320;
-  const ph = popup.offsetHeight || 260;
+  const pw = 420;
   let left = rect.left + rect.width/2 - pw/2;
-  let top  = rect.top - ph - 8;
+  let top  = rect.top - 8;
+  // tenta posicionar acima, senão abaixo
+  const ph = Math.min(560, window.innerHeight - 80);
+  top = rect.top - ph - 8;
   if (left < 8) left = 8;
   if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
   if (top < 8) top = rect.bottom + 8;
@@ -3273,62 +3312,103 @@ function abrirCrmPopup(iconEl, event) {
   popup.style.top  = top  + 'px';
 }
 
-function _renderCrmPopupActions(cod) {
-  const estado = getCrmEstado(cod);
-  const statusEl = document.getElementById('crmPopupStatus');
-  const actionsEl = document.getElementById('crmPopupActions');
-
-  if (estado === 'validado') {
-    statusEl.innerHTML = '<div class="crm-status-badge validado">✔ Validado</div>';
-    actionsEl.innerHTML = `<button class="crm-btn crm-btn-desfazer" onclick="mudarCrmEstado(null)">↩ Desfazer</button>`;
-  } else if (estado === 'recusado') {
-    statusEl.innerHTML = '<div class="crm-status-badge recusado">✖ Recusado</div>';
-    actionsEl.innerHTML = `<button class="crm-btn crm-btn-desfazer" onclick="mudarCrmEstado(null)">↩ Desfazer</button>`;
-  } else if (estado === 'financeiro') {
-    statusEl.innerHTML = '<div class="crm-status-badge financeiro">💳 Financeiro</div>';
-    actionsEl.innerHTML = `<button class="crm-btn crm-btn-desfazer" onclick="mudarCrmEstado(null)">↩ Desfazer</button>`;
-  } else {
-    statusEl.innerHTML = '';
-    actionsEl.innerHTML = `
-      <button class="crm-btn crm-btn-validar"    onclick="mudarCrmEstado('validado')">✔ Validar</button>
-      <button class="crm-btn crm-btn-recusar"    onclick="mudarCrmEstado('recusado')">✖ Recusar</button>
-      <button class="crm-btn crm-btn-financeiro" onclick="mudarCrmEstado('financeiro')">💳 Financeiro</button>
-    `;
-  }
+function _crmAtualizarBotoesTopo() {
+  ['Val','Rec','Fin'].forEach(id => {
+    const btn = document.getElementById('crmBtn' + id);
+    if (btn) btn.style.opacity = '0.45';
+  });
+  if (_crmTipoSelecionado === 'validado')   document.getElementById('crmBtnVal').style.opacity = '1';
+  if (_crmTipoSelecionado === 'recusado')   document.getElementById('crmBtnRec').style.opacity = '1';
+  if (_crmTipoSelecionado === 'financeiro') document.getElementById('crmBtnFin').style.opacity = '1';
 }
 
-function mudarCrmEstado(novoEstado) {
-  if (!_crmPopupCod) return;
-  setCrmEstado(_crmPopupCod, novoEstado);
+function crmSetTipo(tipo) {
+  _crmTipoSelecionado = (_crmTipoSelecionado === tipo) ? null : tipo;
+  _crmAtualizarBotoesTopo();
+}
 
-  // Atualiza o ícone sem re-renderizar tudo
-  if (_crmPopupIconEl) {
-    _crmPopupIconEl.classList.remove('crm-validado','crm-recusado','crm-financeiro');
-    if (novoEstado === 'validado')   _crmPopupIconEl.classList.add('crm-validado');
-    else if (novoEstado === 'recusado')   _crmPopupIconEl.classList.add('crm-recusado');
-    else if (novoEstado === 'financeiro') _crmPopupIconEl.classList.add('crm-financeiro');
+function _crmRenderEventos(cod) {
+  const lista = document.getElementById('crmEventosList');
+  const eventos = getCrmEventos(cod).slice().reverse(); // mais recentes primeiro
+  if (!eventos.length) {
+    lista.innerHTML = '<div style="font-size:12px;color:var(--muted);padding-bottom:10px;text-align:center">Nenhum evento registrado</div>';
+    return;
   }
+  const labelTipo = { validado:'✔ Validado', recusado:'✖ Recusado', financeiro:'💳 Financeiro' };
+  const corTipo   = { validado:'var(--green)', recusado:'var(--amber)', financeiro:'var(--red)' };
+  lista.innerHTML = eventos.map((ev, i) => {
+    const realIdx = eventos.length - 1 - i; // índice real no array original
+    return `<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;position:relative">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${ev.obs?'6px':'0'}">
+        <span style="font-size:11px;font-weight:700;color:${corTipo[ev.tipo]||'var(--tx)'}">${labelTipo[ev.tipo]||ev.tipo}</span>
+        <span style="font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:2px 7px;color:var(--tx)">${ev.colecao||'—'}</span>
+        <span style="margin-left:auto;font-size:10px;color:var(--muted)">${ev.data||''}</span>
+        <button onclick="crmExcluirEvento(${realIdx})" title="Excluir" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 2px;line-height:1">🗑</button>
+      </div>
+      ${ev.obs ? `<div style="font-size:12px;color:var(--tx);line-height:1.5">${ev.obs}</div>` : ''}
+    </div>`;
+  }).join('');
+}
 
-  _renderCrmPopupActions(_crmPopupCod);
+function crmSalvarEvento() {
+  if (!_crmPopupCod) return;
+  const col = document.getElementById('crmColSelect').value;
+  const obs = document.getElementById('crmObsInput').value.trim();
+  if (!col) { alert('Selecione a coleção'); return; }
+  if (!_crmTipoSelecionado) { alert('Selecione o tipo do evento (Validado, Recusado ou Financeiro)'); return; }
+
+  const data = getCrmLocal();
+  const cod  = String(_crmPopupCod);
+  if (!data[cod]) data[cod] = [];
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  data[cod].push({ colecao: col, tipo: _crmTipoSelecionado, obs, data: hoje });
+  saveCrmLocal(data);
+
+  // Atualizar ícone na tabela
+  _crmAtualizarIcone(cod);
+
+  // Resetar form e re-renderizar lista
+  document.getElementById('crmColSelect').value = '';
+  document.getElementById('crmObsInput').value  = '';
+  _crmTipoSelecionado = null;
+  _crmAtualizarBotoesTopo();
+  _crmRenderEventos(cod);
+}
+
+function crmExcluirEvento(idx) {
+  if (!_crmPopupCod) return;
+  const data = getCrmLocal();
+  const cod  = String(_crmPopupCod);
+  if (!data[cod]) return;
+  data[cod].splice(idx, 1);
+  saveCrmLocal(data);
+  _crmAtualizarIcone(cod);
+  _crmRenderEventos(cod);
+}
+
+function _crmAtualizarIcone(cod) {
+  // Atualiza cor do ícone na tabela sem re-renderizar
+  const estado = getCrmEstado(cod);
+  const icones = document.querySelectorAll(`.crm-icon[data-cod="${cod}"]`);
+  icones.forEach(el => {
+    el.classList.remove('crm-validado','crm-recusado','crm-financeiro');
+    if (estado === 'validado')   el.classList.add('crm-validado');
+    else if (estado === 'recusado')   el.classList.add('crm-recusado');
+    else if (estado === 'financeiro') el.classList.add('crm-financeiro');
+  });
 }
 
 function fecharCrmPopup() {
   document.getElementById('crmPopup').classList.remove('open');
-  _crmPopupCod = null;
-  _crmPopupIconEl = null;
+  _crmPopupCod = null; _crmPopupIconEl = null;
 }
 
 // Fechar ao clicar fora
 document.addEventListener('click', function(e) {
   const popup = document.getElementById('crmPopup');
-  if (popup && popup.classList.contains('open') && !popup.contains(e.target)) {
-    fecharCrmPopup();
-  }
+  if (popup && popup.classList.contains('open') && !popup.contains(e.target)) fecharCrmPopup();
 });
-// Fechar com Escape
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') fecharCrmPopup();
-});
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') fecharCrmPopup(); });
 
 // ===== METAS ADMIN =====
 const METAS_LOCAL_KEY  = 'metasEditaveis_v1';
