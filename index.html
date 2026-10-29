@@ -3530,16 +3530,11 @@ function _renderMetasGrid() {
 window._abrirModalNovaColecao = function() {
   const metasLocais = _getMetasLocais();
 
-  // Coleções já existentes (PBI hist + cachedData + locais) → excluir do seletor
+  // Reps para o hist (usado abaixo)
   const hist = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
   const gK   = (r,c) => Object.keys(r).find(k=>k.replace(/[\[\]]/g,'').toUpperCase()===c)||c;
-  const colecoesExist = new Set([
-    ...hist.map(r=>r[gK(r,'COLECAO')]).filter(Boolean),
-    ...(typeof cachedData !== 'undefined' && cachedData ? cachedData.map(d=>d.col).filter(Boolean) : []),
-    ...Object.keys(metasLocais)
-  ]);
 
-  // Coleções do PBI (tabela COLECOES) ainda não cadastradas
+  // Todas as coleções da tabela COLECOES do PBI (sem filtro — usuário escolhe qualquer uma)
   // Chaves do raw DAX: 'COLECOES[COLECAO]', 'COLECOES[DT_INICIO]', 'COLECOES[DT_FINAL]'
   const gCo = (r,c) => String(r['COLECOES['+c+']'] || r[c] || '').trim();
   const cols = (typeof cachedColecoesDatas !== 'undefined' && cachedColecoesDatas) ? cachedColecoesDatas : [];
@@ -3550,7 +3545,7 @@ window._abrirModalNovaColecao = function() {
       ini:  gCo(r,'DT_INICIO'),
       fim:  gCo(r,'DT_FINAL')
     }))
-    .filter(c => c.nome && !colecoesExist.has(c.nome))
+    .filter(c => c.nome)
     .sort((a,b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 
   const fmtDt = s => {
