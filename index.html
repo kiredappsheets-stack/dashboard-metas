@@ -2157,9 +2157,10 @@ function renderDashboard(data) {
     'Atualizado: ' + now.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
 
   // Sempre inicializar a aba Metas após renderDashboard (dados já disponíveis)
+  // Pequeno delay para garantir que cachedMetasHist já foi atribuído
   setTimeout(function() {
     if (typeof _initMetasTab === 'function') _initMetasTab();
-  }, 0);
+  }, 100);
 }
 
 // ════════════════════════════════════════════
@@ -3392,10 +3393,21 @@ function _initMetasTab() {
   const tab = document.getElementById('tab-metas-admin');
   if (!tab) return;
   const hist = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
-  if (!hist.length) return; // dados ainda não chegaram
   const gK2 = (r,c) => Object.keys(r).find(k=>k.toUpperCase()===c)||c;
-  const colecoes = [...new Set(hist.map(r=>r[gK2(r,'COLECAO')]).filter(Boolean))].sort().reverse();
-  if (!colecoes.length) return;
+
+  // Coleções do histórico Power BI
+  let colecoes = [...new Set(hist.map(r=>r[gK2(r,'COLECAO')]).filter(Boolean))].sort().reverse();
+
+  // Fallback: se histórico vazio mas cachedData disponível, usar coleções do cachedData
+  if (!colecoes.length && typeof cachedData !== 'undefined' && cachedData && cachedData.length) {
+    colecoes = [...new Set(cachedData.map(d => d.col).filter(Boolean))].sort().reverse();
+  }
+
+  // Se ainda sem coleções, agendar nova tentativa e sair
+  if (!colecoes.length) {
+    setTimeout(_initMetasTab, 500);
+    return;
+  }
 
   const colEl = document.getElementById('metasAdmin_col');
   const curVal = colEl ? colEl.value : null;
