@@ -1646,6 +1646,11 @@ function renderDashboard(data) {
       });
     }
 
+    // Reps com meta na coleção atual (= rep ativo)
+    const repsAtivos = new Set(
+      (cachedData||[]).filter(d => d.meta > 0).map(d => String(d.rep||'').trim()).filter(Boolean)
+    );
+
     // Determinar rep da última coleção por cliente (independente de marca)
     // cachedClientes2 já vem ordenado por COLECAO ASC, então a última linha é a mais recente
     const repUltimaVenda = {}; // cod -> rep
@@ -1666,7 +1671,9 @@ function renderDashboard(data) {
     cachedClientes2.forEach(r => {
       const cod    = String(gV(r,'CODCLI')||'');
       const nome   = nomeUltimaVenda[cod] || String(gV(r,'CLIENTE')||cod);
-      const rep    = repUltimaVenda[cod]  || String(gV(r,'REP')||'');
+      // Rep da última venda; se não tem meta na col atual → desativado → agrupa como sem rep
+      const repRaw = repUltimaVenda[cod]  || String(gV(r,'REP')||'');
+      const rep    = repsAtivos.has(repRaw) ? repRaw : '';
       const marca  = String(gV(r,'MARCA')||'');
       const col    = String(gV(r,'COLECAO')||'');
       const venda  = parseFloat(gV(r,'VENDA')||0)||0;
