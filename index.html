@@ -3299,18 +3299,19 @@ function abrirCrmPopup(iconEl, event) {
   // Renderizar eventos existentes
   _crmRenderEventos(cod);
 
-  // Posicionar
+  // Posicionar — calcular após tornar visível para ter offsetHeight real
   popup.classList.add('open');
   const rect = iconEl.getBoundingClientRect();
   const pw = 420;
-  let left = rect.left + rect.width/2 - pw/2;
-  let top  = rect.top - 8;
-  // tenta posicionar acima, senão abaixo
-  const ph = Math.min(560, window.innerHeight - 80);
-  top = rect.top - ph - 8;
+  const ph = popup.offsetHeight || 300;
+  // Tentar à direita do ícone, senão à esquerda
+  let left = rect.right + 8;
+  if (left + pw > window.innerWidth - 8) left = rect.left - pw - 8;
   if (left < 8) left = 8;
-  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
-  if (top < 8) top = rect.bottom + 8;
+  // Tentar alinhado ao topo do ícone, ajustar se sair da tela
+  let top = rect.top;
+  if (top + ph > window.innerHeight - 8) top = window.innerHeight - ph - 8;
+  if (top < 8) top = 8;
   popup.style.left = left + 'px';
   popup.style.top  = top  + 'px';
 }
