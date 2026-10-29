@@ -524,6 +524,13 @@ SUMMARIZECOLUMNS(
 ORDER BY COLECOES[COLECAO] ASC
 `;
 
+// Lista de marcas da tabela PEDIDO (sem filtro — todas as marcas cadastradas)
+const DAX_LISTA_MARCAS = `
+EVALUATE
+VALUES(PEDIDO[MARCA])
+ORDER BY PEDIDO[MARCA] ASC
+`;
+
 const DAX_HIST_PERIODO = `
 EVALUATE
 SUMMARIZE(
@@ -2316,6 +2323,7 @@ function applyCache(cached) {
   cachedGestaoCom       = cached.gestaoCom       || [];
   cachedColecoesDatas   = cached.colecoesDatas   || [];
   cachedCrmRetorno      = cached.crmRetorno      || [];
+  cachedListaMarcas     = cached.listaMarcas     || [];
 }
 
 async function loadDashboard() {
@@ -2349,7 +2357,7 @@ async function loadDashboard() {
       try {
         const token = await getToken();
         const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
-        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno] = await Promise.all([
+        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas] = await Promise.all([
           safe(() => runDaxQuery(token, DAX_QUERY, false)),
           safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
           safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -2363,6 +2371,7 @@ async function loadDashboard() {
           safe(() => runDaxQuery(token, DAX_GESTAO_COMERCIAL, true)),
           safe(() => runDaxQuery(token, DAX_COLECOES_DATAS, true)),
           safe(() => runDaxQuery(token, DAX_CRM_RETORNO, true)),
+          safe(() => runDaxQuery(token, DAX_LISTA_MARCAS, true)),
         ]);
         if (!data || data.length === 0) {
           console.warn('DAX_QUERY retornou vazio — não atualiza cache');
@@ -2373,10 +2382,11 @@ async function loadDashboard() {
         cachedHistMarca = histMarca||[]; cachedHistPeriodo = histPeriodo||[];
         cachedClientes2 = clientes2||[]; cachedCrmJustif = crmJustif||[]; cachedClientesLoc = clientesLoc||[];
         cachedGestaoCom = gestaoCom||[]; cachedColecoesDatas = colecoesDatas||[]; cachedCrmRetorno = crmRetorno||[];
+        cachedListaMarcas = listaMarcas||[];
         cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
         if (kpisFat && kpisFat.length > 0) cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
 
-        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno });
+        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas });
         // Reatualizar as abas com dados novos
         renderDashboard(cachedData);
         const now2 = new Date();
@@ -2405,7 +2415,7 @@ async function loadDashboard() {
     if (lu) lu.textContent = 'A carregar dados do Power BI…';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno] = await Promise.all([
+    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -2419,6 +2429,7 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_GESTAO_COMERCIAL, true)),
       safe(() => runDaxQuery(token, DAX_COLECOES_DATAS, true)),
       safe(() => runDaxQuery(token, DAX_CRM_RETORNO, true)),
+      safe(() => runDaxQuery(token, DAX_LISTA_MARCAS, true)),
     ]);
     clearTimeout(_loadTimeout);
     if (!data || data.length === 0) {
@@ -2436,11 +2447,12 @@ async function loadDashboard() {
     cachedGestaoCom = gestaoCom || [];
     cachedColecoesDatas = colecoesDatas || [];
     cachedCrmRetorno = crmRetorno || [];
+    cachedListaMarcas = listaMarcas || [];
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
-    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno });
+    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas });
     renderDashboard(data);
 
   } catch(e) {
@@ -2505,6 +2517,7 @@ let cachedCrmJustif = [];
 let cachedClientesLoc = [];
 let cachedGestaoCom = [];
 let cachedColecoesDatas = [];
+let cachedListaMarcas = [];
 let cachedCrmRetorno = [];
 // Variáveis legacy para contexto IA (queries removidas — sempre vazias)
 let cachedPedidos = [], cachedClientes = [], cachedReps = [], cachedVendas = [];
@@ -3325,9 +3338,28 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ===== METAS ADMIN =====
-const METAS_LOCAL_KEY = 'metasEditaveis_v1';
+const METAS_LOCAL_KEY  = 'metasEditaveis_v1';
+const MARCAS_LOCAL_KEY = 'marcasRep_v1';   // { [rep]: marca } — override manual da marca do rep
+
 function _getMetasLocais(){ try{return JSON.parse(localStorage.getItem(METAS_LOCAL_KEY)||'{}')}catch(e){return{}} }
 function _saveMetaLocal(col,rep,v){ const a=_getMetasLocais();if(!a[col])a[col]={};a[col][rep]=v;try{localStorage.setItem(METAS_LOCAL_KEY,JSON.stringify(a))}catch(e){} }
+
+function _getMarcasLocais(){ try{return JSON.parse(localStorage.getItem(MARCAS_LOCAL_KEY)||'{}')}catch(e){return{}} }
+function _saveMarcaLocal(rep,marca){ const a=_getMarcasLocais();if(marca)a[rep]=marca;else delete a[rep];try{localStorage.setItem(MARCAS_LOCAL_KEY,JSON.stringify(a))}catch(e){} }
+
+// Retorna lista de marcas para selects (PBI + locais, deduplicadas)
+function _getListaMarcas(){
+  const gV = (r,c)=>{ const k=Object.keys(r).find(k=>k.toUpperCase().includes(c.toUpperCase()))||c; return r[k]??null; };
+  const pbi = (typeof cachedListaMarcas!=='undefined'&&cachedListaMarcas)
+    ? cachedListaMarcas.map(r=>String(gV(r,'MARCA')||'').trim()).filter(Boolean)
+    : [];
+  // fallback: extrair de cachedClientes2
+  const fb = (typeof cachedClientes2!=='undefined'&&cachedClientes2&&!pbi.length)
+    ? cachedClientes2.map(r=>String(gV(r,'MARCA')||'').trim()).filter(Boolean)
+    : [];
+  const locais = Object.values(_getMarcasLocais()).filter(Boolean);
+  return [...new Set([...pbi,...fb,...locais])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
 
 window._saveMeta = function(col, rep, rawVal) {
   const v = parseFloat(String(rawVal).replace(/[R$\s.]/g,'').replace(',','.'))||0;
@@ -3371,13 +3403,25 @@ window._iniciarEditMeta = function(btn, col, rep, valorAtual) {
     });
   }
 
+  // Marca atual do rep
+  const marcasLocaisRep = _getMarcasLocais();
+  const marcaAtualRep   = marcasLocaisRep[rep] || '';
+  const listaMarcas     = _getListaMarcas();
+  const optsM = ['', ...listaMarcas].map(m =>
+    `<option value="${m.replace(/"/g,'&quot;')}"${m===marcaAtualRep?' selected':''}>${m||'— manter automático —'}</option>`
+  ).join('');
+
   modal.innerHTML = `
-    <div class="ma-modal" onclick="event.stopPropagation()" style="width:360px">
+    <div class="ma-modal" onclick="event.stopPropagation()" style="width:380px">
       <div class="ma-modal-head">
         <h3>✎ Editar meta — ${rep}</h3>
         <button class="ma-btn ma-btn-cancel" style="padding:4px 10px;font-size:12px" onclick="window._fecharEditMeta()">✕</button>
       </div>
       <div class="ma-modal-body" style="gap:12px">
+        <div class="ma-field">
+          <label>Marca</label>
+          <select id="maEditMarca">${optsM}</select>
+        </div>
         <div class="ma-field">
           <label>Coleção</label>
           <select id="maEditCol" onchange="window._atualizarValorEditMeta()">${opts}</select>
@@ -3450,12 +3494,14 @@ window._fecharEditMeta = function() {
 window._salvarEditMeta = function() {
   const modal = document.getElementById('maModalEditMeta');
   if (!modal) return;
-  const col = modal.querySelector('#maEditCol')?.value;
-  const rep = modal._repAtual;
-  const raw = modal.querySelector('#maEditVal')?.value || '';
-  const v   = parseFloat(String(raw).replace(/[R$\s.]/g,'').replace(',','.'))||0;
+  const col   = modal.querySelector('#maEditCol')?.value;
+  const rep   = modal._repAtual;
+  const raw   = modal.querySelector('#maEditVal')?.value || '';
+  const marca = modal.querySelector('#maEditMarca')?.value || '';
+  const v     = parseFloat(String(raw).replace(/[R$\s.]/g,'').replace(',','.'))||0;
   if (!col || !rep) return;
   _saveMetaLocal(col, rep, v);
+  _saveMarcaLocal(rep, marca); // '' limpa override → volta ao automático
   window._fecharEditMeta();
   _renderMetasGrid();
 };
@@ -3511,11 +3557,10 @@ function _renderMetasGrid() {
   });
 
   // ---------- rep -> marca ----------
-  // Usa cachedClientes2 (DAX_HIST_CLIENTES: PEDIDO[REP] + PEDIDO[MARCA], todas coleções)
-  // Mesma fonte que buildClientes() usa — não depende de COL_ATUAL
-  // gV usa .includes() igual buildClientes() — campos como PEDIDO[REP] são encontrados corretamente
+  // Prioridade: 1) override local (_getMarcasLocais), 2) cachedClientes2 (mais frequente), 3) hist
   const gV2 = (r,c) => { const k = Object.keys(r).find(k=>k.toUpperCase().includes(c.toUpperCase()))||c; return r[k]??null; };
-  const repMarca = {};
+  const marcasLocaisRep = _getMarcasLocais();
+  const repMarca = { ...marcasLocaisRep }; // começa com overrides locais
   if (typeof cachedClientes2 !== 'undefined' && cachedClientes2 && cachedClientes2.length) {
     // Conta ocorrências de cada marca por rep e usa a mais frequente
     const repMarcaCount = {};
@@ -3527,6 +3572,7 @@ function _renderMetasGrid() {
       repMarcaCount[rep][marca] = (repMarcaCount[rep][marca]||0) + 1;
     });
     Object.keys(repMarcaCount).forEach(rep => {
+      if (repMarca[rep]) return; // já tem override local — não sobrescreve
       const counts = repMarcaCount[rep];
       repMarca[rep] = Object.keys(counts).sort((a,b) => counts[b]-counts[a])[0];
     });
@@ -3826,8 +3872,27 @@ window._abrirModalNovaColecao = function() {
     document.body.appendChild(modal);
     document.addEventListener('keydown', e => { if(e.key==='Escape') window._fecharModalNovaColecao(); });
   }
+  // Marcas disponíveis para o select
+  const listaMarcasCad = _getListaMarcas();
+  const optsMCad = ['', ...listaMarcasCad].map(m =>
+    `<option value="${m.replace(/"/g,'&quot;')}">${m||'— manter automático —'}</option>`
+  ).join('');
+
+  // Cada rep com sua marca atual
+  const marcasLocCad = _getMarcasLocais();
+  const repItemsCad = reps.map(r => {
+    const marcaRep = marcasLocCad[r] || '';
+    const optsRepM = ['', ...listaMarcasCad].map(m =>
+      `<option value="${m.replace(/"/g,'&quot;')}"${m===marcaRep?' selected':''}>${m||'—'}</option>`
+    ).join('');
+    return `<label class="ma-rep-chk" style="display:flex;align-items:center;gap:6px;justify-content:space-between">
+      <span style="display:flex;align-items:center;gap:6px"><input type="checkbox" value="${r.replace(/"/g,'&quot;')}" checked/>${r}</span>
+      <select class="maRepMarcaSel" data-rep="${r.replace(/"/g,'&quot;')}" style="font-size:11px;padding:2px 6px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:5px;max-width:120px">${optsRepM}</select>
+    </label>`;
+  }).join('');
+
   modal.innerHTML = `
-    <div class="ma-modal" onclick="event.stopPropagation()">
+    <div class="ma-modal" onclick="event.stopPropagation()" style="width:500px">
       <div class="ma-modal-head">
         <h3>＋ Cadastrar meta futura</h3>
         <button class="ma-btn ma-btn-cancel" style="padding:4px 10px;font-size:12px" onclick="window._fecharModalNovaColecao()">✕</button>
@@ -3841,13 +3906,15 @@ window._abrirModalNovaColecao = function() {
           </select>
         </div>
         <div class="ma-field">
-          <label>Representantes <span style="font-weight:400;color:var(--muted)">(desmarque quem não participar)</span></label>
+          <label>Representantes <span style="font-weight:400;color:var(--muted)">(desmarque quem não participar · selecione a marca de cada rep)</span></label>
           ${reps.length
-            ? `<div style="margin-bottom:6px;display:flex;gap:8px">
-                <button class="ma-btn ma-btn-cancel" style="padding:3px 10px;font-size:11px" onclick="document.querySelectorAll('#maModalReps input').forEach(c=>c.checked=true)">Todos</button>
-                <button class="ma-btn ma-btn-cancel" style="padding:3px 10px;font-size:11px" onclick="document.querySelectorAll('#maModalReps input').forEach(c=>c.checked=false)">Nenhum</button>
+            ? `<div style="margin-bottom:6px;display:flex;gap:8px;align-items:center">
+                <button class="ma-btn ma-btn-cancel" style="padding:3px 10px;font-size:11px" onclick="document.querySelectorAll('#maModalReps input[type=checkbox]').forEach(c=>c.checked=true)">Todos</button>
+                <button class="ma-btn ma-btn-cancel" style="padding:3px 10px;font-size:11px" onclick="document.querySelectorAll('#maModalReps input[type=checkbox]').forEach(c=>c.checked=false)">Nenhum</button>
+                <span style="font-size:11px;color:var(--muted);margin-left:4px">Marca geral:</span>
+                <select id="maMarcaGeral" style="font-size:11px;padding:2px 8px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:5px" onchange="document.querySelectorAll('.maRepMarcaSel').forEach(s=>s.value=this.value)">${optsMCad}</select>
                </div>
-               <div class="ma-reps-list" id="maModalReps">${repItems}</div>`
+               <div class="ma-reps-list" id="maModalReps" style="font-size:12px">${repItemsCad}</div>`
             : '<p style="font-size:12px;color:var(--muted)">Nenhum representante encontrado no Power BI.</p>'}
         </div>
         <div id="maModalErro" style="color:var(--red);font-size:12px;display:none"></div>
@@ -3891,6 +3958,13 @@ window._salvarNovaColecao = function() {
     if (todos[nome][rep] == null) todos[nome][rep] = 0;
   });
   try { localStorage.setItem(METAS_LOCAL_KEY, JSON.stringify(todos)); } catch(e) {}
+  // Salvar marca de cada rep se selecionada no modal
+  const selsMarca = document.querySelectorAll('#maModalReps .maRepMarcaSel');
+  selsMarca.forEach(sel => {
+    const rep   = sel.dataset.rep || '';
+    const marca = sel.value || '';
+    if (rep && repsSel.includes(rep)) _saveMarcaLocal(rep, marca);
+  });
   window._fecharModalNovaColecao();
   _renderMetasGrid();
 };
