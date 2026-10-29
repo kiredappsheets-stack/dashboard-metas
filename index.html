@@ -3313,13 +3313,10 @@ function _renderMetasGrid() {
   const rowsHist = hist.filter(r => r[gK(r,'COLECAO')] === col);
   const repsHist = [...new Set(rowsHist.map(r=>r[gK(r,'NOME')]).filter(Boolean))];
 
-  // Fallback: se histórico PBI não tem reps para essa coleção, buscar de cachedData
-  let repsData = [];
-  if (!repsHist.length && typeof cachedData !== 'undefined' && cachedData && cachedData.length) {
-    repsData = [...new Set(
-      cachedData.filter(d => d.col === col).map(d => d.rep).filter(Boolean)
-    )];
-  }
+  // Sempre buscar reps de cachedData para a coleção selecionada
+  const repsData = (typeof cachedData !== 'undefined' && cachedData && cachedData.length)
+    ? [...new Set(cachedData.filter(d => d.col === col).map(d => d.rep).filter(Boolean))]
+    : [];
 
   const repsLocais = Object.keys(metasLocais);
   let reps = [...new Set([...repsHist,...repsData,...repsLocais])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
@@ -3405,12 +3402,15 @@ function _initMetasTab() {
   const gK2 = (r,c) => Object.keys(r).find(k=>k.toUpperCase()===c)||c;
 
   // Coleções do histórico Power BI
-  let colecoes = [...new Set(hist.map(r=>r[gK2(r,'COLECAO')]).filter(Boolean))].sort().reverse();
+  const colecoesHist = [...new Set(hist.map(r=>r[gK2(r,'COLECAO')]).filter(Boolean))];
 
-  // Fallback: se histórico vazio mas cachedData disponível, usar coleções do cachedData
-  if (!colecoes.length && typeof cachedData !== 'undefined' && cachedData && cachedData.length) {
-    colecoes = [...new Set(cachedData.map(d => d.col).filter(Boolean))].sort().reverse();
-  }
+  // Coleções de cachedData (sempre disponível)
+  const colecoesData = (typeof cachedData !== 'undefined' && cachedData && cachedData.length)
+    ? [...new Set(cachedData.map(d => d.col).filter(Boolean))]
+    : [];
+
+  // União das duas fontes, ordenada desc
+  let colecoes = [...new Set([...colecoesHist, ...colecoesData])].sort().reverse();
 
   // Se ainda sem coleções, agendar nova tentativa e sair
   if (!colecoes.length) {
