@@ -3396,13 +3396,29 @@ function _renderMetasGrid() {
   });
 
   // ---------- rep -> marca ----------
+  // Prioridade: cachedGestaoCom (coleção atual, REP+MARCA) > cachedClientes2 (hist, REP+MARCA) > cachedData (sem marca)
   const repMarca = {};
-  if (typeof cachedData !== 'undefined' && cachedData && cachedData.length) {
-    cachedData.forEach(d => { if (d.rep && d.marca && !repMarca[d.rep]) repMarca[d.rep] = d.marca; });
+  // 1) Gestão comercial (coleção atual): tem REP e MARCA
+  if (typeof cachedGestaoCom !== 'undefined' && cachedGestaoCom && cachedGestaoCom.length) {
+    cachedGestaoCom.forEach(r => {
+      const rep   = String(r[gK(r,'REP')]||'').trim();
+      const marca = String(r[gK(r,'MARCA')]||'').trim();
+      if (rep && marca && !repMarca[rep]) repMarca[rep] = marca;
+    });
   }
+  // 2) Histórico de clientes: PEDIDO[REP] e PEDIDO[MARCA] (todas as coleções)
+  if (typeof cachedClientes2 !== 'undefined' && cachedClientes2 && cachedClientes2.length) {
+    cachedClientes2.forEach(r => {
+      const rep   = String(r[gK(r,'REP')]||'').trim();
+      const marca = String(r[gK(r,'MARCA')]||'').trim();
+      if (rep && marca && !repMarca[rep]) repMarca[rep] = marca;
+    });
+  }
+  // 3) Fallback: hist metas (se tiver campo MARCA)
   hist.forEach(r => {
-    const nom = r[gK(r,'NOME')];
-    if (nom && !repMarca[nom]) repMarca[nom] = r[gK(r,'MARCA')] || '';
+    const nom   = r[gK(r,'NOME')];
+    const marca = r[gK(r,'MARCA')] || '';
+    if (nom && marca && !repMarca[nom]) repMarca[nom] = marca;
   });
 
   // ---------- todos os reps ----------
