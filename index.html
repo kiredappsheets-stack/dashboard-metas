@@ -2348,6 +2348,7 @@ async function loadDashboard() {
     // Cache válido — renderizar imediatamente sem ir ao Power BI
     applyCache(cached);
     renderDashboard(cachedData);
+    _crmLoadFromSheets();
     const cachedTs = JSON.parse(localStorage.getItem(CACHE_KEY)||'{}').ts;
     const cachedDate = cachedTs ? new Date(cachedTs).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '?';
     document.getElementById('lastUpdate').textContent = 'Cache de ' + cachedDate + ' · próx. sync 4h, 12h ou 18h';
@@ -2359,6 +2360,7 @@ async function loadDashboard() {
   if (stale) {
     applyCache(stale);
     renderDashboard(cachedData);
+    _crmLoadFromSheets();
     const staleTs = JSON.parse(localStorage.getItem(CACHE_KEY)||'{}').ts;
     const staleDate = staleTs ? new Date(staleTs).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '?';
     document.getElementById('lastUpdate').textContent = 'A atualizar dados… (cache de ' + staleDate + ')';
@@ -2464,6 +2466,7 @@ async function loadDashboard() {
     }
     saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas });
     renderDashboard(data);
+    _crmLoadFromSheets();
 
   } catch(e) {
     clearTimeout(_loadTimeout);
@@ -3244,28 +3247,46 @@ function speakResponse(text) {
 </div>
 
 <script>
-// ===== CRM LOCAL =====
-const CRM_LOCAL_KEY = 'crmLocal_v1';
-// Estrutura: { [codcli]: [ { colecao, tipo, obs, data } ] }
+// ===== CRM — Google Sheets backend =====
+const CRM_API_URL = 'https://script.google.com/macros/s/AKfycbxGxFyUuPENP-fLLjPmyrf7sauk6oJb-7-GqlT211f-HePyfWk_0qIGnDqKMsFClAZG/exec';
 
-function getCrmLocal() {
-  try { return JSON.parse(localStorage.getItem(CRM_LOCAL_KEY) || '{}'); } catch(e) { return {}; }
+// Cache em memória — carregado do Sheets na inicialização
+let _crmData = {};
+
+async function _crmLoadFromSheets() {
+  try {
+    const r = await fetch(CRM_API_URL + '?action=get');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    _crmData = await r.json();
+    // Atualizar todos os ícones após carregar
+    Object.keys(_crmData).forEach(cod => _crmAtualizarIcone(cod));
+  } catch(e) {
+    console.warn('CRM: falha ao carregar do Sheets, usando cache vazio.', e);
+  }
 }
-function saveCrmLocal(data) {
-  try { localStorage.setItem(CRM_LOCAL_KEY, JSON.stringify(data)); } catch(e) {}
+
+async function _crmSaveToSheets() {
+  try {
+    await fetch(CRM_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'save', data: _crmData })
+    });
+  } catch(e) {
+    console.warn('CRM: falha ao salvar no Sheets.', e);
+  }
 }
+
 function getCrmEventos(cod) {
-  return (getCrmLocal()[String(cod)] || []);
+  return (_crmData[String(cod)] || []);
 }
 // Retorna o tipo (status) mais recente do cliente, para colorir o ícone
 function getCrmEstado(cod) {
   const eventos = getCrmEventos(cod);
   if (!eventos.length) return null;
-  // Pega o mais recente
-  const ultimo = eventos[eventos.length - 1];
-  return ultimo.tipo || null;
+  return eventos[eventos.length - 1].tipo || null;
 }
-// Compatibilidade: getCrmEstados não é mais necessário mas pode ser chamado
+// Compatibilidade
 function getCrmEstados() { return {}; }
 
 let _crmPopupCod  = null;
@@ -3365,41 +3386,40 @@ function _crmRenderEventos(cod) {
   }).join('');
 }
 
-function crmSalvarEvento() {
+async function crmSalvarEvento() {
   if (!_crmPopupCod) return;
   const col = document.getElementById('crmColSelect').value;
   const obs = document.getElementById('crmObsInput').value.trim();
   if (!col) { alert('Selecione a coleção'); return; }
   if (!_crmTipoSelecionado) { alert('Selecione o tipo do evento (Validado, Recusado ou Financeiro)'); return; }
 
-  const data = getCrmLocal();
-  const cod  = String(_crmPopupCod);
-  if (!data[cod]) data[cod] = [];
+  const cod = String(_crmPopupCod);
+  if (!_crmData[cod]) _crmData[cod] = [];
   const hoje = new Date().toLocaleDateString('pt-BR');
-  data[cod].push({ colecao: col, tipo: _crmTipoSelecionado, obs, data: hoje });
-  saveCrmLocal(data);
+  _crmData[cod].push({ colecao: col, tipo: _crmTipoSelecionado, obs, data: hoje });
 
   // Atualizar ícone na tabela
   _crmAtualizarIcone(cod);
 
-  // Resetar form e re-renderizar lista
+  // Resetar form
   document.getElementById('crmColSelect').value = '';
   document.getElementById('crmObsInput').value  = '';
   _crmTipoSelecionado = null;
   _crmAtualizarBotoesTopo();
-  // Fechar popup após salvar
   fecharCrmPopup();
+
+  // Salvar no Sheets em background
+  _crmSaveToSheets();
 }
 
-function crmExcluirEvento(idx) {
+async function crmExcluirEvento(idx) {
   if (!_crmPopupCod) return;
-  const data = getCrmLocal();
-  const cod  = String(_crmPopupCod);
-  if (!data[cod]) return;
-  data[cod].splice(idx, 1);
-  saveCrmLocal(data);
+  const cod = String(_crmPopupCod);
+  if (!_crmData[cod]) return;
+  _crmData[cod].splice(idx, 1);
   _crmAtualizarIcone(cod);
   _crmRenderEventos(cod);
+  _crmSaveToSheets();
 }
 
 function _crmAtualizarIcone(cod) {
