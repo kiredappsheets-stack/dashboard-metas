@@ -3536,10 +3536,17 @@ window._iniciarEditMeta = function(btn, col, rep, valorAtual) {
   // Coletar coleções disponíveis (hist + locais)
   const hist = (typeof cachedMetasHist !== 'undefined' ? cachedMetasHist : null) || [];
   const gKe  = (r,c) => { const k = Object.keys(r).find(k=>k.toUpperCase().includes(c.toUpperCase()))||c; return r[k]??null; };
-  const colsHist  = [...new Set(hist.map(r=>gKe(r,'COLECAO')).filter(Boolean))];
+  const colsHist  = new Set([...hist.map(r=>gKe(r,'COLECAO')).filter(Boolean)]);
   const colsLocal = Object.keys(_getMetasLocais());
   const colsData  = (typeof cachedData !== 'undefined' && cachedData) ? [...new Set(cachedData.map(d=>d.col).filter(Boolean))] : [];
-  const todasCols = [...new Set([...colsData,...colsHist,...colsLocal])].sort().reverse();
+  // Coleções futuras: presentes em cachedColecoesDatas mas ainda sem histórico de metas
+  const gCo2 = (r,c) => String(r['COLECOES['+c+']'] || r[c] || '').trim();
+  const colsFuturas = (typeof cachedColecoesDatas !== 'undefined' ? cachedColecoesDatas : [])
+    .map(r => gCo2(r,'COLECAO')).filter(c => c && !colsHist.has(c));
+  // Somente atuais + futuras (não passadas que estão só no hist)
+  // colsLocal filtrado: só incluir se for atual ou futura
+  const colsLocalFiltrado = colsLocal.filter(c => colsData.includes(c) || colsFuturas.includes(c));
+  const todasCols = [...new Set([...colsData,...colsFuturas,...colsLocalFiltrado])].sort().reverse();
 
   const metasLocais = _getMetasLocais();
   const fmtNum = v => v > 0 ? v : '';
