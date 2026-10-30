@@ -1928,14 +1928,15 @@ function renderDashboard(data) {
         });
         return;
       }
-      const colAtual    = cols[cols.length - 1];
-      const colAnterior = cols[cols.length - 2];
+      // cols está em ordem decrescente (mais recente primeiro)
+      const colAtual    = cols[0];
+      const colAnterior = cols[1];
       Object.keys(porCliente).forEach(cod => {
         const dm = porCliente[cod].marcas[marca];
         if (!dm) return;
         const comprou_atual    = (dm[colAtual]    || 0) > 0;
         const comprou_anterior = (dm[colAnterior] || 0) > 0;
-        const comprouAntes = cols.slice(0, -1).some(c => (dm[c] || 0) > 0);
+        const comprouAntes = cols.slice(1).some(c => (dm[c] || 0) > 0);
         if (comprou_atual && comprou_anterior)  statusPorMarcaCli[marca][cod] = 'mantido';
         else if (comprou_atual && !comprouAntes) statusPorMarcaCli[marca][cod] = 'novo';
         else if (comprou_atual && !comprou_anterior) statusPorMarcaCli[marca][cod] = 'recuperado';
