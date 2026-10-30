@@ -3866,11 +3866,12 @@ function _renderMetasGrid() {
         const editado  = metaLoc != null;
         const metaDisp = fmt(metaVig);
         const iv       = metaVig > 0 ? metaVig : '';
+        const ehAtiva  = colecoesAtivas.has(c);
         const metaCell = `<td class="ma-edit-cell">
           <div class="ma-inline-wrap" id="maw-${encodeURIComponent(c+'\x00'+rep)}">
             <span class="ma-val-disp${editado?' ma-val-editado':''}" style="cursor:default">${metaDisp}</span>
-            <button class="ma-edit-btn" title="Editar meta"
-              onclick="window._iniciarEditMeta(this,'${colEsc}','${repEsc}',${iv||0})">✎</button>
+            ${ehAtiva ? `<button class="ma-edit-btn" title="Editar meta"
+              onclick="window._iniciarEditMeta(this,'${colEsc}','${repEsc}',${iv||0})">✎</button>` : ''}
           </div></td>`;
         cells += `<td class="ma-val ${sep}">${fmt(h.venda)}</td>${metaCell}<td class="ma-pct-cell">
           <div class="ma-bar-wrap"><div class="ma-bar" style="width:${Math.min(p,100)}%;background:${cor}"></div>
