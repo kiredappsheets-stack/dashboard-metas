@@ -2040,11 +2040,23 @@ function renderDashboard(data) {
             const st = statusPorMarcaCli[marca]?.[cod] || 'novo';
             const crm = crmPorCliente[cod];
             const loc = [cli.cidade, cli.estado].filter(Boolean).join(' / ');
+            // Ícone de tendência: compara valor na col atual vs última col anterior com compra
+            const dm2 = cli.marcas[marca] || {};
+            const vAtual = dm2[cols[0]] || 0;
+            const vAnter = (() => { for (let i=1;i<cols.length;i++) { if ((dm2[cols[i]]||0)>0) return dm2[cols[i]]; } return 0; })();
+            const tendIcon = (() => {
+              if (!vAtual || !vAnter) return '';
+              const diff = vAtual - vAnter;
+              const pct  = diff / vAnter;
+              if (pct > 0.02)  return `<span title="Comprou mais que na última coleção (+${(pct*100).toFixed(0)}%)" style="color:var(--green);font-size:12px;margin-left:4px;font-weight:700">↑</span>`;
+              if (pct < -0.02) return `<span title="Comprou menos que na última coleção (${(pct*100).toFixed(0)}%)" style="color:var(--red);font-size:12px;margin-left:4px;font-weight:700">↓</span>`;
+              return `<span title="Valor similar à última coleção" style="color:var(--muted);font-size:12px;margin-left:4px">≈</span>`;
+            })();
             html += `<tr><td class="col-nome" title="${cli.nome}${loc?' — '+loc:''}">
                 ${cli.nome}
                 ${loc ? `<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:1px;overflow:hidden;text-overflow:ellipsis">${loc}</span>` : ''}
               </td>
-              <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span></td>
+              <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span>${tendIcon}</td>
               <td class="col-crm">${(() => { const crmEstado = getCrmEstado(cod); const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : crmEstado === 'financeiro' ? ' crm-financeiro' : ''; return `<button class="crm-icon${crmClass}" data-cod="${cod}" data-nome="${cli.nome.replace(/"/g,'&quot;')}">CRM</button>`; })()}</td>`;
             const crmEventosCli = getCrmEventos(cod);
             cols.forEach((col,ci) => {
