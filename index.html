@@ -2111,6 +2111,12 @@ function renderDashboard(data) {
         </select>
         <button id="${uid}_col_toggle" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap">⚙ Coleções</button>
         <span id="${uid}_count" style="font-size:11px;color:var(--hint);margin-left:4px"></span>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;font-size:10px">
+          <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status mantido" style="margin:0">Mantido</span><span style="color:var(--muted)">comprou nas 2 últimas coleções</span></span>
+          <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status recuperado" style="margin:0">Recuperado</span><span style="color:var(--muted)">comprou na atual, não na anterior</span></span>
+          <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status nao-rep" style="margin:0">Não repetido</span><span style="color:var(--muted)">não comprou na coleção atual</span></span>
+          <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status novo" style="margin:0">Novo</span><span style="color:var(--muted)">nunca comprou antes</span></span>
+        </div>
       </div>
       <div id="${uid}_col_panel" style="display:none;padding:14px 20px;border-bottom:1px solid var(--border);background:var(--sidebar);flex-shrink:0;overflow-y:auto;max-height:220px">
         ${renderColCheckboxes()}
