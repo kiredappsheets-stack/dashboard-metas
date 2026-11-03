@@ -2312,9 +2312,15 @@ function renderDashboard(data) {
         // Remove botões e ícones interativos
         cloneEl.querySelectorAll('button,.crm-icon,.crm-col-icon,.ma-edit-btn').forEach(el=>el.remove());
 
-        // Remove position:sticky de todos os elementos (quebra o layout no PDF)
+        // Remove position:sticky/fixed e left/right residuais (quebra o layout no PDF)
         cloneEl.querySelectorAll('*').forEach(el => {
-          if (el.style) el.style.position = 'static';
+          if (el.style) {
+            el.style.position = 'static';
+            el.style.left = '';
+            el.style.right = '';
+            el.style.top = '';
+            el.style.zIndex = '';
+          }
         });
 
         // Remove overflow:auto dos containers (para thead aparecer)
@@ -2354,9 +2360,10 @@ function renderDashboard(data) {
             .cli-tbl th,.cli-tbl td{padding:4px 7px;white-space:nowrap;border-bottom:1px solid #ddd;text-align:left;position:static!important}
             .cli-tbl thead{display:table-header-group!important}
             .cli-tbl thead th{display:table-cell!important;background:#1a1a2e!important;color:#fff!important;font-size:10px;font-weight:600;position:static!important;top:auto!important;z-index:auto!important}
-            .cli-tbl .col-nome{position:static!important;background:transparent!important;min-width:160px;max-width:200px;white-space:normal;word-break:break-word}
-            .cli-tbl .col-status{position:static!important;background:transparent!important;text-align:center}
-            .cli-tbl .col-crm{display:none}
+            .cli-tbl th,.cli-tbl td{position:static!important;left:auto!important;right:auto!important;top:auto!important;z-index:auto!important}
+            .cli-tbl .col-nome{background:transparent!important;min-width:160px;max-width:200px;white-space:normal;word-break:break-word}
+            .cli-tbl .col-status{background:transparent!important;text-align:center}
+            .cli-tbl .col-crm{display:none!important}
             .cli-tbl .col-val{text-align:right;font-size:10px}
             .cli-tbl .col-total{text-align:right;font-weight:700;font-size:10px}
             /* Linhas de representante */
