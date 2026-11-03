@@ -2252,94 +2252,51 @@ function renderDashboard(data) {
           return;
         }
 
-        // Monta a mensagem com a lista de clientes visível
+        // Gera o PDF (abre janela de impressão para salvar como PDF)
+        const dataHora = new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
+        const countTxt = countEl ? countEl.textContent : '';
+        abrirPdf(true);
+
+        // Abre WhatsApp com mensagem curta pedindo para anexar o PDF
         const statusLabel2 = statusSel?.value
           ? ({mantido:'Mantido',recuperado:'Recuperado','nao-rep':'Não repetido',novo:'Novo'})[statusSel.value] || statusSel.value
           : '';
-        const dataHora = new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
-
-        // Coleta clientes visíveis
-        let linhas = [];
-        const painelEls2 = tableEl.children;
-        Array.from(painelEls2).forEach(painel => {
-          const tbl = painel.querySelector('table.cli-tbl');
-          if (!tbl) return;
-          const titleEl = painel.querySelector('div');
-          const marcaNome = titleEl ? titleEl.textContent.trim().split('\n')[0].trim() : '';
-          const rows = tbl.querySelectorAll('tbody tr:not(.rep-row)');
-          if (!rows.length) return;
-          linhas.push(`*${marcaNome}* (${rows.length} cliente${rows.length!==1?'s':''})`);
-          rows.forEach(tr => {
-            const tds = tr.querySelectorAll('td');
-            const nome = tds[0] ? tds[0].innerText.trim().split('\n')[0].trim() : '';
-            const st   = tds[1] ? (tds[1].querySelector('.cli-status')?.textContent.trim() || '') : '';
-            // Total (última coluna de valor)
-            const totalTd = tr.querySelector('.col-total');
-            const total = totalTd ? totalTd.textContent.trim() : '';
-            if (nome) linhas.push(`  • ${nome}${st?' ['+st+']':''}${total?' — '+total:''}`);
-          });
-        });
-
         const statusTxt = statusLabel2 ? ` | Status: ${statusLabel2}` : '';
-        const msg = [
-          `📋 *Relatório de Clientes — ${dataHora}*`,
-          `Representante: *${repSelecionado}*${statusTxt}`,
-          `Total: ${countEl ? countEl.textContent : ''}`,
-          '',
-          ...linhas
-        ].join('\n');
+        const msg = `📋 *Relatório de Clientes — ${dataHora}*\nRepresentante: *${repSelecionado}*${statusTxt}\nTotal: ${countTxt}\n\n_(O relatório PDF foi gerado — salve e anexe aqui)_`;
 
         // Adiciona código do país Brasil se não tiver (55)
         const numFinal = telefone.startsWith('55') ? telefone : '55' + telefone;
         const url = `https://wa.me/${numFinal}?text=${encodeURIComponent(msg)}`;
-        window.open(url, '_blank');
+        // Pequeno delay para o PDF abrir antes do WhatsApp
+        setTimeout(() => window.open(url, '_blank'), 800);
       });
 
-      // ── Exportar PDF ──
-      if (pdfBtn) pdfBtn.addEventListener('click', () => {
-        // Captura filtros ativos para o título
-        const repLabel    = repSel.value || 'Todos os representantes';
+      // ── Função compartilhada: gera e abre janela de impressão PDF ──
+      const abrirPdf = (autoImprimir) => {
+        const repLabel     = repSel.value || 'Todos os representantes';
         const statusLabel2 = statusSel?.value
           ? ({mantido:'Mantido',recuperado:'Recuperado','nao-rep':'Não repetido',novo:'Novo'})[statusSel.value] || statusSel.value
           : 'Todos os status';
-        const busca2 = buscaEl.value.trim();
+        const busca2   = buscaEl.value.trim();
         const countTxt = countEl ? countEl.textContent : '';
         const dataHora = new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
 
         // Clona o HTML das tabelas exatamente como estão na tela
         const cloneEl = tableEl.cloneNode(true);
-
-        // Remove botões e ícones interativos
         cloneEl.querySelectorAll('button,.crm-icon,.crm-col-icon,.ma-edit-btn').forEach(el=>el.remove());
-
-        // Remove position:sticky/fixed e left/right residuais (quebra o layout no PDF)
         cloneEl.querySelectorAll('*').forEach(el => {
-          if (el.style) {
-            el.style.position = 'static';
-            el.style.left = '';
-            el.style.right = '';
-            el.style.top = '';
-            el.style.zIndex = '';
-          }
+          if (el.style) { el.style.position='static'; el.style.left=''; el.style.right=''; el.style.top=''; el.style.zIndex=''; }
         });
-
-        // Remove overflow:auto dos containers (para thead aparecer)
-        cloneEl.querySelectorAll('[style]').forEach(el => {
-          el.style.overflow = 'visible';
-          el.style.maxHeight = 'none';
-        });
+        cloneEl.querySelectorAll('[style]').forEach(el => { el.style.overflow='visible'; el.style.maxHeight='none'; });
 
         const tabelasHtml = cloneEl.innerHTML || '<p>Nenhum cliente encontrado.</p>';
-
-        // Nome do arquivo: inclui representante se filtrado
         const repParaArquivo = repSel.value && repSel.value !== '__SEM_REP__'
-          ? repSel.value.replace(/[^a-zA-Z0-9À-ÿ ]/g,'').trim()
-          : 'Todos';
+          ? repSel.value.replace(/[^a-zA-Z0-9À-ÿ ]/g,'').trim() : 'Todos';
         const dataArquivo = new Date().toLocaleString('pt-BR',{dateStyle:'short'}).replace(/\//g,'-');
         const tituloArquivo = `Clientes — ${repParaArquivo} — ${dataArquivo}`;
 
         const win = window.open('', '_blank');
-        if (!win) { alert('Habilite popups para exportar PDF.'); return; }
+        if (!win) { alert('Habilite popups para exportar PDF.'); return false; }
         win.document.write(`<!DOCTYPE html><html lang="pt-BR"><head>
           <meta charset="UTF-8"/>
           <title>${tituloArquivo}</title>
@@ -2347,54 +2304,37 @@ function renderDashboard(data) {
           <style>
             *{box-sizing:border-box;margin:0;padding:0}
             body{font-family:'Inter',Arial,sans-serif;font-size:11px;color:#111;background:#fff;padding:14px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-            /* Cabeçalho do relatório */
             .pdf-header{margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #222}
             .pdf-header h1{font-size:14px;font-weight:700;margin-bottom:4px}
             .pdf-meta{font-size:10px;color:#555;display:flex;gap:14px;flex-wrap:wrap}
-            /* Layout das marcas */
             [style*="margin-bottom:28px"]{margin-bottom:18px!important}
-            /* Título da marca */
             [style*="font-size:13px;font-weight:700"]{font-size:12px!important;padding:5px 10px!important;border-radius:4px!important;background:#f0f0f0!important;border-left:3px solid #222!important;color:#111!important;margin-bottom:6px!important}
-            /* Tabela */
             .cli-tbl{border-collapse:collapse;font-size:10px;width:100%;table-layout:auto}
-            .cli-tbl th,.cli-tbl td{padding:4px 7px;white-space:nowrap;border-bottom:1px solid #ddd;text-align:left;position:static!important}
+            .cli-tbl th,.cli-tbl td{padding:4px 7px;white-space:nowrap;border-bottom:1px solid #ddd;text-align:left;position:static!important;left:auto!important;right:auto!important;top:auto!important;z-index:auto!important}
             .cli-tbl thead{display:table-header-group!important}
-            .cli-tbl thead th{display:table-cell!important;background:#1a1a2e!important;color:#fff!important;font-size:10px;font-weight:600;position:static!important;top:auto!important;z-index:auto!important}
-            .cli-tbl th,.cli-tbl td{position:static!important;left:auto!important;right:auto!important;top:auto!important;z-index:auto!important}
+            .cli-tbl thead th{display:table-cell!important;background:#1a1a2e!important;color:#fff!important;font-size:10px;font-weight:700;border-bottom:2px solid #444!important}
             .cli-tbl .col-nome{background:transparent!important;min-width:160px;max-width:200px;white-space:normal;word-break:break-word}
-            .cli-tbl .col-status{background:transparent!important;text-align:center}
+            .cli-tbl .col-status{background:transparent!important;text-align:center;min-width:90px}
             .cli-tbl .col-crm{display:none!important}
             .cli-tbl .col-val{text-align:right;font-size:10px}
-            .cli-tbl .col-total{text-align:right;font-weight:700;font-size:10px}
-            /* Linhas de representante */
+            .cli-tbl .col-total{text-align:right;font-weight:700;font-size:10px;min-width:90px}
             .rep-row td{background:#e8e8e8!important;color:#111!important;font-weight:700;font-size:11px;border-top:2px solid #aaa!important}
             .rep-row .rep-label::before{background:#00c896!important}
             .rep-row .rep-badge{background:#ddd;color:#555}
             .rep-row .rep-sub-val{color:#555!important}
-            /* Linhas de cliente zebra */
             .cli-tbl tbody tr:nth-child(even) td{background:#f8f8f8!important}
             .cli-tbl tbody tr:nth-child(odd) td{background:#fff!important}
-            /* Mantém background do heatmap nas células de valor */
-            .cli-tbl .col-val[style]{background-color:attr(style)!important}
-            /* Status badges — versão print */
             .cli-status{display:inline-block;font-size:8px;font-weight:700;border-radius:3px;padding:1px 4px;text-transform:uppercase;letter-spacing:.04em;border:1px solid currentColor}
             .cli-status.mantido{color:#007a5a;border-color:#007a5a;background:rgba(0,122,90,.12)!important}
             .cli-status.recuperado{color:#1a5fa8;border-color:#1a5fa8;background:rgba(26,95,168,.12)!important}
             .cli-status.nao-rep{color:#a06000;border-color:#a06000;background:rgba(160,96,0,.12)!important}
             .cli-status.novo{color:#6b2fad;border-color:#6b2fad;background:rgba(107,47,173,.12)!important}
-            /* Rodapé de totais */
             .tbl-foot td{background:#e8e8e8!important;font-weight:700;color:#333!important;border-top:2px solid #aaa!important;position:static!important}
-            /* Ícones de tendência */
             span[title*="mais"]{color:#007a5a!important}
             span[title*="menos"]{color:#a06000!important}
-            /* Colunas de overflow */
             [style*="overflow:auto"]{overflow:visible!important;max-height:none!important;border:1px solid #ddd;border-radius:4px}
-            /* Ocultar colunas CRM */
             .col-crm{display:none!important}
-            @media print{
-              body{padding:8px 12px}
-              [style*="margin-bottom:28px"]{page-break-inside:avoid}
-            }
+            @media print{body{padding:8px 12px}[style*="margin-bottom:28px"]{page-break-inside:avoid}}
           </style>
         </head><body>
           <div class="pdf-header">
@@ -2408,10 +2348,14 @@ function renderDashboard(data) {
             </div>
           </div>
           ${tabelasHtml}
-          <script>window.onload=()=>{window.print();}<\/script>
+          ${autoImprimir ? `<script>window.onload=()=>{window.print();}<\/script>` : ''}
         </body></html>`);
         win.document.close();
-      });
+        return true;
+      };
+
+      // ── Exportar PDF ──
+      if (pdfBtn) pdfBtn.addEventListener('click', () => abrirPdf(true));
     }, 0);
 
     return `<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">${filtersHtml}</div>`;
