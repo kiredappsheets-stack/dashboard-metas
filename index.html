@@ -2252,10 +2252,10 @@ function renderDashboard(data) {
           return;
         }
 
-        // Gera o PDF (abre janela de impressão para salvar como PDF)
+        // Baixa o relatório como arquivo HTML (para anexar no WhatsApp)
         const dataHora = new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
         const countTxt = countEl ? countEl.textContent : '';
-        abrirPdf(true);
+        abrirPdf('download');
 
         // Abre WhatsApp com mensagem curta pedindo para anexar o PDF
         const statusLabel2 = statusSel?.value
@@ -2272,7 +2272,9 @@ function renderDashboard(data) {
       });
 
       // ── Função compartilhada: gera e abre janela de impressão PDF ──
-      const abrirPdf = (autoImprimir) => {
+      // modo: 'print' = abre janela e dispara window.print()
+      //       'download' = baixa como arquivo .html (para anexar no WhatsApp)
+      const abrirPdf = (modo) => {
         const repLabel     = repSel.value || 'Todos os representantes';
         const statusLabel2 = statusSel?.value
           ? ({mantido:'Mantido',recuperado:'Recuperado','nao-rep':'Não repetido',novo:'Novo'})[statusSel.value] || statusSel.value
@@ -2295,9 +2297,7 @@ function renderDashboard(data) {
         const dataArquivo = new Date().toLocaleString('pt-BR',{dateStyle:'short'}).replace(/\//g,'-');
         const tituloArquivo = `Clientes — ${repParaArquivo} — ${dataArquivo}`;
 
-        const win = window.open('', '_blank');
-        if (!win) { alert('Habilite popups para exportar PDF.'); return false; }
-        win.document.write(`<!DOCTYPE html><html lang="pt-BR"><head>
+        const htmlContent = `<!DOCTYPE html><html lang="pt-BR"><head>
           <meta charset="UTF-8"/>
           <title>${tituloArquivo}</title>
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -2348,14 +2348,30 @@ function renderDashboard(data) {
             </div>
           </div>
           ${tabelasHtml}
-          ${autoImprimir ? `<script>window.onload=()=>{window.print();}<\/script>` : ''}
-        </body></html>`);
+          ${modo==='print' ? `<script>window.onload=()=>{window.print();}<\/script>` : ''}
+        </body></html>`;
+
+        if (modo === 'download') {
+          // Baixa como arquivo .html sem abrir janela
+          const blob = new Blob([htmlContent], {type:'text/html;charset=utf-8'});
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = tituloArquivo + '.html';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+          return true;
+        }
+
+        const win = window.open('', '_blank');
+        if (!win) { alert('Habilite popups para exportar PDF.'); return false; }
+        win.document.write(htmlContent);
         win.document.close();
         return true;
       };
 
       // ── Exportar PDF ──
-      if (pdfBtn) pdfBtn.addEventListener('click', () => abrirPdf(true));
+      if (pdfBtn) pdfBtn.addEventListener('click', () => abrirPdf('print'));
     }, 0);
 
     return `<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">${filtersHtml}</div>`;
