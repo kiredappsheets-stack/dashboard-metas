@@ -533,6 +533,17 @@ VALUES(PEDIDO[MARCA])
 ORDER BY PEDIDO[MARCA] ASC
 `;
 
+const DAX_REPRESENTANTES = `
+EVALUATE
+SELECTCOLUMNS(
+  REPRESENTANTE,
+  "CODREP",    REPRESENTANTE[CODREP],
+  "NOME",      REPRESENTANTE[NOME],
+  "TELEFONE",  REPRESENTANTE[TELEFONE]
+)
+ORDER BY REPRESENTANTE[NOME] ASC
+`;
+
 const DAX_HIST_PERIODO = `
 EVALUATE
 SUMMARIZE(
@@ -2204,6 +2215,85 @@ function renderDashboard(data) {
       if (statusSel) statusSel.addEventListener('change', update);
       update();
 
+      // ── WhatsApp ──
+      const waBtn = document.getElementById(uid+'_wa_btn');
+      if (waBtn) waBtn.addEventListener('click', () => {
+        // Verifica se tem representante filtrado
+        const repSelecionado = repSel.value;
+        if (!repSelecionado || repSelecionado === '__SEM_REP__') {
+          // Toast de aviso
+          const toast = document.createElement('div');
+          toast.textContent = '⚠ Selecione um representante no filtro antes de enviar por WhatsApp';
+          toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#f5a623;color:#000;font-family:var(--font);font-size:13px;font-weight:600;padding:10px 20px;border-radius:8px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none';
+          document.body.appendChild(toast);
+          setTimeout(() => toast.remove(), 3500);
+          return;
+        }
+
+        // Busca o telefone do representante em cachedRepresentantes
+        const reps = (typeof cachedRepresentantes !== 'undefined' ? cachedRepresentantes : []);
+        const gRep = (r,c) => r['REPRESENTANTE['+c+']'] || r[c] || '';
+        const repRow = reps.find(r => {
+          const nome = gRep(r,'NOME') || '';
+          return nome.trim() === repSelecionado.trim();
+        });
+
+        const telefoneRaw = repRow ? gRep(repRow,'TELEFONE') : '';
+        // Limpa o número: mantém só dígitos
+        const telefone = telefoneRaw.replace(/\D/g,'');
+
+        if (!telefone) {
+          const toast = document.createElement('div');
+          toast.textContent = `⚠ Nenhum telefone cadastrado para ${repSelecionado}`;
+          toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#e84a4a;color:#fff;font-family:var(--font);font-size:13px;font-weight:600;padding:10px 20px;border-radius:8px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none';
+          document.body.appendChild(toast);
+          setTimeout(() => toast.remove(), 3500);
+          return;
+        }
+
+        // Monta a mensagem com a lista de clientes visível
+        const statusLabel2 = statusSel?.value
+          ? ({mantido:'Mantido',recuperado:'Recuperado','nao-rep':'Não repetido',novo:'Novo'})[statusSel.value] || statusSel.value
+          : '';
+        const dataHora = new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
+
+        // Coleta clientes visíveis
+        let linhas = [];
+        const painelEls2 = tableEl.children;
+        Array.from(painelEls2).forEach(painel => {
+          const tbl = painel.querySelector('table.cli-tbl');
+          if (!tbl) return;
+          const titleEl = painel.querySelector('div');
+          const marcaNome = titleEl ? titleEl.textContent.trim().split('\n')[0].trim() : '';
+          const rows = tbl.querySelectorAll('tbody tr:not(.rep-row)');
+          if (!rows.length) return;
+          linhas.push(`*${marcaNome}* (${rows.length} cliente${rows.length!==1?'s':''})`);
+          rows.forEach(tr => {
+            const tds = tr.querySelectorAll('td');
+            const nome = tds[0] ? tds[0].innerText.trim().split('\n')[0].trim() : '';
+            const st   = tds[1] ? (tds[1].querySelector('.cli-status')?.textContent.trim() || '') : '';
+            // Total (última coluna de valor)
+            const totalTd = tr.querySelector('.col-total');
+            const total = totalTd ? totalTd.textContent.trim() : '';
+            if (nome) linhas.push(`  • ${nome}${st?' ['+st+']':''}${total?' — '+total:''}`);
+          });
+        });
+
+        const statusTxt = statusLabel2 ? ` | Status: ${statusLabel2}` : '';
+        const msg = [
+          `📋 *Relatório de Clientes — ${dataHora}*`,
+          `Representante: *${repSelecionado}*${statusTxt}`,
+          `Total: ${countEl ? countEl.textContent : ''}`,
+          '',
+          ...linhas
+        ].join('\n');
+
+        // Adiciona código do país Brasil se não tiver (55)
+        const numFinal = telefone.startsWith('55') ? telefone : '55' + telefone;
+        const url = `https://wa.me/${numFinal}?text=${encodeURIComponent(msg)}`;
+        window.open(url, '_blank');
+      });
+
       // ── Exportar PDF ──
       if (pdfBtn) pdfBtn.addEventListener('click', () => {
         // Captura filtros ativos para o título
@@ -2461,6 +2551,7 @@ function applyCache(cached) {
   cachedColecoesDatas   = cached.colecoesDatas   || [];
   cachedCrmRetorno      = cached.crmRetorno      || [];
   cachedListaMarcas     = cached.listaMarcas     || [];
+  cachedRepresentantes  = cached.representantes  || [];
 }
 
 async function loadDashboard() {
@@ -2496,7 +2587,7 @@ async function loadDashboard() {
       try {
         const token = await getToken();
         const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
-        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas] = await Promise.all([
+        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes] = await Promise.all([
           safe(() => runDaxQuery(token, DAX_QUERY, false)),
           safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
           safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -2511,6 +2602,7 @@ async function loadDashboard() {
           safe(() => runDaxQuery(token, DAX_COLECOES_DATAS, true)),
           safe(() => runDaxQuery(token, DAX_CRM_RETORNO, true)),
           safe(() => runDaxQuery(token, DAX_LISTA_MARCAS, true)),
+          safe(() => runDaxQuery(token, DAX_REPRESENTANTES, true)),
         ]);
         if (!data || data.length === 0) {
           console.warn('DAX_QUERY retornou vazio — não atualiza cache');
@@ -2521,11 +2613,11 @@ async function loadDashboard() {
         cachedHistMarca = histMarca||[]; cachedHistPeriodo = histPeriodo||[];
         cachedClientes2 = clientes2||[]; cachedCrmJustif = crmJustif||[]; cachedClientesLoc = clientesLoc||[];
         cachedGestaoCom = gestaoCom||[]; cachedColecoesDatas = colecoesDatas||[]; cachedCrmRetorno = crmRetorno||[];
-        cachedListaMarcas = listaMarcas||[];
+        cachedListaMarcas = listaMarcas||[]; cachedRepresentantes = representantes||[];
         cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
         if (kpisFat && kpisFat.length > 0) cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
 
-        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas });
+        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas, representantes: cachedRepresentantes });
         // Reatualizar as abas com dados novos
         renderDashboard(cachedData);
         const now2 = new Date();
@@ -2554,7 +2646,7 @@ async function loadDashboard() {
     if (lu) lu.textContent = 'A carregar dados do Power BI…';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas] = await Promise.all([
+    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -2569,6 +2661,7 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_COLECOES_DATAS, true)),
       safe(() => runDaxQuery(token, DAX_CRM_RETORNO, true)),
       safe(() => runDaxQuery(token, DAX_LISTA_MARCAS, true)),
+      safe(() => runDaxQuery(token, DAX_REPRESENTANTES, true)),
     ]);
     clearTimeout(_loadTimeout);
     if (!data || data.length === 0) {
@@ -2587,11 +2680,12 @@ async function loadDashboard() {
     cachedColecoesDatas = colecoesDatas || [];
     cachedCrmRetorno = crmRetorno || [];
     cachedListaMarcas = listaMarcas || [];
+    cachedRepresentantes = representantes || [];
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
-    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas });
+    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas, representantes: cachedRepresentantes });
     renderDashboard(data);
     _crmLoadFromSheets();
 
@@ -2658,9 +2752,11 @@ let cachedClientesLoc = [];
 let cachedGestaoCom = [];
 let cachedColecoesDatas = [];
 let cachedListaMarcas = [];
+let cachedRepresentantes = cachedRepresentantes || [];
 let cachedCrmRetorno = [];
 // Variáveis legacy para contexto IA (queries removidas — sempre vazias)
 let cachedPedidos = [], cachedClientes = [], cachedReps = [], cachedVendas = [];
+let cachedRepresentantes = [];
 let cachedMarcas = [], cachedColecoes = [], cachedPedidosDetalhe = [], cachedProdutos = [];
 let cachedFaturamento = [], cachedFatColecao = [], cachedClientesAtender = [];
 let chatHistory = [];
