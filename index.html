@@ -538,10 +538,10 @@ EVALUATE
 SUMMARIZE(
   REPRESENTANTE,
   REPRESENTANTE[CODREP],
-  REPRESENTANTE[NOME],
+  REPRESENTANTE[REPRESENTANTE],
   REPRESENTANTE[TELEFONE]
 )
-ORDER BY REPRESENTANTE[NOME] ASC
+ORDER BY REPRESENTANTE[REPRESENTANTE] ASC
 `;
 
 const DAX_HIST_PERIODO = `
@@ -2236,7 +2236,8 @@ function renderDashboard(data) {
         // Normaliza string: sem acentos, maiúsculas, espaços colapsados — para comparação robusta
         const normaliz = s => (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
         const repNorm = normaliz(repSelecionado);
-        const repRow = reps.find(r => normaliz(gRep(r,'NOME')) === repNorm);
+        // Coluna se chama REPRESENTANTE (não NOME) na tabela Power BI
+        const repRow = reps.find(r => normaliz(gRep(r,'REPRESENTANTE')) === repNorm);
 
         const telefoneRaw = repRow ? gRep(repRow,'TELEFONE') : '';
         // Limpa o número: mantém só dígitos
