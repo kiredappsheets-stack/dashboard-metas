@@ -2211,75 +2211,89 @@ function renderDashboard(data) {
         const countTxt = countEl ? countEl.textContent : '';
         const dataHora = new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
 
-        // Coleta HTML das tabelas visíveis — cada marca é um div direto filho de tableEl
-        const painelEls = tableEl.children;
-        let tabelasHtml = '';
-        Array.from(painelEls).forEach(painel => {
-          // Título da marca: primeiro div filho com font-weight:700
-          const titleEl = painel.querySelector('div');
-          const marcaNome = titleEl ? titleEl.textContent.trim().split('\n')[0].trim() : '';
-          const tbl = painel.querySelector('table.cli-tbl');
-          if (!tbl) return;
-          // Pega apenas linhas de cliente (não as linhas de representante .rep-row)
-          const rows = tbl.querySelectorAll('tbody tr:not(.rep-row)');
-          if (!rows.length) return;
-          let rowsHtml = '';
-          rows.forEach(tr => {
-            // col 0: nome, col 1: status (badge), col 2: CRM — col 3+: valores (omitimos)
-            const tds = tr.querySelectorAll('td');
-            if (tds.length < 2) return;
-            const nome   = tds[0] ? tds[0].innerText.trim().replace(/\n+/g,' ') : '';
-            const status = tds[1] ? (tds[1].querySelector('.cli-status')?.textContent.trim() || tds[1].innerText.trim().replace(/\n+/g,' ')) : '';
-            const trend  = tds[1] ? (tds[1].querySelector('span[title]')?.textContent.trim() || '') : '';
-            // Calcular total das colunas de valor (td.col-val)
-            let total = 0;
-            tds.forEach((td,i) => { if (i>=3 && td.classList.contains('col-val')) { const v=parseFloat((td.textContent||'').replace(/[^\d,]/g,'').replace(',','.')); if (!isNaN(v)) total+=v; } });
-            const totalFmt = total>0 ? total.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : '—';
-            rowsHtml += `<tr><td>${nome}</td><td>${status} ${trend}</td><td>${totalFmt}</td></tr>`;
-          });
-          if (!rowsHtml) return;
-          tabelasHtml += `
-            <div class="pdf-marca">
-              <div class="pdf-marca-title">${marcaNome} <span class="pdf-count">${rows.length} cliente${rows.length!==1?'s':''}</span></div>
-              <table>
-                <thead><tr><th>Cliente</th><th>Status</th><th>Total</th></tr></thead>
-                <tbody>${rowsHtml}</tbody>
-              </table>
-            </div>`;
+        // Clona o HTML das tabelas exatamente como estão na tela
+        const cloneEl = tableEl.cloneNode(true);
+
+        // Remove botões CRM e ícones de interação do clone
+        cloneEl.querySelectorAll('button,.crm-icon,.crm-col-icon,.ma-edit-btn').forEach(el=>el.remove());
+
+        // Converte inline background com rgba para valores impressáveis (mantém o heatmap)
+        // e remove sticky positioning que quebra no PDF
+        cloneEl.querySelectorAll('td,th').forEach(td => {
+          td.style.position = 'static';
+          // Converte cores de fundo inline (heatmap) para print-color-adjust
         });
+
+        const tabelasHtml = cloneEl.innerHTML || '<p>Nenhum cliente encontrado.</p>';
 
         const win = window.open('', '_blank');
         if (!win) { alert('Habilite popups para exportar PDF.'); return; }
         win.document.write(`<!DOCTYPE html><html lang="pt-BR"><head>
           <meta charset="UTF-8"/>
           <title>Clientes — ${dataHora}</title>
+          <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
           <style>
             *{box-sizing:border-box;margin:0;padding:0}
-            body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff;padding:18px 22px}
-            h1{font-size:15px;font-weight:700;margin-bottom:4px}
-            .pdf-meta{font-size:10px;color:#555;margin-bottom:14px;display:flex;gap:18px;flex-wrap:wrap}
-            .pdf-marca{margin-bottom:20px;page-break-inside:avoid}
-            .pdf-marca-title{font-size:12px;font-weight:700;margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid #222;display:flex;align-items:baseline;gap:8px}
-            .pdf-count{font-size:10px;font-weight:400;color:#666}
-            table{width:100%;border-collapse:collapse;font-size:10px}
-            th{background:#1a1a2e;color:#fff;padding:5px 8px;text-align:left;font-size:10px;font-weight:600}
-            td{padding:4px 8px;border-bottom:1px solid #e5e5e5;vertical-align:top}
-            tr:nth-child(even) td{background:#f9f9f9}
+            body{font-family:'Inter',Arial,sans-serif;font-size:11px;color:#111;background:#fff;padding:14px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+            /* Cabeçalho do relatório */
+            .pdf-header{margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #222}
+            .pdf-header h1{font-size:14px;font-weight:700;margin-bottom:4px}
+            .pdf-meta{font-size:10px;color:#555;display:flex;gap:14px;flex-wrap:wrap}
+            /* Layout das marcas */
+            [style*="margin-bottom:28px"]{margin-bottom:18px!important}
+            /* Título da marca */
+            [style*="font-size:13px;font-weight:700"]{font-size:12px!important;padding:5px 10px!important;border-radius:4px!important;background:#f0f0f0!important;border-left:3px solid #222!important;color:#111!important;margin-bottom:6px!important}
+            /* Tabela */
+            .cli-tbl{border-collapse:collapse;font-size:10px;width:100%;table-layout:auto}
+            .cli-tbl th,.cli-tbl td{padding:4px 7px;white-space:nowrap;border-bottom:1px solid #ddd;text-align:left}
+            .cli-tbl thead th{background:#1a1a2e!important;color:#fff!important;font-size:10px;font-weight:600;position:static!important}
+            .cli-tbl .col-nome{position:static!important;background:transparent!important;min-width:160px;max-width:200px;white-space:normal;word-break:break-word}
+            .cli-tbl .col-status{position:static!important;background:transparent!important;text-align:center}
+            .cli-tbl .col-crm{display:none}
+            .cli-tbl .col-val{text-align:right;font-size:10px}
+            .cli-tbl .col-total{text-align:right;font-weight:700;font-size:10px}
+            /* Linhas de representante */
+            .rep-row td{background:#e8e8e8!important;color:#111!important;font-weight:700;font-size:11px;border-top:2px solid #aaa!important}
+            .rep-row .rep-label::before{background:#00c896!important}
+            .rep-row .rep-badge{background:#ddd;color:#555}
+            .rep-row .rep-sub-val{color:#555!important}
+            /* Linhas de cliente zebra */
+            .cli-tbl tbody tr:nth-child(even) td{background:#f8f8f8!important}
+            .cli-tbl tbody tr:nth-child(odd) td{background:#fff!important}
+            /* Mantém background do heatmap nas células de valor */
+            .cli-tbl .col-val[style]{background-color:attr(style)!important}
+            /* Status badges — versão print */
+            .cli-status{display:inline-block;font-size:8px;font-weight:700;border-radius:3px;padding:1px 4px;text-transform:uppercase;letter-spacing:.04em;border:1px solid currentColor}
+            .cli-status.mantido{color:#007a5a;border-color:#007a5a;background:rgba(0,122,90,.12)!important}
+            .cli-status.recuperado{color:#1a5fa8;border-color:#1a5fa8;background:rgba(26,95,168,.12)!important}
+            .cli-status.nao-rep{color:#a06000;border-color:#a06000;background:rgba(160,96,0,.12)!important}
+            .cli-status.novo{color:#6b2fad;border-color:#6b2fad;background:rgba(107,47,173,.12)!important}
+            /* Rodapé de totais */
+            .tbl-foot td{background:#e8e8e8!important;font-weight:700;color:#333!important;border-top:2px solid #aaa!important;position:static!important}
+            /* Ícones de tendência */
+            span[title*="mais"]{color:#007a5a!important}
+            span[title*="menos"]{color:#a06000!important}
+            /* Colunas de overflow */
+            [style*="overflow:auto"]{overflow:visible!important;max-height:none!important;border:1px solid #ddd;border-radius:4px}
+            /* Ocultar colunas CRM */
+            .col-crm{display:none!important}
             @media print{
-              body{padding:10px 14px}
-              button{display:none}
+              body{padding:8px 12px}
+              [style*="margin-bottom:28px"]{page-break-inside:avoid}
             }
           </style>
         </head><body>
-          <h1>Relatório de Clientes</h1>
-          <div class="pdf-meta">
-            <span>Gerado em: <b>${dataHora}</b></span>
-            <span>Representante: <b>${repLabel}</b></span>
-            <span>Status: <b>${statusLabel2}</b></span>
-            ${busca2 ? `<span>Busca: <b>${busca2}</b></span>` : ''}
-            <span>Total: <b>${countTxt}</b></span>
+          <div class="pdf-header">
+            <h1>Relatório de Clientes</h1>
+            <div class="pdf-meta">
+              <span>Gerado em: <b>${dataHora}</b></span>
+              <span>Representante: <b>${repLabel}</b></span>
+              <span>Status: <b>${statusLabel2}</b></span>
+              ${busca2 ? `<span>Busca: <b>${busca2}</b></span>` : ''}
+              <span>Total: <b>${countTxt}</b></span>
+            </div>
           </div>
-          ${tabelasHtml || '<p>Nenhum cliente encontrado com os filtros atuais.</p>'}
+          ${tabelasHtml}
           <script>window.onload=()=>{window.print();}<\/script>
         </body></html>`);
         win.document.close();
