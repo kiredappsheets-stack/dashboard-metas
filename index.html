@@ -2308,23 +2308,34 @@ function renderDashboard(data) {
         // Clona o HTML das tabelas exatamente como estão na tela
         const cloneEl = tableEl.cloneNode(true);
 
-        // Remove botões CRM e ícones de interação do clone
+        // Remove botões e ícones interativos
         cloneEl.querySelectorAll('button,.crm-icon,.crm-col-icon,.ma-edit-btn').forEach(el=>el.remove());
 
-        // Converte inline background com rgba para valores impressáveis (mantém o heatmap)
-        // e remove sticky positioning que quebra no PDF
-        cloneEl.querySelectorAll('td,th').forEach(td => {
-          td.style.position = 'static';
-          // Converte cores de fundo inline (heatmap) para print-color-adjust
+        // Remove position:sticky de todos os elementos (quebra o layout no PDF)
+        cloneEl.querySelectorAll('*').forEach(el => {
+          if (el.style) el.style.position = 'static';
+        });
+
+        // Remove overflow:auto dos containers (para thead aparecer)
+        cloneEl.querySelectorAll('[style]').forEach(el => {
+          el.style.overflow = 'visible';
+          el.style.maxHeight = 'none';
         });
 
         const tabelasHtml = cloneEl.innerHTML || '<p>Nenhum cliente encontrado.</p>';
+
+        // Nome do arquivo: inclui representante se filtrado
+        const repParaArquivo = repSel.value && repSel.value !== '__SEM_REP__'
+          ? repSel.value.replace(/[^a-zA-Z0-9À-ÿ ]/g,'').trim()
+          : 'Todos';
+        const dataArquivo = new Date().toLocaleString('pt-BR',{dateStyle:'short'}).replace(/\//g,'-');
+        const tituloArquivo = `Clientes — ${repParaArquivo} — ${dataArquivo}`;
 
         const win = window.open('', '_blank');
         if (!win) { alert('Habilite popups para exportar PDF.'); return; }
         win.document.write(`<!DOCTYPE html><html lang="pt-BR"><head>
           <meta charset="UTF-8"/>
-          <title>Clientes — ${dataHora}</title>
+          <title>${tituloArquivo}</title>
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
           <style>
             *{box-sizing:border-box;margin:0;padding:0}
@@ -2339,8 +2350,9 @@ function renderDashboard(data) {
             [style*="font-size:13px;font-weight:700"]{font-size:12px!important;padding:5px 10px!important;border-radius:4px!important;background:#f0f0f0!important;border-left:3px solid #222!important;color:#111!important;margin-bottom:6px!important}
             /* Tabela */
             .cli-tbl{border-collapse:collapse;font-size:10px;width:100%;table-layout:auto}
-            .cli-tbl th,.cli-tbl td{padding:4px 7px;white-space:nowrap;border-bottom:1px solid #ddd;text-align:left}
-            .cli-tbl thead th{background:#1a1a2e!important;color:#fff!important;font-size:10px;font-weight:600;position:static!important}
+            .cli-tbl th,.cli-tbl td{padding:4px 7px;white-space:nowrap;border-bottom:1px solid #ddd;text-align:left;position:static!important}
+            .cli-tbl thead{display:table-header-group!important}
+            .cli-tbl thead th{display:table-cell!important;background:#1a1a2e!important;color:#fff!important;font-size:10px;font-weight:600;position:static!important;top:auto!important;z-index:auto!important}
             .cli-tbl .col-nome{position:static!important;background:transparent!important;min-width:160px;max-width:200px;white-space:normal;word-break:break-word}
             .cli-tbl .col-status{position:static!important;background:transparent!important;text-align:center}
             .cli-tbl .col-crm{display:none}
