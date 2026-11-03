@@ -1850,7 +1850,7 @@ function renderDashboard(data) {
         .ma-btn-cancel:hover { color:var(--tx); }
         .cli-tbl { border-collapse:collapse; font-size:12px; }
         .cli-tbl th, .cli-tbl td { padding:6px 10px; white-space:nowrap; border-bottom:1px solid var(--border); }
-        .cli-tbl thead th { background:var(--sidebar); position:sticky; top:0; z-index:2; font-size:11px; font-weight:600; color:var(--muted); }
+        .cli-tbl thead th { background:var(--sidebar); position:sticky; top:0; z-index:2; font-size:11px; font-weight:700; color:var(--tx); border-bottom:2px solid var(--border); }
         .cli-tbl .col-nome { position:sticky; left:0; z-index:1; background:var(--surface); min-width:220px; max-width:240px; overflow:hidden; font-weight:500; vertical-align:middle; }
         .cli-tbl thead .col-nome { z-index:4; background:var(--sidebar); }
         .cli-tbl .col-status { position:sticky; left:240px; z-index:1; background:var(--surface); min-width:105px; text-align:center; }
@@ -2233,10 +2233,10 @@ function renderDashboard(data) {
         // Busca o telefone do representante em cachedRepresentantes
         const reps = (typeof cachedRepresentantes !== 'undefined' ? cachedRepresentantes : []);
         const gRep = (r,c) => r['REPRESENTANTE['+c+']'] || r[c] || '';
-        const repRow = reps.find(r => {
-          const nome = gRep(r,'NOME') || '';
-          return nome.trim() === repSelecionado.trim();
-        });
+        // Normaliza string: sem acentos, maiúsculas, espaços colapsados — para comparação robusta
+        const normaliz = s => (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
+        const repNorm = normaliz(repSelecionado);
+        const repRow = reps.find(r => normaliz(gRep(r,'NOME')) === repNorm);
 
         const telefoneRaw = repRow ? gRep(repRow,'TELEFONE') : '';
         // Limpa o número: mantém só dígitos
