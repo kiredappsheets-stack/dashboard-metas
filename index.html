@@ -4434,6 +4434,7 @@ CALCULATETABLE(
     "COMISSAO",    CALCULATE(SUMX(PEDIDO, PEDIDO[VAL_DESC_EMPENHO] * PEDIDO[PERC_COMISSAO_MK] / 100)),
     "DVENDAS",     CALCULATE(SUMX(PEDIDO, PEDIDO[VAL_DESC_EMPENHO] * PEDIDO[PERC_DVENDAS_MK] / 100)),
     "FRETE_MK",    CALCULATE(SUMX(PEDIDO, PEDIDO[VAL_DESC_EMPENHO] * PEDIDO[PERC_FRETE_MK] / 100)),
+    "TIPO_FRETE",  CALCULATE(MAX(PEDIDO[TIPO_FRETE])),
     "MARKUP",      CALCULATE(MAX(PEDIDO[MARKUP_COD])),
     "MC_PROG",     CALCULATE(SUMX(PEDIDO, PEDIDO[VAL_DESC_EMPENHO] * PEDIDO[PERC_MC_MK] / 100)),
     "N_MARKUPS",   CALCULATE(DISTINCTCOUNT(PEDIDO[MARKUP_COD])),
@@ -4454,16 +4455,17 @@ function _mgTxt(r, c) { return String(r['PEDIDO[' + c + ']'] ?? r[c] ?? '').trim
 function _mgPct(v) { return isFinite(v) ? (v * 100).toFixed(1).replace('.', ',') + '%' : '—'; }
 function _mgR(v) { return 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function _mgEsc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-// Frete ponderado: o % de frete do markup vale para clientes com R$ 3.000 ou mais na coleção
-// (somando todos os pedidos do cliente). Abaixo disso, o frete custa como um pedido de R$ 3.000
-// (% × 3.000), rateado entre os pedidos do cliente, e a diferença sai da margem.
+// Frete ponderado (só pedidos CIF, frete pago pelo remetente): o % de frete do markup vale para
+// clientes com R$ 3.000 ou mais na coleção (somando os pedidos CIF do cliente). Abaixo disso, o frete
+// custa como um pedido de R$ 3.000 (% × 3.000), rateado entre esses pedidos, e a diferença sai da margem.
+// Pedidos FOB (frete pago pelo destinatário) ficam com o % do markup, sem ponderação.
 const MG_FRETE_MIN = 3000;
 function _mgAplicaFrete(list) {
   const totCli = {};
-  list.forEach(r => { const k = r.col + '|' + (r.codcli || r.cliente); totCli[k] = (totCli[k] || 0) + r.valor; });
+  list.forEach(r => { if (r.tipoFrete === 'FOB') return; const k = r.col + '|' + (r.codcli || r.cliente); totCli[k] = (totCli[k] || 0) + r.valor; });
   list.forEach(r => {
     const tc = totCli[r.col + '|' + (r.codcli || r.cliente)] || r.valor;
-    const fator = tc > 0 && tc < MG_FRETE_MIN ? MG_FRETE_MIN / tc : 1;
+    const fator = r.tipoFrete !== 'FOB' && tc > 0 && tc < MG_FRETE_MIN ? MG_FRETE_MIN / tc : 1;
     r.totCli = tc;
     r.frete = r.freteMk * fator;
     r.freteExtra = r.frete - r.freteMk;
@@ -4511,6 +4513,7 @@ async function loadMargemTab(force) {
       return {
         marca: _mgTxt(r, 'MARCA'), col: _mgTxt(r, 'COLECAO'), pedido: _mgTxt(r, 'PEDIDO'),
         cliente: _mgTxt(r, 'CLIENTE'), codcli: _mgTxt(r, 'CODCLI'), rep: _mgTxt(r, 'REP'),
+        tipoFrete: String(r['[TIPO_FRETE]'] ?? '').trim() || 'CIF',
         pecas: _mgNum(r, 'PECAS'), semCusto: _mgNum(r, 'PECAS_S_CUSTO'),
         semMarkup: _mgNum(r, 'VALOR_S_MARKUP'), mcProg: _mgNum(r, 'MC_PROG'),
         markup: String(r['[MARKUP]'] ?? '').trim(), nMarkups: _mgNum(r, 'N_MARKUPS'),
@@ -4520,7 +4523,7 @@ async function loadMargemTab(force) {
     _mgAplicaFrete(cachedMargem);
     renderMargemTab();
   } catch (e) {
-    const semColuna = /CUSTO_UNIT|MARKUP_COD|PERC_COMISSAO_MK|PERC_DVENDAS_MK|PERC_MC_MK|PERC_FRETE_MK/i.test(e.message);
+    const semColuna = /CUSTO_UNIT|MARKUP_COD|PERC_COMISSAO_MK|PERC_DVENDAS_MK|PERC_MC_MK|PERC_FRETE_MK|TIPO_FRETE/i.test(e.message);
     el.innerHTML = `<div class="error-box">${semColuna
       ? '<b>Custo e markup ainda não estão no dataset publicado.</b><br>As colunas <code>PEDIDO[CUSTO_UNIT]</code>, <code>PERC_COMISSAO_MK</code>, <code>PERC_DVENDAS_MK</code> e <code>MARKUP_COD</code> e <code>PERC_MC_MK</code> precisam estar no dataset publicado.'
       : 'Erro ao carregar margem: ' + _mgEsc(e.message)}</div>`;
@@ -4650,7 +4653,7 @@ function renderMargemBody() {
       <td style="text-align:right;font-weight:600">${_mgR(r.valor)}</td>
       <td style="text-align:right;color:var(--muted)">${_mgR(r.custo)}</td>
       <td style="text-align:right;color:var(--muted)">${_mgR(r.comissao)}</td>
-      <td style="text-align:right;color:${r.freteExtra > 0.005 ? 'var(--amber)' : 'var(--muted)'}" title="${r.freteExtra > 0.005 ? `Cliente com ${_mgR(r.totCli)} na coleção (abaixo de R$ 3.000): frete como pedido de R$ 3.000 = ${_mgPct(r.frete / r.valor)} do pedido (markup: ${_mgPct(r.freteMk / r.valor)})` : `Frete do markup: ${r.valor ? _mgPct(r.freteMk / r.valor) : '—'}`}">${_mgR(r.frete)}${r.freteExtra > 0.005 ? `<div style="font-size:10px">+${_mgR(r.freteExtra)}</div>` : ''}</td>
+      <td style="text-align:right;color:${r.freteExtra > 0.005 ? 'var(--amber)' : 'var(--muted)'}" title="${r.freteExtra > 0.005 ? `Cliente com ${_mgR(r.totCli)} na coleção (abaixo de R$ 3.000): frete como pedido de R$ 3.000 = ${_mgPct(r.frete / r.valor)} do pedido (markup: ${_mgPct(r.freteMk / r.valor)})` : `Frete ${r.tipoFrete} · % do markup: ${r.valor ? _mgPct(r.freteMk / r.valor) : '—'}`}">${_mgR(r.frete)}<span style="font-size:9px;margin-left:4px;padding:1px 4px;border-radius:4px;background:${r.tipoFrete === 'FOB' ? 'var(--blue-bg);color:var(--blue)' : 'var(--surface2);color:var(--muted)'}">${r.tipoFrete}</span>${r.freteExtra > 0.005 ? `<div style="font-size:10px">+${_mgR(r.freteExtra)}</div>` : ''}</td>
       <td style="text-align:right;color:var(--muted)">${_mgR(r.dvendas)}</td>
       <td style="text-align:right;font-weight:600;color:${_mgCor(r.pct)}">${_mgR(r.margem)}</td>
       <td>${bar(r.pct)}</td>
@@ -4702,7 +4705,7 @@ function renderMargemBody() {
       <span class="leg"><span class="ldot" style="background:var(--amber)"></span>0–10%</span>
       <span class="leg"><span class="ldot" style="background:var(--red)"></span>negativa</span>
       <span class="leg">▲▼ margem real vs. MC programada no markup</span>
-      <span class="leg" style="margin-left:auto">Margem de contribuição = valor vendido (c/ desconto) − custo de produção − comissão (3-COMISSÃO) − frete (% do markup; abaixo de R$ 3.000 por cliente na coleção, frete de um pedido de R$ 3.000) − demais despesas de venda (8-D_VENDAS) do markup da tabela de preço</span>
+      <span class="leg" style="margin-left:auto">Margem de contribuição = valor vendido (c/ desconto) − custo de produção − comissão (3-COMISSÃO) − frete (% do markup; pedidos CIF de clientes com menos de R$ 3.000 na coleção pagam o frete de um pedido de R$ 3.000; FOB sem ponderação) − demais despesas de venda (8-D_VENDAS) do markup da tabela de preço</span>
     </div>`;
   box.innerHTML = h;
 }
