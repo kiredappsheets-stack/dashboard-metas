@@ -4591,10 +4591,10 @@ function renderMargemBody() {
   };
 
   h += `<div class="tbl-wrap" style="margin-top:20px"><table class="dash-table"><thead><tr>
-    <th>Marca</th><th>Coleção</th><th style="text-align:center">Pedido</th><th>Cliente</th><th>Representante</th><th style="text-align:right" title="Margem de contribuição programada no markup (índice 0-INDICE), ponderada pelo valor dos itens">MC programada</th>
+    <th>Marca</th><th>Coleção</th><th style="text-align:center">Pedido</th><th>Cliente</th><th>Representante</th>
     <th style="text-align:right">Peças</th><th style="text-align:right">Desconto</th><th style="text-align:right">Valor do pedido</th><th style="text-align:right">Custo produção</th>
     <th style="text-align:right">Comissão</th><th style="text-align:right">Desp. venda</th>
-    <th style="text-align:right">Margem R$</th><th style="text-align:right">Margem %</th></tr></thead><tbody>`;
+    <th style="text-align:right">Margem R$</th><th style="text-align:right">Margem %</th><th style="text-align:right" title="Margem de contribuição programada no markup (índice 0-INDICE), ponderada pelo valor dos itens">MC programada</th></tr></thead><tbody>`;
 
   chaves.forEach(k => {
     const g = grupos[k].sort(ord), [marca, col] = k.split('||');
@@ -4602,7 +4602,7 @@ function renderMargemBody() {
     const gM = gV - gC - gCo - gD, gP = gV ? gM / gV : NaN;
     h += `<tr class="tbl-group">
       <td class="tbl-group-cell">${_mgEsc(marca)}</td><td class="tbl-group-cell">${_mgEsc(col)}</td>
-      <td class="tbl-group-cell" style="text-align:center;color:var(--muted);font-weight:500">${g.length} ped.</td><td colspan="2"></td><td class="tbl-group-cell" style="text-align:right">${_mgProgCell(_mgProg(g), gP)}</td>
+      <td class="tbl-group-cell" style="text-align:center;color:var(--muted);font-weight:500">${g.length} ped.</td><td colspan="2"></td>
       <td class="tbl-group-cell" style="text-align:right">${Math.round(sum(g, 'pecas')).toLocaleString('pt-BR')}</td>
       <td class="tbl-group-cell" style="text-align:right">${_mgDesc(sum(g, 'desconto'), sum(g, 'bruto'))}</td>
       <td class="tbl-group-cell" style="text-align:right">${fmtR(gV)}</td>
@@ -4610,7 +4610,8 @@ function renderMargemBody() {
       <td class="tbl-group-cell" style="text-align:right">${fmtR(gCo)}</td>
       <td class="tbl-group-cell" style="text-align:right">${fmtR(gD)}</td>
       <td class="tbl-group-cell" style="text-align:right;color:${_mgCor(gP)}">${fmtR(gM)}</td>
-      <td class="tbl-group-cell">${bar(gP)}</td></tr>`;
+      <td class="tbl-group-cell">${bar(gP)}</td>
+      <td class="tbl-group-cell" style="text-align:right">${_mgProgCell(_mgProg(g), gP)}</td></tr>`;
     g.forEach((r, i) => {
       const aviso = (r.semCusto > 0 ? ` <span class="badge badge-red" title="${Math.round(r.semCusto)} peça(s) sem custo cadastrado">sem custo</span>` : '')
         + (r.semMarkup > 0 ? ` <span class="badge badge-amber" title="${_mgR(r.semMarkup)} em produtos sem markup cadastrado">sem markup</span>` : '');
@@ -4622,7 +4623,6 @@ function renderMargemBody() {
         <td style="text-align:center;font-family:monospace;color:var(--muted)">${_mgEsc(r.pedido)}</td>
         <td>${_mgEsc(r.cliente)}${aviso}</td>
         <td style="color:var(--muted)">${_mgEsc(shortName(r.rep))}</td>
-        <td style="text-align:right;white-space:nowrap" title="${_mgEsc(mk + (r.markup ? ' — ' + r.markup : ''))}">${_mgProgCell(_mgProg([r]), r.pct)}${r.nMarkups > 1 ? ' <span style="font-size:10px;color:var(--hint)">(' + r.nMarkups + ' markups)</span>' : ''}</td>
         <td style="text-align:right">${Math.round(r.pecas).toLocaleString('pt-BR')}</td>
         <td style="text-align:right;color:var(--muted);white-space:nowrap">${r.descPct ? `<span style="color:var(--amber);font-weight:600">${r.descPct.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</span> · ${_mgR(r.desconto)}` : '—'}</td>
         <td style="text-align:right;font-weight:600">${_mgR(r.valor)}</td>
@@ -4630,16 +4630,17 @@ function renderMargemBody() {
         <td style="text-align:right;color:var(--muted)">${_mgR(r.comissao)}</td>
         <td style="text-align:right;color:var(--muted)">${_mgR(r.dvendas)}</td>
         <td style="text-align:right;font-weight:600;color:${_mgCor(r.pct)}">${_mgR(r.margem)}</td>
-        <td>${bar(r.pct)}</td></tr>`;
+        <td>${bar(r.pct)}</td>
+        <td style="text-align:right;white-space:nowrap" title="${_mgEsc(mk + (r.markup ? ' — ' + r.markup : ''))}">${_mgProgCell(_mgProg([r]), r.pct)}${r.nMarkups > 1 ? ' <span style="font-size:10px;color:var(--hint)">(' + r.nMarkups + ' markups)</span>' : ''}</td></tr>`;
     });
   });
 
-  h += `</tbody><tfoot><tr class="tbl-foot"><td colspan="5">Total</td><td style="text-align:right">${_mgProgCell(_mgProg(rows), tP)}</td>
+  h += `</tbody><tfoot><tr class="tbl-foot"><td colspan="5">Total</td>
     <td style="text-align:right">${Math.round(sum(rows, 'pecas')).toLocaleString('pt-BR')}</td>
     <td style="text-align:right">${_mgDesc(sum(rows, 'desconto'), sum(rows, 'bruto'))}</td>
     <td style="text-align:right">${fmtR(tV)}</td><td style="text-align:right">${fmtR(tC)}</td>
     <td style="text-align:right">${fmtR(tCo)}</td><td style="text-align:right">${fmtR(tD)}</td>
-    <td style="text-align:right;color:${_mgCor(tP)}">${fmtR(tM)}</td><td style="text-align:right;color:${_mgCor(tP)}">${_mgPct(tP)}</td></tr></tfoot></table></div>
+    <td style="text-align:right;color:${_mgCor(tP)}">${fmtR(tM)}</td><td style="text-align:right;color:${_mgCor(tP)}">${_mgPct(tP)}</td><td style="text-align:right">${_mgProgCell(_mgProg(rows), tP)}</td></tr></tfoot></table></div>
     <div class="legend-row">
       <span class="leg"><span class="ldot" style="background:var(--green)"></span>≥ 20%</span>
       <span class="leg"><span class="ldot" style="background:var(--blue)"></span>10–20%</span>
