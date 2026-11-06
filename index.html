@@ -204,6 +204,8 @@
     .chat-panel { width:calc(100vw - 32px); right:16px; }
   }
 
+  .mg-in { background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--tx); font-family:var(--font); font-size:12px; padding:7px 10px; }
+  .mg-in:focus { outline:none; border-color:var(--green); }
 </style>
 </head>
 <body>
@@ -2385,6 +2387,7 @@ function renderDashboard(data) {
       <button class="tab-btn" data-tab="clientes">Clientes</button>
       <button class="tab-btn" data-tab="historico">Histórico Mensal</button>
       <button class="tab-btn" data-tab="periodo">Histórico Semanal</button>
+      <button class="tab-btn" data-tab="margem">💰 Margem por Pedido</button>
       <button class="tab-btn" data-tab="restricoes">Restrições <span class="tab-badge">${cachedRestricoes?cachedRestricoes.length:0}</span></button>
       <button class="tab-btn" data-tab="metas-admin">⚙ Metas</button>
       <button class="tab-btn" data-tab="leads">🏪 Leads</button>
@@ -2394,6 +2397,7 @@ function renderDashboard(data) {
     <div class="tab-content hidden" id="tab-historico">${buildHistorico()}</div>
     <div class="tab-content hidden" id="tab-periodo">${buildHistoricoPeriodo()}</div>
     <div class="tab-content hidden" id="tab-clientes">${buildClientes()}</div>
+    <div class="tab-content hidden" id="tab-margem"><div class="loading-tab"><div class="spinner"></div>Abrindo…</div></div>
     <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
     <div class="tab-content hidden" id="tab-metas-admin" style="padding:0;height:100%;overflow:hidden"><div class="loading-tab"><div class="spinner"></div>Aguardando dados…</div></div>
     <div class="tab-content hidden" id="tab-leads" style="padding:0;height:100%;overflow:hidden"><iframe src="https://lojistas.myrockdenim.com.br/admin.html" style="width:100%;height:100%;border:none;display:block" allow="identity-credentials-get" title="Leads de Lojistas"></iframe></div>
@@ -2405,6 +2409,7 @@ function renderDashboard(data) {
       container.querySelectorAll('.tab-content').forEach(c=>c.classList.add('hidden'));
       btn.classList.add('active');
       document.getElementById('tab-'+btn.dataset.tab).classList.remove('hidden');
+      if (btn.dataset.tab === 'margem') loadMargemTab(false);
     });
   });
 
@@ -4395,5 +4400,232 @@ document.addEventListener('input', function(e) {
 });
 </script>
 
+<script>
+// ════════════════════════════════════════════
+//  ABA MARGEM DE CONTRIBUIÇÃO POR PEDIDO — coleções atuais
+//  Receita  = PEDIDO[VAL_DESC_EMPENHO] (valor vendido, já com desconto)
+//  Peças    = QTDE_PED (em aberto + faturadas − canceladas), mesma base do VAL_DESC_EMPENHO
+//  Custo    = Σ peças × PEDIDO[CUSTO_UNIT] (custo de produção por produto, vindo do ERP)
+//  Variáveis de venda (markup do produto: ERP PRECO_001 → PRECO_INDICE_001):
+//    Comissão   = Σ valor × índices tipo 3-COMISSAO / 100
+//    Desp. venda= Σ valor × índices tipo 8-D_VENDAS / 100
+//  Margem de contribuição = Receita − Custo − Comissão − Desp. venda
+// ════════════════════════════════════════════
+const DAX_MARGEM = `
+EVALUATE
+CALCULATETABLE(
+  ADDCOLUMNS(
+    SUMMARIZE(PEDIDO, PEDIDO[MARCA], PEDIDO[COLECAO], PEDIDO[PEDIDO], PEDIDO[CLIENTE], PEDIDO[REP]),
+    "VALOR",       CALCULATE(SUM(PEDIDO[VAL_DESC_EMPENHO])),
+    "PECAS",       CALCULATE(SUM(PEDIDO[QTDE_PED])),
+    "CUSTO",       CALCULATE(SUMX(PEDIDO, PEDIDO[QTDE_PED] * PEDIDO[CUSTO_UNIT])),
+    "COMISSAO",    CALCULATE(SUMX(PEDIDO, PEDIDO[VAL_DESC_EMPENHO] * PEDIDO[PERC_COMISSAO_MK] / 100)),
+    "DVENDAS",     CALCULATE(SUMX(PEDIDO, PEDIDO[VAL_DESC_EMPENHO] * PEDIDO[PERC_DVENDAS_MK] / 100)),
+    "MARKUP",      CALCULATE(MAX(PEDIDO[MARKUP_COD])),
+    "N_MARKUPS",   CALCULATE(DISTINCTCOUNT(PEDIDO[MARKUP_COD])),
+    "PECAS_S_CUSTO", CALCULATE(SUMX(FILTER(PEDIDO, ISBLANK(PEDIDO[CUSTO_UNIT]) || PEDIDO[CUSTO_UNIT] = 0), PEDIDO[QTDE_PED])),
+    "VALOR_S_MARKUP", CALCULATE(SUMX(FILTER(PEDIDO, ISBLANK(PEDIDO[MARKUP_COD]) || PEDIDO[MARKUP_COD] = ""), PEDIDO[VAL_DESC_EMPENHO]))
+  ),
+  PEDIDO[COL_ATUAL] = "COL ATUAL"
+)
+ORDER BY PEDIDO[MARCA] ASC, PEDIDO[COLECAO] DESC, PEDIDO[PEDIDO] ASC
+`;
+
+let cachedMargem = null;
+let _margemLoading = false;
+const _mgState = { col: '', marca: '', busca: '', ordem: 'pedido', soCritico: false };
+
+function _mgNum(r, c) { return parseFloat(r['[' + c + ']'] ?? r[c] ?? 0) || 0; }
+function _mgTxt(r, c) { return String(r['PEDIDO[' + c + ']'] ?? r[c] ?? '').trim(); }
+function _mgPct(v) { return isFinite(v) ? (v * 100).toFixed(1).replace('.', ',') + '%' : '—'; }
+function _mgR(v) { return 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function _mgEsc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function _mgCor(p) {
+  if (!isFinite(p)) return 'var(--muted)';
+  if (p < 0)    return 'var(--red)';
+  if (p < 0.10) return 'var(--amber)';
+  if (p < 0.20) return 'var(--blue)';
+  return 'var(--green)';
+}
+
+async function loadMargemTab(force) {
+  const el = document.getElementById('tab-margem');
+  if (!el) return;
+  if (cachedMargem && !force) { renderMargemTab(); return; }
+  if (_margemLoading) return;
+  _margemLoading = true;
+  el.innerHTML = '<div class="loading-tab"><div class="spinner"></div>Calculando margem por pedido…</div>';
+  try {
+    const token = await getToken();
+    const rows = await runDaxQuery(token, DAX_MARGEM, true);
+    cachedMargem = rows.map(r => {
+      const valor = _mgNum(r, 'VALOR'), custo = _mgNum(r, 'CUSTO');
+      const comissao = _mgNum(r, 'COMISSAO'), dvendas = _mgNum(r, 'DVENDAS');
+      const margem = valor - custo - comissao - dvendas;
+      return {
+        marca: _mgTxt(r, 'MARCA'), col: _mgTxt(r, 'COLECAO'), pedido: _mgTxt(r, 'PEDIDO'),
+        cliente: _mgTxt(r, 'CLIENTE'), rep: _mgTxt(r, 'REP'),
+        pecas: _mgNum(r, 'PECAS'), semCusto: _mgNum(r, 'PECAS_S_CUSTO'),
+        semMarkup: _mgNum(r, 'VALOR_S_MARKUP'),
+        markup: String(r['[MARKUP]'] ?? '').trim(), nMarkups: _mgNum(r, 'N_MARKUPS'),
+        valor, custo, comissao, dvendas, margem, pct: valor ? margem / valor : NaN,
+      };
+    }).filter(r => r.pedido && r.valor !== 0);
+    renderMargemTab();
+  } catch (e) {
+    const semColuna = /CUSTO_UNIT|MARKUP_COD|PERC_COMISSAO_MK|PERC_DVENDAS_MK/i.test(e.message);
+    el.innerHTML = `<div class="error-box">${semColuna
+      ? '<b>Custo e markup ainda não estão no dataset publicado.</b><br>As colunas <code>PEDIDO[CUSTO_UNIT]</code>, <code>PERC_COMISSAO_MK</code>, <code>PERC_DVENDAS_MK</code> e <code>MARKUP_COD</code> precisam estar no dataset publicado.'
+      : 'Erro ao carregar margem: ' + _mgEsc(e.message)}</div>`;
+  } finally { _margemLoading = false; }
+}
+
+function renderMargemTab() {
+  const el = document.getElementById('tab-margem');
+  if (!el || !cachedMargem) return;
+  const all = cachedMargem;
+  const cols = [...new Set(all.map(r => r.col))].sort().reverse();
+  const marcas = [...new Set(all.map(r => r.marca))].sort((a, b) =>
+    a.toUpperCase().includes('MYROCK') ? -1 : b.toUpperCase().includes('MYROCK') ? 1 : a.localeCompare(b, 'pt-BR'));
+  const sel = (v, cur) => v === cur ? ' selected' : '';
+
+  el.innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+      <select id="mgCol" class="mg-in"><option value="">Todas as coleções atuais</option>${cols.map(c => `<option${sel(c, _mgState.col)}>${_mgEsc(c)}</option>`).join('')}</select>
+      <select id="mgMarca" class="mg-in"><option value="">Todas as marcas</option>${marcas.map(m => `<option${sel(m, _mgState.marca)}>${_mgEsc(m)}</option>`).join('')}</select>
+      <select id="mgOrdem" class="mg-in">
+        <option value="pedido"${sel('pedido', _mgState.ordem)}>Ordenar: nº do pedido</option>
+        <option value="pct_asc"${sel('pct_asc', _mgState.ordem)}>Ordenar: menor margem %</option>
+        <option value="pct_desc"${sel('pct_desc', _mgState.ordem)}>Ordenar: maior margem %</option>
+        <option value="valor"${sel('valor', _mgState.ordem)}>Ordenar: maior valor</option>
+      </select>
+      <input id="mgBusca" class="mg-in" style="flex:1;min-width:180px" placeholder="Buscar pedido, cliente ou representante…" value="${_mgEsc(_mgState.busca)}">
+      <label style="font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="mgCrit"${_mgState.soCritico ? ' checked' : ''}> Só margem abaixo de 10%</label>
+      <button class="btn-refresh" id="mgReload" title="Recarregar">↻</button>
+    </div>
+    <div id="mgBody"></div>`;
+
+  const upd = () => {
+    _mgState.col = document.getElementById('mgCol').value;
+    _mgState.marca = document.getElementById('mgMarca').value;
+    _mgState.ordem = document.getElementById('mgOrdem').value;
+    _mgState.busca = document.getElementById('mgBusca').value;
+    _mgState.soCritico = document.getElementById('mgCrit').checked;
+    renderMargemBody();
+  };
+  ['mgCol', 'mgMarca', 'mgOrdem', 'mgCrit'].forEach(id => document.getElementById(id).addEventListener('change', upd));
+  document.getElementById('mgBusca').addEventListener('input', upd);
+  document.getElementById('mgReload').addEventListener('click', () => loadMargemTab(true));
+  renderMargemBody();
+}
+
+function renderMargemBody() {
+  const box = document.getElementById('mgBody');
+  if (!box) return;
+  const q = _mgState.busca.trim().toUpperCase();
+  let rows = cachedMargem.filter(r =>
+    (!_mgState.col || r.col === _mgState.col) &&
+    (!_mgState.marca || r.marca === _mgState.marca) &&
+    (!q || (r.pedido + ' ' + r.cliente + ' ' + r.rep).toUpperCase().includes(q)) &&
+    (!_mgState.soCritico || r.pct < 0.10));
+
+  const sum = (arr, k) => arr.reduce((a, r) => a + r[k], 0);
+  const tV = sum(rows, 'valor'), tC = sum(rows, 'custo'), tCo = sum(rows, 'comissao'), tD = sum(rows, 'dvendas');
+  const tM = tV - tC - tCo - tD, tP = tV ? tM / tV : NaN;
+  const nSemMk = rows.filter(r => r.semMarkup > 0).length;
+  const nSemCusto = rows.filter(r => r.semCusto > 0).length;
+  const nNeg = rows.filter(r => r.margem < 0).length;
+
+  let h = `<div class="kpi-row" style="grid-template-columns:repeat(6,1fr)">
+    <div class="kpi accent-blue-border"><div class="kpi-lbl">Valor dos pedidos</div><div class="kpi-val">${fmtR(tV)}</div><div class="kpi-sub">${rows.length.toLocaleString('pt-BR')} pedidos · ${Math.round(sum(rows, 'pecas')).toLocaleString('pt-BR')} peças</div></div>
+    <div class="kpi accent-amber-border"><div class="kpi-lbl">Custo de produção</div><div class="kpi-val accent-amber">${fmtR(tC)}</div><div class="kpi-sub">${tV ? _mgPct(tC / tV) : '—'} do valor vendido</div></div>
+    <div class="kpi accent-red-border"><div class="kpi-lbl">Variáveis de venda</div><div class="kpi-val accent-red">${fmtR(tCo + tD)}</div><div class="kpi-sub">${tV ? _mgPct((tCo + tD) / tV) : '—'} · comissão ${fmtR(tCo)} · desp. ${fmtR(tD)}</div></div>
+    <div class="kpi accent-green-border"><div class="kpi-lbl">Margem de contribuição</div><div class="kpi-val" style="color:${_mgCor(tP)}">${fmtR(tM)}</div><div class="kpi-sub">valor − custo − variáveis de venda</div></div>
+    <div class="kpi accent-green-border"><div class="kpi-lbl">Margem %</div><div class="kpi-val" style="color:${_mgCor(tP)}">${_mgPct(tP)}</div><div class="kpi-sub">${nNeg ? nNeg + ' pedido(s) com margem negativa' : 'nenhum pedido negativo'}</div></div>
+    <div class="kpi ${nSemCusto + nSemMk ? 'accent-red-border' : ''}"><div class="kpi-lbl">Pedidos com dados faltando</div><div class="kpi-val ${nSemCusto + nSemMk ? 'accent-red' : ''}">${nSemCusto}<span style="font-size:12px;color:var(--muted)"> s/ custo</span> · ${nSemMk}<span style="font-size:12px;color:var(--muted)"> s/ markup</span></div><div class="kpi-sub">margem desses pedidos fica superestimada</div></div>
+  </div>`;
+
+  if (!rows.length) { box.innerHTML = h + '<div class="empty-state">Nenhum pedido para os filtros escolhidos.</div>'; return; }
+
+  const ord = {
+    pedido: (a, b) => a.pedido.localeCompare(b.pedido, 'pt-BR', { numeric: true }),
+    pct_asc: (a, b) => (a.pct || 0) - (b.pct || 0),
+    pct_desc: (a, b) => (b.pct || 0) - (a.pct || 0),
+    valor: (a, b) => b.valor - a.valor,
+  }[_mgState.ordem];
+
+  // Agrupar por marca → coleção
+  const grupos = {};
+  rows.forEach(r => { const k = r.marca + '||' + r.col; (grupos[k] = grupos[k] || []).push(r); });
+  const chaves = Object.keys(grupos).sort((a, b) => {
+    const [ma, ca] = a.split('||'), [mb, cb] = b.split('||');
+    if (ma !== mb) return ma.toUpperCase().includes('MYROCK') ? -1 : mb.toUpperCase().includes('MYROCK') ? 1 : ma.localeCompare(mb, 'pt-BR');
+    return cb.localeCompare(ca);
+  });
+
+  const bar = p => {
+    const w = Math.max(0, Math.min(100, (p || 0) * 100));
+    return `<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end">
+      <div style="width:70px;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden"><div style="width:${w}%;height:100%;background:${_mgCor(p)}"></div></div>
+      <span style="font-weight:700;color:${_mgCor(p)};min-width:52px;text-align:right">${_mgPct(p)}</span></div>`;
+  };
+
+  h += `<div class="tbl-wrap" style="margin-top:20px"><table class="dash-table"><thead><tr>
+    <th>Marca</th><th>Coleção</th><th style="text-align:center">Pedido</th><th>Cliente</th><th>Representante</th><th>Markup</th>
+    <th style="text-align:right">Peças</th><th style="text-align:right">Valor do pedido</th><th style="text-align:right">Custo produção</th>
+    <th style="text-align:right">Comissão</th><th style="text-align:right">Desp. venda</th>
+    <th style="text-align:right">Margem R$</th><th style="text-align:right">Margem %</th></tr></thead><tbody>`;
+
+  chaves.forEach(k => {
+    const g = grupos[k].sort(ord), [marca, col] = k.split('||');
+    const gV = sum(g, 'valor'), gC = sum(g, 'custo'), gCo = sum(g, 'comissao'), gD = sum(g, 'dvendas');
+    const gM = gV - gC - gCo - gD, gP = gV ? gM / gV : NaN;
+    h += `<tr class="tbl-group">
+      <td class="tbl-group-cell">${_mgEsc(marca)}</td><td class="tbl-group-cell">${_mgEsc(col)}</td>
+      <td class="tbl-group-cell" style="text-align:center;color:var(--muted);font-weight:500">${g.length} ped.</td><td colspan="3"></td>
+      <td class="tbl-group-cell" style="text-align:right">${Math.round(sum(g, 'pecas')).toLocaleString('pt-BR')}</td>
+      <td class="tbl-group-cell" style="text-align:right">${fmtR(gV)}</td>
+      <td class="tbl-group-cell" style="text-align:right">${fmtR(gC)}</td>
+      <td class="tbl-group-cell" style="text-align:right">${fmtR(gCo)}</td>
+      <td class="tbl-group-cell" style="text-align:right">${fmtR(gD)}</td>
+      <td class="tbl-group-cell" style="text-align:right;color:${_mgCor(gP)}">${fmtR(gM)}</td>
+      <td class="tbl-group-cell">${bar(gP)}</td></tr>`;
+    g.forEach((r, i) => {
+      const aviso = (r.semCusto > 0 ? ` <span class="badge badge-red" title="${Math.round(r.semCusto)} peça(s) sem custo cadastrado">sem custo</span>` : '')
+        + (r.semMarkup > 0 ? ` <span class="badge badge-amber" title="${_mgR(r.semMarkup)} em produtos sem markup cadastrado">sem markup</span>` : '');
+      const _f = (r.markup.match(/MARKUP\s*([\d.,]+)/i) || [])[1];
+      const mk = r.markup ? r.markup.split(' - ')[0].replace(/\(.*?\)/g, '').trim() + (_f ? ' ' + _f : '') + (r.nMarkups > 1 ? ` +${r.nMarkups - 1}` : '') : '—';
+      h += `<tr class="${i % 2 === 0 ? 'tbl-even' : 'tbl-odd'}">
+        <td></td><td></td>
+        <td style="text-align:center;font-family:monospace;color:var(--muted)">${_mgEsc(r.pedido)}</td>
+        <td>${_mgEsc(r.cliente)}${aviso}</td>
+        <td style="color:var(--muted)">${_mgEsc(shortName(r.rep))}</td>
+        <td style="color:var(--muted);font-size:11px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${_mgEsc(r.markup)}">${_mgEsc(mk)}</td>
+        <td style="text-align:right">${Math.round(r.pecas).toLocaleString('pt-BR')}</td>
+        <td style="text-align:right;font-weight:600">${_mgR(r.valor)}</td>
+        <td style="text-align:right;color:var(--muted)">${_mgR(r.custo)}</td>
+        <td style="text-align:right;color:var(--muted)">${_mgR(r.comissao)}</td>
+        <td style="text-align:right;color:var(--muted)">${_mgR(r.dvendas)}</td>
+        <td style="text-align:right;font-weight:600;color:${_mgCor(r.pct)}">${_mgR(r.margem)}</td>
+        <td>${bar(r.pct)}</td></tr>`;
+    });
+  });
+
+  h += `</tbody><tfoot><tr class="tbl-foot"><td colspan="6">Total</td>
+    <td style="text-align:right">${Math.round(sum(rows, 'pecas')).toLocaleString('pt-BR')}</td>
+    <td style="text-align:right">${fmtR(tV)}</td><td style="text-align:right">${fmtR(tC)}</td>
+    <td style="text-align:right">${fmtR(tCo)}</td><td style="text-align:right">${fmtR(tD)}</td>
+    <td style="text-align:right;color:${_mgCor(tP)}">${fmtR(tM)}</td><td style="text-align:right;color:${_mgCor(tP)}">${_mgPct(tP)}</td></tr></tfoot></table></div>
+    <div class="legend-row">
+      <span class="leg"><span class="ldot" style="background:var(--green)"></span>≥ 20%</span>
+      <span class="leg"><span class="ldot" style="background:var(--blue)"></span>10–20%</span>
+      <span class="leg"><span class="ldot" style="background:var(--amber)"></span>0–10%</span>
+      <span class="leg"><span class="ldot" style="background:var(--red)"></span>negativa</span>
+      <span class="leg" style="margin-left:auto">Margem de contribuição = valor vendido (c/ desconto) − custo de produção − comissão (3-COMISSÃO) − despesas de venda (8-D_VENDAS) do markup do produto</span>
+    </div>`;
+  box.innerHTML = h;
+}
+
+</script>
 </body>
 </html>
