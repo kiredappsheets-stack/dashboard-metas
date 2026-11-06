@@ -4425,7 +4425,7 @@ const DAX_MARGEM = `
 EVALUATE
 CALCULATETABLE(
   ADDCOLUMNS(
-    SUMMARIZE(PEDIDO, PEDIDO[MARCA], PEDIDO[COLECAO], PEDIDO[PEDIDO], PEDIDO[CLIENTE], PEDIDO[REP]),
+    SUMMARIZE(PEDIDO, PEDIDO[MARCA], PEDIDO[COLECAO], PEDIDO[PEDIDO], PEDIDO[CLIENTE], PEDIDO[CODCLI], PEDIDO[REP]),
     "VALOR",       CALCULATE(SUM(PEDIDO[VAL_DESC_EMPENHO])),
     "VALOR_BRUTO", CALCULATE(SUM(PEDIDO[FAT_TOTAL_BRUTO])),
     "DESC_PCT",    CALCULATE(MAX(PEDIDO[DESCONTO])),
@@ -4433,6 +4433,7 @@ CALCULATETABLE(
     "CUSTO",       CALCULATE(SUMX(PEDIDO, PEDIDO[QTDE_PED] * PEDIDO[CUSTO_UNIT])),
     "COMISSAO",    CALCULATE(SUMX(PEDIDO, PEDIDO[VAL_DESC_EMPENHO] * PEDIDO[PERC_COMISSAO_MK] / 100)),
     "DVENDAS",     CALCULATE(SUMX(PEDIDO, PEDIDO[VAL_DESC_EMPENHO] * PEDIDO[PERC_DVENDAS_MK] / 100)),
+    "FRETE_MK",    CALCULATE(SUMX(PEDIDO, PEDIDO[VAL_DESC_EMPENHO] * PEDIDO[PERC_FRETE_MK] / 100)),
     "MARKUP",      CALCULATE(MAX(PEDIDO[MARKUP_COD])),
     "MC_PROG",     CALCULATE(SUMX(PEDIDO, PEDIDO[VAL_DESC_EMPENHO] * PEDIDO[PERC_MC_MK] / 100)),
     "N_MARKUPS",   CALCULATE(DISTINCTCOUNT(PEDIDO[MARKUP_COD])),
@@ -4453,6 +4454,23 @@ function _mgTxt(r, c) { return String(r['PEDIDO[' + c + ']'] ?? r[c] ?? '').trim
 function _mgPct(v) { return isFinite(v) ? (v * 100).toFixed(1).replace('.', ',') + '%' : '—'; }
 function _mgR(v) { return 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function _mgEsc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+// Frete ponderado: o % de frete do markup vale para clientes com R$ 3.000 ou mais na coleção
+// (somando todos os pedidos do cliente). Abaixo disso, o frete custa como um pedido de R$ 3.000
+// (% × 3.000), rateado entre os pedidos do cliente, e a diferença sai da margem.
+const MG_FRETE_MIN = 3000;
+function _mgAplicaFrete(list) {
+  const totCli = {};
+  list.forEach(r => { const k = r.col + '|' + (r.codcli || r.cliente); totCli[k] = (totCli[k] || 0) + r.valor; });
+  list.forEach(r => {
+    const tc = totCli[r.col + '|' + (r.codcli || r.cliente)] || r.valor;
+    const fator = tc > 0 && tc < MG_FRETE_MIN ? MG_FRETE_MIN / tc : 1;
+    r.totCli = tc;
+    r.frete = r.freteMk * fator;
+    r.freteExtra = r.frete - r.freteMk;
+    r.margem = r.valor - r.custo - r.comissao - r.dvendas - r.frete;
+    r.pct = r.valor ? r.margem / r.valor : NaN;
+  });
+}
 function _mgProg(rows) {
   const base = rows.reduce((a, r) => a + r.valor - r.semMarkup, 0);
   return base > 0 ? rows.reduce((a, r) => a + r.mcProg, 0) / base : NaN;
@@ -4487,21 +4505,22 @@ async function loadMargemTab(force) {
     const rows = await runDaxQuery(token, DAX_MARGEM, true);
     cachedMargem = rows.map(r => {
       const valor = _mgNum(r, 'VALOR'), custo = _mgNum(r, 'CUSTO');
-      const comissao = _mgNum(r, 'COMISSAO'), dvendas = _mgNum(r, 'DVENDAS');
+      const comissao = _mgNum(r, 'COMISSAO'), freteMk = _mgNum(r, 'FRETE_MK');
+      const dvendas = _mgNum(r, 'DVENDAS') - freteMk;   // despesas de venda sem o frete
       const bruto = _mgNum(r, 'VALOR_BRUTO'), descPct = _mgNum(r, 'DESC_PCT');
-      const margem = valor - custo - comissao - dvendas;
       return {
         marca: _mgTxt(r, 'MARCA'), col: _mgTxt(r, 'COLECAO'), pedido: _mgTxt(r, 'PEDIDO'),
-        cliente: _mgTxt(r, 'CLIENTE'), rep: _mgTxt(r, 'REP'),
+        cliente: _mgTxt(r, 'CLIENTE'), codcli: _mgTxt(r, 'CODCLI'), rep: _mgTxt(r, 'REP'),
         pecas: _mgNum(r, 'PECAS'), semCusto: _mgNum(r, 'PECAS_S_CUSTO'),
         semMarkup: _mgNum(r, 'VALOR_S_MARKUP'), mcProg: _mgNum(r, 'MC_PROG'),
         markup: String(r['[MARKUP]'] ?? '').trim(), nMarkups: _mgNum(r, 'N_MARKUPS'),
-        valor, custo, comissao, dvendas, margem, bruto, descPct, desconto: Math.max(0, bruto - valor), pct: valor ? margem / valor : NaN,
+        valor, custo, comissao, dvendas, freteMk, bruto, descPct, desconto: Math.max(0, bruto - valor),
       };
     }).filter(r => r.pedido && r.valor !== 0);
+    _mgAplicaFrete(cachedMargem);
     renderMargemTab();
   } catch (e) {
-    const semColuna = /CUSTO_UNIT|MARKUP_COD|PERC_COMISSAO_MK|PERC_DVENDAS_MK|PERC_MC_MK/i.test(e.message);
+    const semColuna = /CUSTO_UNIT|MARKUP_COD|PERC_COMISSAO_MK|PERC_DVENDAS_MK|PERC_MC_MK|PERC_FRETE_MK/i.test(e.message);
     el.innerHTML = `<div class="error-box">${semColuna
       ? '<b>Custo e markup ainda não estão no dataset publicado.</b><br>As colunas <code>PEDIDO[CUSTO_UNIT]</code>, <code>PERC_COMISSAO_MK</code>, <code>PERC_DVENDAS_MK</code> e <code>MARKUP_COD</code> e <code>PERC_MC_MK</code> precisam estar no dataset publicado.'
       : 'Erro ao carregar margem: ' + _mgEsc(e.message)}</div>`;
@@ -4558,7 +4577,8 @@ function renderMargemBody() {
     (!_mgState.soCritico || r.pct < 0.10));
 
   const sum = (arr, k) => arr.reduce((a, r) => a + r[k], 0);
-  const tV = sum(rows, 'valor'), tC = sum(rows, 'custo'), tCo = sum(rows, 'comissao'), tD = sum(rows, 'dvendas');
+  const tV = sum(rows, 'valor'), tC = sum(rows, 'custo'), tCo = sum(rows, 'comissao'), tF = sum(rows, 'frete'), tD = sum(rows, 'dvendas') + tF;
+  const tFx = sum(rows, 'freteExtra');
   const tM = tV - tC - tCo - tD, tP = tV ? tM / tV : NaN;
   const nSemMk = rows.filter(r => r.semMarkup > 0).length;
   const nSemCusto = rows.filter(r => r.semCusto > 0).length;
@@ -4567,7 +4587,7 @@ function renderMargemBody() {
   let h = `<div class="kpi-row" style="grid-template-columns:repeat(6,1fr)">
     <div class="kpi accent-blue-border"><div class="kpi-lbl">Valor dos pedidos</div><div class="kpi-val">${fmtR(tV)}</div><div class="kpi-sub">${rows.length.toLocaleString('pt-BR')} pedidos · ${Math.round(sum(rows, 'pecas')).toLocaleString('pt-BR')} peças<br>desconto concedido ${fmtR(sum(rows, 'desconto'))}</div></div>
     <div class="kpi accent-amber-border"><div class="kpi-lbl">Custo de produção</div><div class="kpi-val accent-amber">${fmtR(tC)}</div><div class="kpi-sub">${tV ? _mgPct(tC / tV) : '—'} do valor vendido</div></div>
-    <div class="kpi accent-red-border"><div class="kpi-lbl">Variáveis de venda</div><div class="kpi-val accent-red">${fmtR(tCo + tD)}</div><div class="kpi-sub">${tV ? _mgPct((tCo + tD) / tV) : '—'} · comissão ${fmtR(tCo)} · desp. ${fmtR(tD)}</div></div>
+    <div class="kpi accent-red-border"><div class="kpi-lbl">Variáveis de venda</div><div class="kpi-val accent-red">${fmtR(tCo + tD)}</div><div class="kpi-sub">${tV ? _mgPct((tCo + tD) / tV) : '—'} · comissão ${fmtR(tCo)} · frete ${fmtR(tF)}${tFx > 0.5 ? ` (+${fmtR(tFx)} pedidos &lt; R$ 3 mil)` : ''} · outras desp. ${fmtR(tD - tF)}</div></div>
     <div class="kpi accent-green-border"><div class="kpi-lbl">Margem de contribuição</div><div class="kpi-val" style="color:${_mgCor(tP)}">${fmtR(tM)}</div><div class="kpi-sub">valor − custo − variáveis de venda</div></div>
     <div class="kpi accent-green-border"><div class="kpi-lbl">Margem %</div><div class="kpi-val" style="color:${_mgCor(tP)}">${_mgPct(tP)}</div><div class="kpi-sub">${nNeg ? nNeg + ' pedido(s) com margem negativa' : 'nenhum pedido negativo'}</div></div>
     <div class="kpi ${nSemCusto + nSemMk ? 'accent-red-border' : ''}"><div class="kpi-lbl">Pedidos com dados faltando</div><div class="kpi-val ${nSemCusto + nSemMk ? 'accent-red' : ''}">${nSemCusto}<span style="font-size:12px;color:var(--muted)"> s/ custo</span> · ${nSemMk}<span style="font-size:12px;color:var(--muted)"> s/ markup</span></div><div class="kpi-sub">margem desses pedidos fica superestimada</div></div>
@@ -4594,14 +4614,14 @@ function renderMargemBody() {
       <span style="font-weight:700;color:${_mgCor(p)};min-width:52px;text-align:right">${_mgPct(p)}</span></div>`;
   };
   const tot = arr => {
-    const V = sum(arr, 'valor'), C = sum(arr, 'custo'), Co = sum(arr, 'comissao'), D = sum(arr, 'dvendas');
-    const M = V - C - Co - D;
-    return { V, C, Co, D, M, P: V ? M / V : NaN, pecas: sum(arr, 'pecas'), desc: sum(arr, 'desconto'), bruto: sum(arr, 'bruto'), prog: _mgProg(arr) };
+    const V = sum(arr, 'valor'), C = sum(arr, 'custo'), Co = sum(arr, 'comissao'), D = sum(arr, 'dvendas'), F = sum(arr, 'frete'), Fx = sum(arr, 'freteExtra');
+    const M = V - C - Co - D - F;
+    return { V, C, Co, D, F, Fx, M, P: V ? M / V : NaN, pecas: sum(arr, 'pecas'), desc: sum(arr, 'desconto'), bruto: sum(arr, 'bruto'), prog: _mgProg(arr) };
   };
   const stats = t => `<div class="col-card-stats">
       <div class="col-stat-item"><div class="cs-lbl">Valor</div><div class="cs-val">${fmtR(t.V)}</div></div>
       <div class="col-stat-item"><div class="cs-lbl">Custo produção</div><div class="cs-val accent-amber">${fmtR(t.C)}</div></div>
-      <div class="col-stat-item"><div class="cs-lbl">Variáveis venda</div><div class="cs-val accent-red">${fmtR(t.Co + t.D)}</div></div>
+      <div class="col-stat-item"><div class="cs-lbl">Variáveis venda</div><div class="cs-val accent-red" title="comissão ${fmtR(t.Co)} · frete ${fmtR(t.F)} · outras ${fmtR(t.D)}">${fmtR(t.Co + t.D + t.F)}</div></div>
       <div class="col-stat-item"><div class="cs-lbl">Margem R$</div><div class="cs-val" style="color:${_mgCor(t.P)}">${fmtR(t.M)}</div></div>
       <div class="col-stat-item"><div class="cs-lbl">Margem %</div><div class="cs-val" style="color:${_mgCor(t.P)}">${_mgPct(t.P)}</div></div>
       <div class="col-stat-item"><div class="cs-lbl">MC programada</div><div class="cs-val">${_mgProgCell(t.prog, t.P)}</div></div>
@@ -4609,13 +4629,13 @@ function renderMargemBody() {
   const thead = `<thead><tr>
     <th style="text-align:center">Pedido</th><th>Cliente</th><th>Representante</th>
     <th style="text-align:right">Peças</th><th style="text-align:right">Desconto</th><th style="text-align:right">Valor do pedido</th><th style="text-align:right">Custo produção</th>
-    <th style="text-align:right">Comissão</th><th style="text-align:right">Desp. venda</th>
+    <th style="text-align:right">Comissão</th><th style="text-align:right" title="% de frete do markup; clientes com menos de R$ 3.000 na coleção pagam frete como um pedido de R$ 3.000">Frete</th><th style="text-align:right" title="Demais despesas de venda (8-D_VENDAS) do markup, sem o frete">Desp. venda</th>
     <th style="text-align:right">Margem R$</th><th style="text-align:right">Margem %</th><th style="text-align:right" title="Margem de contribuição programada no markup da tabela de preço do pedido, ponderada pelo valor dos itens">MC programada</th></tr></thead>`;
   const linhaTot = (lbl, t, cls) => `<tr class="${cls}"><td colspan="3"${cls === 'tbl-group' ? ' class="tbl-group-cell"' : ''}>${lbl}</td>
     <td style="text-align:right">${Math.round(t.pecas).toLocaleString('pt-BR')}</td>
     <td style="text-align:right">${_mgDesc(t.desc, t.bruto)}</td>
     <td style="text-align:right">${fmtR(t.V)}</td><td style="text-align:right">${fmtR(t.C)}</td>
-    <td style="text-align:right">${fmtR(t.Co)}</td><td style="text-align:right">${fmtR(t.D)}</td>
+    <td style="text-align:right">${fmtR(t.Co)}</td><td style="text-align:right">${fmtR(t.F)}${t.Fx > 0.5 ? `<div style="font-size:10px;color:var(--amber)">+${fmtR(t.Fx)} ponderado</div>` : ''}</td><td style="text-align:right">${fmtR(t.D)}</td>
     <td style="text-align:right;color:${_mgCor(t.P)}">${fmtR(t.M)}</td><td>${bar(t.P)}</td>
     <td style="text-align:right">${_mgProgCell(t.prog, t.P)}</td></tr>`;
   const linhaPed = (r, i) => {
@@ -4630,6 +4650,7 @@ function renderMargemBody() {
       <td style="text-align:right;font-weight:600">${_mgR(r.valor)}</td>
       <td style="text-align:right;color:var(--muted)">${_mgR(r.custo)}</td>
       <td style="text-align:right;color:var(--muted)">${_mgR(r.comissao)}</td>
+      <td style="text-align:right;color:${r.freteExtra > 0.005 ? 'var(--amber)' : 'var(--muted)'}" title="${r.freteExtra > 0.005 ? `Cliente com ${_mgR(r.totCli)} na coleção (abaixo de R$ 3.000): frete como pedido de R$ 3.000 = ${_mgPct(r.frete / r.valor)} do pedido (markup: ${_mgPct(r.freteMk / r.valor)})` : `Frete do markup: ${r.valor ? _mgPct(r.freteMk / r.valor) : '—'}`}">${_mgR(r.frete)}${r.freteExtra > 0.005 ? `<div style="font-size:10px">+${_mgR(r.freteExtra)}</div>` : ''}</td>
       <td style="text-align:right;color:var(--muted)">${_mgR(r.dvendas)}</td>
       <td style="text-align:right;font-weight:600;color:${_mgCor(r.pct)}">${_mgR(r.margem)}</td>
       <td>${bar(r.pct)}</td>
@@ -4681,7 +4702,7 @@ function renderMargemBody() {
       <span class="leg"><span class="ldot" style="background:var(--amber)"></span>0–10%</span>
       <span class="leg"><span class="ldot" style="background:var(--red)"></span>negativa</span>
       <span class="leg">▲▼ margem real vs. MC programada no markup</span>
-      <span class="leg" style="margin-left:auto">Margem de contribuição = valor vendido (c/ desconto) − custo de produção − comissão (3-COMISSÃO) − despesas de venda (8-D_VENDAS) do markup da tabela de preço</span>
+      <span class="leg" style="margin-left:auto">Margem de contribuição = valor vendido (c/ desconto) − custo de produção − comissão (3-COMISSÃO) − frete (% do markup; abaixo de R$ 3.000 por cliente na coleção, frete de um pedido de R$ 3.000) − demais despesas de venda (8-D_VENDAS) do markup da tabela de preço</span>
     </div>`;
   box.innerHTML = h;
 }
