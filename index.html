@@ -207,6 +207,14 @@
   .mg-in { background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--tx); font-family:var(--font); font-size:12px; padding:7px 10px; }
   .mg-in:focus { outline:none; border-color:var(--green); }
   #tab-margem .dash-table td[style*="text-align:right"], #tab-margem .dash-table td.tbl-group-cell { white-space:nowrap; }
+  #tab-margem:not(.hidden) { display:flex; flex-direction:column; overflow:hidden; padding-bottom:0; }
+  #tab-margem #mgBody { flex:1; min-height:0; overflow:auto; padding-bottom:20px; }
+  #tab-margem .mg-card { overflow:visible; margin-top:16px; }
+  #tab-margem .mg-card .col-card-header { border-bottom:1px solid var(--border); }
+  #tab-margem .mg-tbl { overflow:visible; border:none; border-radius:0; }
+  #tab-margem .mg-tbl thead th { position:sticky; top:0; z-index:3; background:var(--surface2); box-shadow:0 1px 0 var(--border); }
+  #tab-margem .mg-total { border-color:var(--green); }
+  #tab-margem .col-stat-item .cs-val { white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -4574,14 +4582,10 @@ function renderMargemBody() {
     valor: (a, b) => b.valor - a.valor,
   }[_mgState.ordem];
 
-  // Agrupar por marca → coleção
-  const grupos = {};
-  rows.forEach(r => { const k = r.marca + '||' + r.col; (grupos[k] = grupos[k] || []).push(r); });
-  const chaves = Object.keys(grupos).sort((a, b) => {
-    const [ma, ca] = a.split('||'), [mb, cb] = b.split('||');
-    if (ma !== mb) return ma.toUpperCase().includes('MYROCK') ? -1 : mb.toUpperCase().includes('MYROCK') ? 1 : ma.localeCompare(mb, 'pt-BR');
-    return cb.localeCompare(ca);
-  });
+  // Um card por coleção (marca dentro da coleção, se houver mais de uma)
+  const porCol = {};
+  rows.forEach(r => { (porCol[r.col] = porCol[r.col] || []).push(r); });
+  const cols = Object.keys(porCol).sort((a, b) => b.localeCompare(a, 'pt-BR', { numeric: true }));
 
   const bar = p => {
     const w = Math.max(0, Math.min(100, (p || 0) * 100));
@@ -4589,65 +4593,95 @@ function renderMargemBody() {
       <div style="width:70px;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden"><div style="width:${w}%;height:100%;background:${_mgCor(p)}"></div></div>
       <span style="font-weight:700;color:${_mgCor(p)};min-width:52px;text-align:right">${_mgPct(p)}</span></div>`;
   };
-
-  h += `<div class="tbl-wrap" style="margin-top:20px"><table class="dash-table"><thead><tr>
-    <th>Marca</th><th>Coleção</th><th style="text-align:center">Pedido</th><th>Cliente</th><th>Representante</th>
+  const tot = arr => {
+    const V = sum(arr, 'valor'), C = sum(arr, 'custo'), Co = sum(arr, 'comissao'), D = sum(arr, 'dvendas');
+    const M = V - C - Co - D;
+    return { V, C, Co, D, M, P: V ? M / V : NaN, pecas: sum(arr, 'pecas'), desc: sum(arr, 'desconto'), bruto: sum(arr, 'bruto'), prog: _mgProg(arr) };
+  };
+  const stats = t => `<div class="col-card-stats">
+      <div class="col-stat-item"><div class="cs-lbl">Valor</div><div class="cs-val">${fmtR(t.V)}</div></div>
+      <div class="col-stat-item"><div class="cs-lbl">Custo produção</div><div class="cs-val accent-amber">${fmtR(t.C)}</div></div>
+      <div class="col-stat-item"><div class="cs-lbl">Variáveis venda</div><div class="cs-val accent-red">${fmtR(t.Co + t.D)}</div></div>
+      <div class="col-stat-item"><div class="cs-lbl">Margem R$</div><div class="cs-val" style="color:${_mgCor(t.P)}">${fmtR(t.M)}</div></div>
+      <div class="col-stat-item"><div class="cs-lbl">Margem %</div><div class="cs-val" style="color:${_mgCor(t.P)}">${_mgPct(t.P)}</div></div>
+      <div class="col-stat-item"><div class="cs-lbl">MC programada</div><div class="cs-val">${_mgProgCell(t.prog, t.P)}</div></div>
+    </div>`;
+  const thead = `<thead><tr>
+    <th style="text-align:center">Pedido</th><th>Cliente</th><th>Representante</th>
     <th style="text-align:right">Peças</th><th style="text-align:right">Desconto</th><th style="text-align:right">Valor do pedido</th><th style="text-align:right">Custo produção</th>
     <th style="text-align:right">Comissão</th><th style="text-align:right">Desp. venda</th>
-    <th style="text-align:right">Margem R$</th><th style="text-align:right">Margem %</th><th style="text-align:right" title="Margem de contribuição programada no markup (índice 0-INDICE), ponderada pelo valor dos itens">MC programada</th></tr></thead><tbody>`;
+    <th style="text-align:right">Margem R$</th><th style="text-align:right">Margem %</th><th style="text-align:right" title="Margem de contribuição programada no markup da tabela de preço do pedido, ponderada pelo valor dos itens">MC programada</th></tr></thead>`;
+  const linhaTot = (lbl, t, cls) => `<tr class="${cls}"><td colspan="3"${cls === 'tbl-group' ? ' class="tbl-group-cell"' : ''}>${lbl}</td>
+    <td style="text-align:right">${Math.round(t.pecas).toLocaleString('pt-BR')}</td>
+    <td style="text-align:right">${_mgDesc(t.desc, t.bruto)}</td>
+    <td style="text-align:right">${fmtR(t.V)}</td><td style="text-align:right">${fmtR(t.C)}</td>
+    <td style="text-align:right">${fmtR(t.Co)}</td><td style="text-align:right">${fmtR(t.D)}</td>
+    <td style="text-align:right;color:${_mgCor(t.P)}">${fmtR(t.M)}</td><td>${bar(t.P)}</td>
+    <td style="text-align:right">${_mgProgCell(t.prog, t.P)}</td></tr>`;
+  const linhaPed = (r, i) => {
+    const aviso = (r.semCusto > 0 ? ` <span class="badge badge-red" title="${Math.round(r.semCusto)} peça(s) sem custo cadastrado">sem custo</span>` : '')
+      + (r.semMarkup > 0 ? ` <span class="badge badge-amber" title="${_mgR(r.semMarkup)} em produtos sem markup cadastrado">sem markup</span>` : '');
+    return `<tr class="${i % 2 === 0 ? 'tbl-even' : 'tbl-odd'}">
+      <td style="text-align:center;font-family:monospace;color:var(--muted)">${_mgEsc(r.pedido)}</td>
+      <td>${_mgEsc(r.cliente)}${aviso}</td>
+      <td style="color:var(--muted)">${_mgEsc(shortName(r.rep))}</td>
+      <td style="text-align:right">${Math.round(r.pecas).toLocaleString('pt-BR')}</td>
+      <td style="text-align:right;color:var(--muted);white-space:nowrap">${r.descPct ? `<span style="color:var(--amber);font-weight:600">${r.descPct.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</span> · ${_mgR(r.desconto)}` : '—'}</td>
+      <td style="text-align:right;font-weight:600">${_mgR(r.valor)}</td>
+      <td style="text-align:right;color:var(--muted)">${_mgR(r.custo)}</td>
+      <td style="text-align:right;color:var(--muted)">${_mgR(r.comissao)}</td>
+      <td style="text-align:right;color:var(--muted)">${_mgR(r.dvendas)}</td>
+      <td style="text-align:right;font-weight:600;color:${_mgCor(r.pct)}">${_mgR(r.margem)}</td>
+      <td>${bar(r.pct)}</td>
+      <td style="text-align:right;white-space:nowrap" title="${_mgEsc(r.markup || '')}">${_mgProgCell(_mgProg([r]), r.pct)}${r.nMarkups > 1 ? ' <span style="font-size:10px;color:var(--hint)">(' + r.nMarkups + ' markups)</span>' : ''}</td></tr>`;
+  };
 
-  chaves.forEach(k => {
-    const g = grupos[k].sort(ord), [marca, col] = k.split('||');
-    const gV = sum(g, 'valor'), gC = sum(g, 'custo'), gCo = sum(g, 'comissao'), gD = sum(g, 'dvendas');
-    const gM = gV - gC - gCo - gD, gP = gV ? gM / gV : NaN;
-    h += `<tr class="tbl-group">
-      <td class="tbl-group-cell">${_mgEsc(marca)}</td><td class="tbl-group-cell">${_mgEsc(col)}</td>
-      <td class="tbl-group-cell" style="text-align:center;color:var(--muted);font-weight:500">${g.length} ped.</td><td colspan="2"></td>
-      <td class="tbl-group-cell" style="text-align:right">${Math.round(sum(g, 'pecas')).toLocaleString('pt-BR')}</td>
-      <td class="tbl-group-cell" style="text-align:right">${_mgDesc(sum(g, 'desconto'), sum(g, 'bruto'))}</td>
-      <td class="tbl-group-cell" style="text-align:right">${fmtR(gV)}</td>
-      <td class="tbl-group-cell" style="text-align:right">${fmtR(gC)}</td>
-      <td class="tbl-group-cell" style="text-align:right">${fmtR(gCo)}</td>
-      <td class="tbl-group-cell" style="text-align:right">${fmtR(gD)}</td>
-      <td class="tbl-group-cell" style="text-align:right;color:${_mgCor(gP)}">${fmtR(gM)}</td>
-      <td class="tbl-group-cell">${bar(gP)}</td>
-      <td class="tbl-group-cell" style="text-align:right">${_mgProgCell(_mgProg(g), gP)}</td></tr>`;
-    g.forEach((r, i) => {
-      const aviso = (r.semCusto > 0 ? ` <span class="badge badge-red" title="${Math.round(r.semCusto)} peça(s) sem custo cadastrado">sem custo</span>` : '')
-        + (r.semMarkup > 0 ? ` <span class="badge badge-amber" title="${_mgR(r.semMarkup)} em produtos sem markup cadastrado">sem markup</span>` : '');
-      const _f = (r.markup.match(/MARKUP\s*([\d.,]+)/i) || [])[1];
-      const _d = r.markup.replace(/^\s*\S+\s+-\s+/, '');
-      const mk = r.markup ? r.markup.split(' - ')[0].trim() + ' · ' + _d.split(' - ')[0].replace(/\(.*?\)/g, '').trim() + (_f ? ' ' + _f : '') + (r.nMarkups > 1 ? ` +${r.nMarkups - 1}` : '') : '—';
-      h += `<tr class="${i % 2 === 0 ? 'tbl-even' : 'tbl-odd'}">
-        <td></td><td></td>
-        <td style="text-align:center;font-family:monospace;color:var(--muted)">${_mgEsc(r.pedido)}</td>
-        <td>${_mgEsc(r.cliente)}${aviso}</td>
-        <td style="color:var(--muted)">${_mgEsc(shortName(r.rep))}</td>
-        <td style="text-align:right">${Math.round(r.pecas).toLocaleString('pt-BR')}</td>
-        <td style="text-align:right;color:var(--muted);white-space:nowrap">${r.descPct ? `<span style="color:var(--amber);font-weight:600">${r.descPct.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</span> · ${_mgR(r.desconto)}` : '—'}</td>
-        <td style="text-align:right;font-weight:600">${_mgR(r.valor)}</td>
-        <td style="text-align:right;color:var(--muted)">${_mgR(r.custo)}</td>
-        <td style="text-align:right;color:var(--muted)">${_mgR(r.comissao)}</td>
-        <td style="text-align:right;color:var(--muted)">${_mgR(r.dvendas)}</td>
-        <td style="text-align:right;font-weight:600;color:${_mgCor(r.pct)}">${_mgR(r.margem)}</td>
-        <td>${bar(r.pct)}</td>
-        <td style="text-align:right;white-space:nowrap" title="${_mgEsc(mk + (r.markup ? ' — ' + r.markup : ''))}">${_mgProgCell(_mgProg([r]), r.pct)}${r.nMarkups > 1 ? ' <span style="font-size:10px;color:var(--hint)">(' + r.nMarkups + ' markups)</span>' : ''}</td></tr>`;
-    });
+  cols.forEach(col => {
+    const g = porCol[col].sort(ord);
+    const t = tot(g);
+    const marcas = [...new Set(g.map(r => r.marca))].sort();
+    let body = '';
+    if (marcas.length > 1) {
+      marcas.forEach(m => {
+        const gm = g.filter(r => r.marca === m);
+        body += linhaTot(_mgEsc(m) + ` <span style="color:var(--muted);font-weight:500">· ${gm.length} ped.</span>`, tot(gm), 'tbl-group');
+        gm.forEach((r, i) => { body += linhaPed(r, i); });
+      });
+    } else {
+      g.forEach((r, i) => { body += linhaPed(r, i); });
+    }
+    h += `<div class="col-card mg-card">
+      <div class="col-card-header">
+        <div class="col-card-left">
+          <div class="col-card-name">${_mgEsc(col)}</div>
+          <div class="col-card-sub">${_mgEsc(marcas.join(', '))} · ${g.length} pedido(s) · ${Math.round(t.pecas).toLocaleString('pt-BR')} peças · desconto ${_mgDesc(t.desc, t.bruto)}</div>
+          <div class="col-progress-track"><div class="col-progress-fill" style="width:${Math.max(0, Math.min(100, (t.P || 0) * 100 / 0.4))}%;background:${_mgCor(t.P)}"></div></div>
+        </div>
+        ${stats(t)}
+      </div>
+      <div class="tbl-wrap mg-tbl"><table class="dash-table">${thead}<tbody>${body}</tbody>
+        <tfoot>${linhaTot('Total da coleção', t, 'tbl-foot')}</tfoot></table></div>
+    </div>`;
   });
 
-  h += `</tbody><tfoot><tr class="tbl-foot"><td colspan="5">Total</td>
-    <td style="text-align:right">${Math.round(sum(rows, 'pecas')).toLocaleString('pt-BR')}</td>
-    <td style="text-align:right">${_mgDesc(sum(rows, 'desconto'), sum(rows, 'bruto'))}</td>
-    <td style="text-align:right">${fmtR(tV)}</td><td style="text-align:right">${fmtR(tC)}</td>
-    <td style="text-align:right">${fmtR(tCo)}</td><td style="text-align:right">${fmtR(tD)}</td>
-    <td style="text-align:right;color:${_mgCor(tP)}">${fmtR(tM)}</td><td style="text-align:right;color:${_mgCor(tP)}">${_mgPct(tP)}</td><td style="text-align:right">${_mgProgCell(_mgProg(rows), tP)}</td></tr></tfoot></table></div>
+  // Card de total geral
+  const tg = tot(rows);
+  h += `<div class="col-card mg-card mg-total">
+      <div class="col-card-header">
+        <div class="col-card-left">
+          <div class="col-card-name">Total geral</div>
+          <div class="col-card-sub">${cols.length} coleção(ões) · ${rows.length} pedido(s) · ${Math.round(tg.pecas).toLocaleString('pt-BR')} peças · desconto ${_mgDesc(tg.desc, tg.bruto)}</div>
+        </div>
+        ${stats(tg)}
+      </div>
+    </div>
     <div class="legend-row">
       <span class="leg"><span class="ldot" style="background:var(--green)"></span>≥ 20%</span>
       <span class="leg"><span class="ldot" style="background:var(--blue)"></span>10–20%</span>
       <span class="leg"><span class="ldot" style="background:var(--amber)"></span>0–10%</span>
       <span class="leg"><span class="ldot" style="background:var(--red)"></span>negativa</span>
       <span class="leg">▲▼ margem real vs. MC programada no markup</span>
-      <span class="leg" style="margin-left:auto">Margem de contribuição = valor vendido (c/ desconto) − custo de produção − comissão (3-COMISSÃO) − despesas de venda (8-D_VENDAS) do markup do produto</span>
+      <span class="leg" style="margin-left:auto">Margem de contribuição = valor vendido (c/ desconto) − custo de produção − comissão (3-COMISSÃO) − despesas de venda (8-D_VENDAS) do markup da tabela de preço</span>
     </div>`;
   box.innerHTML = h;
 }
