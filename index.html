@@ -4405,7 +4405,8 @@ document.addEventListener('input', function(e) {
 //  ABA MARGEM DE CONTRIBUIÇÃO POR PEDIDO — coleções atuais
 //  Receita  = PEDIDO[VAL_DESC_EMPENHO] (valor vendido, já com desconto)
 //  Peças    = QTDE_PED (em aberto + faturadas − canceladas), mesma base do VAL_DESC_EMPENHO
-//  Custo    = Σ peças × PEDIDO[CUSTO_UNIT] (custo de produção por produto, vindo do ERP)
+//  Custo e markup: por item, a linha da tabela de preços (PRECO_001: markup + grade) cujo PRECO_VENDA
+//  mais se aproxima do preço aplicado no pedido → custo da grade e índices desse markup (reserva: PRODUTO_001.CUSTO)
 //  Variáveis de venda (markup do produto: ERP PRECO_001 → PRECO_INDICE_001):
 //    Comissão   = Σ valor × índices tipo 3-COMISSAO / 100
 //    Desp. venda= Σ valor × índices tipo 8-D_VENDAS / 100
@@ -4594,7 +4595,8 @@ function renderMargemBody() {
       const aviso = (r.semCusto > 0 ? ` <span class="badge badge-red" title="${Math.round(r.semCusto)} peça(s) sem custo cadastrado">sem custo</span>` : '')
         + (r.semMarkup > 0 ? ` <span class="badge badge-amber" title="${_mgR(r.semMarkup)} em produtos sem markup cadastrado">sem markup</span>` : '');
       const _f = (r.markup.match(/MARKUP\s*([\d.,]+)/i) || [])[1];
-      const mk = r.markup ? r.markup.split(' - ')[0].replace(/\(.*?\)/g, '').trim() + (_f ? ' ' + _f : '') + (r.nMarkups > 1 ? ` +${r.nMarkups - 1}` : '') : '—';
+      const _d = r.markup.replace(/^\s*\S+\s+-\s+/, '');
+      const mk = r.markup ? r.markup.split(' - ')[0].trim() + ' · ' + _d.split(' - ')[0].replace(/\(.*?\)/g, '').trim() + (_f ? ' ' + _f : '') + (r.nMarkups > 1 ? ` +${r.nMarkups - 1}` : '') : '—';
       h += `<tr class="${i % 2 === 0 ? 'tbl-even' : 'tbl-odd'}">
         <td></td><td></td>
         <td style="text-align:center;font-family:monospace;color:var(--muted)">${_mgEsc(r.pedido)}</td>
