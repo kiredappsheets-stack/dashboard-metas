@@ -206,6 +206,7 @@
 
   .mg-in { background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--tx); font-family:var(--font); font-size:12px; padding:7px 10px; }
   .mg-in:focus { outline:none; border-color:var(--green); }
+  #tab-margem .dash-table td[style*="text-align:right"], #tab-margem .dash-table td.tbl-group-cell { white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -4418,6 +4419,8 @@ CALCULATETABLE(
   ADDCOLUMNS(
     SUMMARIZE(PEDIDO, PEDIDO[MARCA], PEDIDO[COLECAO], PEDIDO[PEDIDO], PEDIDO[CLIENTE], PEDIDO[REP]),
     "VALOR",       CALCULATE(SUM(PEDIDO[VAL_DESC_EMPENHO])),
+    "VALOR_BRUTO", CALCULATE(SUM(PEDIDO[FAT_TOTAL_BRUTO])),
+    "DESC_PCT",    CALCULATE(MAX(PEDIDO[DESCONTO])),
     "PECAS",       CALCULATE(SUM(PEDIDO[QTDE_PED])),
     "CUSTO",       CALCULATE(SUMX(PEDIDO, PEDIDO[QTDE_PED] * PEDIDO[CUSTO_UNIT])),
     "COMISSAO",    CALCULATE(SUMX(PEDIDO, PEDIDO[VAL_DESC_EMPENHO] * PEDIDO[PERC_COMISSAO_MK] / 100)),
@@ -4441,6 +4444,10 @@ function _mgTxt(r, c) { return String(r['PEDIDO[' + c + ']'] ?? r[c] ?? '').trim
 function _mgPct(v) { return isFinite(v) ? (v * 100).toFixed(1).replace('.', ',') + '%' : '—'; }
 function _mgR(v) { return 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function _mgEsc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function _mgDesc(d, b) {
+  if (!d) return '—';
+  return `<span style="color:var(--amber)">${b ? (d / b * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%' : ''}</span> · ${fmtR(d)}`;
+}
 function _mgCor(p) {
   if (!isFinite(p)) return 'var(--muted)';
   if (p < 0)    return 'var(--red)';
@@ -4462,6 +4469,7 @@ async function loadMargemTab(force) {
     cachedMargem = rows.map(r => {
       const valor = _mgNum(r, 'VALOR'), custo = _mgNum(r, 'CUSTO');
       const comissao = _mgNum(r, 'COMISSAO'), dvendas = _mgNum(r, 'DVENDAS');
+      const bruto = _mgNum(r, 'VALOR_BRUTO'), descPct = _mgNum(r, 'DESC_PCT');
       const margem = valor - custo - comissao - dvendas;
       return {
         marca: _mgTxt(r, 'MARCA'), col: _mgTxt(r, 'COLECAO'), pedido: _mgTxt(r, 'PEDIDO'),
@@ -4469,7 +4477,7 @@ async function loadMargemTab(force) {
         pecas: _mgNum(r, 'PECAS'), semCusto: _mgNum(r, 'PECAS_S_CUSTO'),
         semMarkup: _mgNum(r, 'VALOR_S_MARKUP'),
         markup: String(r['[MARKUP]'] ?? '').trim(), nMarkups: _mgNum(r, 'N_MARKUPS'),
-        valor, custo, comissao, dvendas, margem, pct: valor ? margem / valor : NaN,
+        valor, custo, comissao, dvendas, margem, bruto, descPct, desconto: Math.max(0, bruto - valor), pct: valor ? margem / valor : NaN,
       };
     }).filter(r => r.pedido && r.valor !== 0);
     renderMargemTab();
@@ -4538,7 +4546,7 @@ function renderMargemBody() {
   const nNeg = rows.filter(r => r.margem < 0).length;
 
   let h = `<div class="kpi-row" style="grid-template-columns:repeat(6,1fr)">
-    <div class="kpi accent-blue-border"><div class="kpi-lbl">Valor dos pedidos</div><div class="kpi-val">${fmtR(tV)}</div><div class="kpi-sub">${rows.length.toLocaleString('pt-BR')} pedidos · ${Math.round(sum(rows, 'pecas')).toLocaleString('pt-BR')} peças</div></div>
+    <div class="kpi accent-blue-border"><div class="kpi-lbl">Valor dos pedidos</div><div class="kpi-val">${fmtR(tV)}</div><div class="kpi-sub">${rows.length.toLocaleString('pt-BR')} pedidos · ${Math.round(sum(rows, 'pecas')).toLocaleString('pt-BR')} peças<br>desconto concedido ${fmtR(sum(rows, 'desconto'))}</div></div>
     <div class="kpi accent-amber-border"><div class="kpi-lbl">Custo de produção</div><div class="kpi-val accent-amber">${fmtR(tC)}</div><div class="kpi-sub">${tV ? _mgPct(tC / tV) : '—'} do valor vendido</div></div>
     <div class="kpi accent-red-border"><div class="kpi-lbl">Variáveis de venda</div><div class="kpi-val accent-red">${fmtR(tCo + tD)}</div><div class="kpi-sub">${tV ? _mgPct((tCo + tD) / tV) : '—'} · comissão ${fmtR(tCo)} · desp. ${fmtR(tD)}</div></div>
     <div class="kpi accent-green-border"><div class="kpi-lbl">Margem de contribuição</div><div class="kpi-val" style="color:${_mgCor(tP)}">${fmtR(tM)}</div><div class="kpi-sub">valor − custo − variáveis de venda</div></div>
@@ -4573,7 +4581,7 @@ function renderMargemBody() {
 
   h += `<div class="tbl-wrap" style="margin-top:20px"><table class="dash-table"><thead><tr>
     <th>Marca</th><th>Coleção</th><th style="text-align:center">Pedido</th><th>Cliente</th><th>Representante</th><th>Markup</th>
-    <th style="text-align:right">Peças</th><th style="text-align:right">Valor do pedido</th><th style="text-align:right">Custo produção</th>
+    <th style="text-align:right">Peças</th><th style="text-align:right">Desconto</th><th style="text-align:right">Valor do pedido</th><th style="text-align:right">Custo produção</th>
     <th style="text-align:right">Comissão</th><th style="text-align:right">Desp. venda</th>
     <th style="text-align:right">Margem R$</th><th style="text-align:right">Margem %</th></tr></thead><tbody>`;
 
@@ -4585,6 +4593,7 @@ function renderMargemBody() {
       <td class="tbl-group-cell">${_mgEsc(marca)}</td><td class="tbl-group-cell">${_mgEsc(col)}</td>
       <td class="tbl-group-cell" style="text-align:center;color:var(--muted);font-weight:500">${g.length} ped.</td><td colspan="3"></td>
       <td class="tbl-group-cell" style="text-align:right">${Math.round(sum(g, 'pecas')).toLocaleString('pt-BR')}</td>
+      <td class="tbl-group-cell" style="text-align:right">${_mgDesc(sum(g, 'desconto'), sum(g, 'bruto'))}</td>
       <td class="tbl-group-cell" style="text-align:right">${fmtR(gV)}</td>
       <td class="tbl-group-cell" style="text-align:right">${fmtR(gC)}</td>
       <td class="tbl-group-cell" style="text-align:right">${fmtR(gCo)}</td>
@@ -4604,6 +4613,7 @@ function renderMargemBody() {
         <td style="color:var(--muted)">${_mgEsc(shortName(r.rep))}</td>
         <td style="color:var(--muted);font-size:11px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${_mgEsc(r.markup)}">${_mgEsc(mk)}</td>
         <td style="text-align:right">${Math.round(r.pecas).toLocaleString('pt-BR')}</td>
+        <td style="text-align:right;color:var(--muted);white-space:nowrap">${r.descPct ? `<span style="color:var(--amber);font-weight:600">${r.descPct.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</span> · ${_mgR(r.desconto)}` : '—'}</td>
         <td style="text-align:right;font-weight:600">${_mgR(r.valor)}</td>
         <td style="text-align:right;color:var(--muted)">${_mgR(r.custo)}</td>
         <td style="text-align:right;color:var(--muted)">${_mgR(r.comissao)}</td>
@@ -4615,6 +4625,7 @@ function renderMargemBody() {
 
   h += `</tbody><tfoot><tr class="tbl-foot"><td colspan="6">Total</td>
     <td style="text-align:right">${Math.round(sum(rows, 'pecas')).toLocaleString('pt-BR')}</td>
+    <td style="text-align:right">${_mgDesc(sum(rows, 'desconto'), sum(rows, 'bruto'))}</td>
     <td style="text-align:right">${fmtR(tV)}</td><td style="text-align:right">${fmtR(tC)}</td>
     <td style="text-align:right">${fmtR(tCo)}</td><td style="text-align:right">${fmtR(tD)}</td>
     <td style="text-align:right;color:${_mgCor(tP)}">${fmtR(tM)}</td><td style="text-align:right;color:${_mgCor(tP)}">${_mgPct(tP)}</td></tr></tfoot></table></div>
