@@ -210,6 +210,14 @@
   .chat-act-btn.wa:hover { border-color:#25D366; }
   .chat-act-btn.ok { color:#00a884; border-color:#00a884; }
   .chat-msg-wrap.pending .chat-act-btn { display:none; }
+  .chat-act-btn.speaking { color:#e5484d; border-color:#e5484d; }
+  .chat-stop-audio { display:none; align-self:center; margin:0 auto 8px; align-items:center; gap:8px; height:32px; padding:0 14px 0 10px; border-radius:16px; border:none; background:#e5484d; color:#fff; font-family:var(--font); font-size:12px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.25); }
+  .chat-stop-audio.show { display:inline-flex; }
+  .chat-stop-audio:hover { background:#f2555a; }
+  .chat-stop-audio .eq { display:inline-flex; align-items:flex-end; gap:2px; height:12px; }
+  .chat-stop-audio .eq i { width:3px; background:#fff; border-radius:1px; animation:chatEq .9s infinite ease-in-out; }
+  .chat-stop-audio .eq i:nth-child(2){ animation-delay:.2s } .chat-stop-audio .eq i:nth-child(3){ animation-delay:.4s }
+  @keyframes chatEq { 0%,100%{height:3px} 50%{height:12px} }
   .chat-msg .msg-title { font-weight:700; font-size:13.5px; margin:0 0 6px; color:var(--tx); }
   .chat-msg .msg-li { position:relative; padding-left:14px; margin:2px 0; }
   .chat-msg .msg-li::before { content:''; position:absolute; left:3px; top:.62em; width:5px; height:5px; border-radius:50%; background:#00a884; }
@@ -2874,6 +2882,7 @@ function toggleChat() {
   chatOpen = !chatOpen;
   const panel = document.getElementById('chatPanel');
   panel.classList.toggle('open', chatOpen);
+  if (!chatOpen) pararAudio();
   if (chatOpen) document.getElementById('chatInput').focus();
 }
 
@@ -2956,9 +2965,18 @@ function addMsg(text, role) {
     shareBtn.title = 'Encaminhar no WhatsApp';
     shareBtn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14"><path fill="#25D366" d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm5.8 14.16c-.24.68-1.42 1.31-1.95 1.36-.5.05-.97.23-3.28-.68-2.78-1.1-4.55-3.93-4.69-4.11-.14-.18-1.12-1.49-1.12-2.84 0-1.35.71-2.02.96-2.29.25-.28.55-.35.73-.35l.53.01c.17.01.4-.06.62.48.24.56.8 1.94.87 2.08.07.14.12.3.02.48-.09.18-.14.3-.28.46-.14.16-.29.36-.42.48-.14.14-.28.29-.12.57.16.28.72 1.19 1.55 1.93 1.07.95 1.97 1.25 2.25 1.39.28.14.44.12.6-.07.16-.19.69-.81.88-1.09.18-.28.37-.23.62-.14.25.09 1.6.76 1.87.89.28.14.46.21.53.32.07.12.07.66-.17 1.33z"/></svg><span>Encaminhar</span>`;
     shareBtn.addEventListener('click', () => shareOnWhatsApp(wrap._text));
+    const ouvirBtn = document.createElement('button');
+    ouvirBtn.className = 'chat-act-btn chat-ouvir-btn';
+    ouvirBtn.title = 'Ouvir resposta';
+    ouvirBtn.innerHTML = _ICON_OUVIR + '<span>Ouvir</span>';
+    ouvirBtn.addEventListener('click', () => {
+      if (ouvirBtn.classList.contains('speaking')) pararAudio();
+      else speakResponse(wrap._text, ouvirBtn);
+    });
     shareRow.appendChild(timeSpan);
     shareRow.appendChild(copyBtn);
     shareRow.appendChild(shareBtn);
+    shareRow.appendChild(ouvirBtn);
     wrap.appendChild(div);
     wrap.appendChild(shareRow);
   } else {
@@ -3277,6 +3295,7 @@ async function sendChat() {
   if (!question) return;
   const wasVoice = lastInputWasVoice;
   lastInputWasVoice = false; // reset após usar
+  pararAudio();
 
   input.value = '';
   input.style.height = 'auto';
@@ -3398,7 +3417,8 @@ ${buildContext()}`;
     // Ler resposta em voz alta se a pergunta foi por voz
     if (wasVoice) {
       // Pequeno delay para não sobrepor com o texto a renderizar
-      setTimeout(() => speakResponse(answer), 300);
+      const _wrapResp = thinking.parentElement;
+      setTimeout(() => speakResponse(answer, _wrapResp && _wrapResp.querySelector('.chat-ouvir-btn')), 300);
     }
 
   } catch(e) {
@@ -3491,40 +3511,109 @@ function stopListening() {
   try { recognition && recognition.stop(); } catch(e) {}
 }
 
-function speakResponse(text) {
-  if (!synth) return;
-  synth.cancel();
-  // Limpar markdown antes de falar
-  const cleanText = text
+const _ICON_OUVIR = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.48 4.48 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06A9 9 0 0 0 14 3.23z"/></svg>';
+const _ICON_PARAR = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>';
+let _falaId = 0, _falaKeepAlive = null, _falaBtn = null;
+
+function _setFalaUI(ativo, btn) {
+  const pill = document.getElementById('chatStopAudio');
+  if (pill) pill.classList.toggle('show', ativo);
+  if (_falaBtn && _falaBtn !== btn) { _falaBtn.classList.remove('speaking'); _falaBtn.innerHTML = _ICON_OUVIR + '<span>Ouvir</span>'; }
+  _falaBtn = ativo ? (btn || null) : null;
+  if (btn) {
+    btn.classList.toggle('speaking', ativo);
+    btn.innerHTML = ativo ? _ICON_PARAR + '<span>Parar</span>' : _ICON_OUVIR + '<span>Ouvir</span>';
+  }
+}
+
+function pararAudio() {
+  _falaId++;
+  if (_falaKeepAlive) { clearInterval(_falaKeepAlive); _falaKeepAlive = null; }
+  if (synth) synth.cancel();
+  _setFalaUI(false, _falaBtn);
+}
+
+function _textoParaFala(text) {
+  return String(text || '')
+    .replace(/<[^>]+>/g, ' ')
     .replace(/[*][*](.*?)[*][*]/g, '$1')
     .replace(/[*](.*?)[*]/g, '$1')
-    .replace(/^#{1,3}\s+/gm, '')
-    .replace(/^[-\u2022]\s+/gm, '')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*[-•]\s+/gm, '')
     .replace(/`([^`]+)`/g, '$1')
-    .replace(/\n+/g, '. ')
+    .replace(/\|/g, ', ')
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '')
+    .replace(/R\$\s?/g, 'R$ ')
+    .replace(/\s*\n+\s*/g, '. ')
+    .replace(/([.!?:;,])\s*\.(\s|$)/g, '$1$2')
+    .replace(/\s{2,}/g, ' ')
     .trim();
-  const shortText = cleanText.length > 300 ? cleanText.substring(0, 300) + '.' : cleanText;
-  const utt = new SpeechSynthesisUtterance(shortText);
-  utt.lang = 'pt-BR';
-  utt.rate = 1.05;
-  utt.pitch = 0.85;
+}
 
-  function trySpeak() {
-    const voices = synth.getVoices();
-    // Prioridade: voz masculina pt-BR > qualquer pt-BR > qualquer masculina > primeira disponível
-    const ptBR = voices.filter(v => v.lang === 'pt-BR' || v.lang === 'pt_BR');
-    const ptBRMale = ptBR.find(v => /male|masculin|daniel|antonio|breno|lucas|google português brasil/i.test(v.name));
-    const ptAny = voices.find(v => v.lang.startsWith('pt'));
-    const maleAny = voices.find(v => /male|masculin/i.test(v.name) && v.lang.startsWith('pt'));
-    utt.voice = ptBRMale || maleAny || ptAny || voices[0] || null;
+// Divide em pedaços curtos (Chrome corta falas longas num único utterance)
+function _dividirFala(t, max = 180) {
+  const frases = t.match(/[^.!?;]+[.!?;]*\s*/g) || [t];
+  const out = [];
+  let atual = '';
+  for (let f of frases) {
+    f = f.trim(); if (!f) continue;
+    while (f.length > max) {
+      let corte = f.lastIndexOf(',', max);
+      if (corte < 60) corte = f.lastIndexOf(' ', max);
+      if (corte < 60) corte = max;
+      const parte = f.slice(0, corte + 1).trim();
+      if (atual) { out.push(atual); atual = ''; }
+      out.push(parte);
+      f = f.slice(corte + 1).trim();
+    }
+    if ((atual + ' ' + f).trim().length > max) { if (atual) out.push(atual); atual = f; }
+    else atual = (atual + ' ' + f).trim();
+  }
+  if (atual) out.push(atual);
+  return out;
+}
+
+function _escolherVoz() {
+  const voices = synth.getVoices();
+  const ptBR = voices.filter(v => v.lang === 'pt-BR' || v.lang === 'pt_BR');
+  const ptBRMale = ptBR.find(v => /male|masculin|daniel|antonio|breno|lucas|google português brasil/i.test(v.name));
+  const ptAny = voices.find(v => v.lang && v.lang.startsWith('pt'));
+  const maleAny = voices.find(v => /male|masculin/i.test(v.name) && v.lang && v.lang.startsWith('pt'));
+  return ptBRMale || ptBR[0] || maleAny || ptAny || null;
+}
+
+function speakResponse(text, btn) {
+  if (!synth) return;
+  pararAudio();
+  const partes = _dividirFala(_textoParaFala(text));
+  if (!partes.length) return;
+  const id = ++_falaId;
+  _setFalaUI(true, btn);
+
+  function falar(i) {
+    if (id !== _falaId) return;
+    if (i >= partes.length) { pararAudio(); return; }
+    const utt = new SpeechSynthesisUtterance(partes[i]);
+    utt.lang = 'pt-BR'; utt.rate = 1.05; utt.pitch = 0.85;
+    const voz = _escolherVoz(); if (voz) utt.voice = voz;
+    utt.onend = () => falar(i + 1);
+    utt.onerror = (e) => { if (e.error === 'interrupted' || e.error === 'canceled') return; falar(i + 1); };
     synth.speak(utt);
   }
 
-  // Algumas browsers carregam vozes de forma assíncrona
+  // Workaround Chrome: a fala para sozinha após ~15s sem pause/resume
+  _falaKeepAlive = setInterval(() => {
+    if (id !== _falaId) return;
+    if (synth.speaking && !synth.paused) { synth.pause(); synth.resume(); }
+  }, 10000);
+
   if (synth.getVoices().length === 0) {
-    synth.addEventListener('voiceschanged', trySpeak, { once: true });
+    let iniciado = false;
+    const go = () => { if (!iniciado) { iniciado = true; falar(0); } };
+    synth.addEventListener('voiceschanged', go, { once: true });
+    setTimeout(go, 800);
   } else {
-    trySpeak();
+    falar(0);
   }
 }
 
@@ -3559,6 +3648,7 @@ function speakResponse(text) {
       <div class="chat-time">Assistente</div>
     </div>
   </div>
+  <button class="chat-stop-audio" id="chatStopAudio" onclick="pararAudio()" title="Parar resposta em áudio">■ Parar áudio</button>
   <div class="chat-footer">
     <textarea class="chat-input" id="chatInput" placeholder="Mensagem..." rows="1"
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"
