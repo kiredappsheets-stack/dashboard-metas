@@ -3431,6 +3431,12 @@ CAPACIDADES:
 - Identificar tendências por representante, cliente, estado ou coleção
 - Responder sobre qualquer coleção histórica ou atual nos dados
 
+TAMANHO DA RESPOSTA (REGRA MAIS IMPORTANTE):
+- Responde de forma MUITO RESUMIDA: vai direto ao número/resposta pedida.
+- Máximo de 3 a 5 linhas curtas. Sem introdução, sem repetir a pergunta, sem conclusão, sem sugestões extras.
+- Em listas, mostra no máximo os 5 itens principais e resume o resto numa linha (ex: "+12 outros").
+- Só dá respostas completas/detalhadas quando o utilizador pedir explicitamente (ex: "detalhe", "completo", "explique", "todos", "lista completa").
+
 REGRAS DE FORMATAÇÃO:
 - Liste UM item por linha usando "- item" (NUNCA use | entre itens)
 - Títulos: # Título
@@ -3438,11 +3444,10 @@ REGRAS DE FORMATAÇÃO:
 - Use lista quando houver mais de 2 itens
 - Seja direto e objetivo
 
-EXEMPLO CORRETO:
-# Crescimento por Coleção
-- Coleção 41: R$ 210.019
-- Coleção 46: R$ 108.917 (-48%)
-- Coleção 53: R$ 537.282 (+393%)
+EXEMPLO CORRETO (pergunta: "quanto vendeu ontem?"):
+Ontem (07/11): **R$ 45.320** em **12 pedidos**.
+- MYROCK: **R$ 20.000**
+- CHARPEY: **R$ 15.000**
 
 CÁLCULOS QUE SABES FAZER:
 - Crescimento de uma coleção para outra: ((valor_novo - valor_anterior) / ABS(valor_anterior) * 100)
@@ -3644,6 +3649,7 @@ function pararAudio() {
   _falaId++;
   if (_falaKeepAlive) { clearInterval(_falaKeepAlive); _falaKeepAlive = null; }
   if (synth) synth.cancel();
+  _falaUtts = [];
   _setFalaUI(false, _falaBtn);
 }
 
@@ -3696,6 +3702,7 @@ function _escolherVoz() {
   return ptBRMale || ptBR[0] || maleAny || ptAny || null;
 }
 
+let _falaUtts = [];
 function speakResponse(text, btn) {
   if (!synth) return;
   pararAudio();
@@ -3704,30 +3711,34 @@ function speakResponse(text, btn) {
   const id = ++_falaId;
   _setFalaUI(true, btn);
 
-  function falar(i) {
+  function enfileirar() {
     if (id !== _falaId) return;
-    if (i >= partes.length) { pararAudio(); return; }
-    const utt = new SpeechSynthesisUtterance(partes[i]);
-    utt.lang = 'pt-BR'; utt.rate = 1.05; utt.pitch = 0.85;
-    const voz = _escolherVoz(); if (voz) utt.voice = voz;
-    utt.onend = () => falar(i + 1);
-    utt.onerror = (e) => { if (e.error === 'interrupted' || e.error === 'canceled') return; falar(i + 1); };
-    synth.speak(utt);
+    const voz = _escolherVoz();
+    // Guarda referências (no Chrome o utterance pode ser recolhido pelo GC e a fala para a meio)
+    _falaUtts = partes.map(t => {
+      const u = new SpeechSynthesisUtterance(t);
+      u.lang = 'pt-BR'; u.rate = 1.05; u.pitch = 0.85;
+      if (voz) u.voice = voz;
+      return u;
+    });
+    _falaUtts[_falaUtts.length - 1].onend = () => { if (id === _falaId) pararAudio(); };
+    _falaUtts.forEach(u => synth.speak(u));
+    // Vigia: quando a fila acabar (ou se o onend não disparar), limpa a UI
+    let comecou = false;
+    _falaKeepAlive = setInterval(() => {
+      if (id !== _falaId) return;
+      if (synth.speaking || synth.pending) { comecou = true; return; }
+      if (comecou) pararAudio();
+    }, 700);
   }
-
-  // Workaround Chrome: a fala para sozinha após ~15s sem pause/resume
-  _falaKeepAlive = setInterval(() => {
-    if (id !== _falaId) return;
-    if (synth.speaking && !synth.paused) { synth.pause(); synth.resume(); }
-  }, 10000);
 
   if (synth.getVoices().length === 0) {
     let iniciado = false;
-    const go = () => { if (!iniciado) { iniciado = true; falar(0); } };
+    const go = () => { if (!iniciado) { iniciado = true; enfileirar(); } };
     synth.addEventListener('voiceschanged', go, { once: true });
     setTimeout(go, 800);
   } else {
-    falar(0);
+    enfileirar();
   }
 }
 
