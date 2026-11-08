@@ -2754,6 +2754,91 @@ let cachedMarcas = [], cachedColecoes = [], cachedPedidosDetalhe = [], cachedPro
 let cachedFaturamento = [], cachedFatColecao = [], cachedClientesAtender = [];
 let chatHistory = [];
 
+// ════════ DADOS DO CHAT — carregados sob demanda na 1ª pergunta (ver _carregarDadosChat) ════════
+const DAX_CHAT_COLECOES = `
+EVALUATE
+SUMMARIZECOLUMNS(COLECOES[COLECAO], COLECOES[DESCRICAO], COLECOES[DT_FINAL], COLECOES[COL_ATUAL])
+ORDER BY COLECOES[COLECAO] ASC
+`;
+const DAX_CHAT_REPS = `
+EVALUATE
+SUMMARIZECOLUMNS(REPRESENTANTE[CODREP], REPRESENTANTE[REPRESENTANTE])
+ORDER BY REPRESENTANTE[REPRESENTANTE] ASC
+`;
+const DAX_CHAT_MARCAS = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  PEDIDO[MARCA], PEDIDO[COLECAO],
+  "FAT_LIQ",       SUM(PEDIDO[FAT_LIQ]),
+  "QTDE",          SUM(PEDIDO[QTDE_ORIG]),
+  "QTDE_PEDIDA",   SUM(PEDIDO[QTDE_ORIG]),
+  "QTDE_FATURADA", SUM(PEDIDO[QTDE_FAT]),
+  "QTDE_CANC",     SUM(PEDIDO[QTDE_CANC])
+)
+ORDER BY PEDIDO[MARCA] ASC, PEDIDO[COLECAO] ASC
+`;
+const DAX_CHAT_PEDIDOS = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  PEDIDO[COLECAO], PEDIDO[REP],
+  "FAT_LIQ", SUM(PEDIDO[FAT_LIQ]),
+  "QTDE",    SUM(PEDIDO[QTDE_ORIG])
+)
+ORDER BY PEDIDO[COLECAO] DESC
+`;
+const DAX_CHAT_VENDAS = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  PEDIDO[COLECAO], PEDIDO[REP], PEDIDO[CLIENTE],
+  FILTER(ALL(PEDIDO[DATA]), PEDIDO[DATA] >= TODAY() - 730),
+  "FAT_LIQ", SUM(PEDIDO[FAT_LIQ])
+)
+ORDER BY PEDIDO[COLECAO] DESC
+`;
+// Pedidos por dia (≈13 meses) — permite responder "quanto vendeu ontem / esta semana / este mês"
+const DAX_CHAT_DETALHE = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  PEDIDO[DATA], PEDIDO[PEDIDO], PEDIDO[REP], PEDIDO[CLIENTE], PEDIDO[MARCA], PEDIDO[COLECAO],
+  FILTER(ALL(PEDIDO[DATA]), PEDIDO[DATA] >= TODAY() - 400),
+  "VAL_VENDA",     SUM(PEDIDO[VAL_DESC_EMPENHO]),
+  "FAT_LIQ",       SUM(PEDIDO[FAT_LIQ]),
+  "FAT_BRUTO",     SUM(PEDIDO[FAT_TOTAL_BRUTO]),
+  "QTDE_PEDIDA",   SUM(PEDIDO[QTDE_ORIG]),
+  "QTDE_FATURADA", SUM(PEDIDO[QTDE_FAT]),
+  "QTDE_CANC",     SUM(PEDIDO[QTDE_CANC]),
+  "DESCONTO",      SUM(PEDIDO[DESC])
+)
+ORDER BY PEDIDO[DATA] DESC
+`;
+const DAX_CHAT_PRODUTOS = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  PEDIDO[COLECAO], PEDIDO[CLIENTE], PEDIDO[REP], PEDIDO[MARCA], PEDIDO[PRODUTO],
+  FILTER(ALL(PEDIDO[COL_ATUAL]), PEDIDO[COL_ATUAL] = "COL ATUAL"),
+  "VAL_VENDA",   SUM(PEDIDO[VAL_DESC_EMPENHO]),
+  "QTDE_PEDIDA", SUM(PEDIDO[QTDE_ORIG])
+)
+ORDER BY PEDIDO[COLECAO] DESC, PEDIDO[CLIENTE] ASC
+`;
+let _chatDadosEm = 0, _chatDadosPromise = null;
+async function _carregarDadosChat() {
+  if (Date.now() - _chatDadosEm < 15 * 60 * 1000 && cachedPedidosDetalhe.length) return;
+  if (_chatDadosPromise) return _chatDadosPromise;
+  _chatDadosPromise = (async () => {
+    const token = await getToken();
+    const safe = async (q) => { try { return await runDaxQuery(token, q, true) || []; } catch (e) { console.warn('Chat — query falhou:', e.message); return []; } };
+    const [col, reps, marcas, peds, vendas, det, prods, clis] = await Promise.all([
+      safe(DAX_CHAT_COLECOES), safe(DAX_CHAT_REPS), safe(DAX_CHAT_MARCAS), safe(DAX_CHAT_PEDIDOS),
+      safe(DAX_CHAT_VENDAS), safe(DAX_CHAT_DETALHE), safe(DAX_CHAT_PRODUTOS), safe(DAX_CLIENTES),
+    ]);
+    cachedColecoes = col; cachedReps = reps; cachedMarcas = marcas; cachedPedidos = peds;
+    cachedVendas = vendas; cachedPedidosDetalhe = det; cachedProdutos = prods; cachedClientes = clis;
+    _chatDadosEm = Date.now();
+  })().finally(() => { _chatDadosPromise = null; });
+  return _chatDadosPromise;
+}
+
 function toggleChat() {
   chatOpen = !chatOpen;
   const panel = document.getElementById('chatPanel');
@@ -2956,9 +3041,9 @@ function buildContext() {
     const gPd = (r,c) => r['PEDIDO['+c+']'] || r[c] || '';
     const gMd = (r,c) => parseFloat(r['['+c+']'] || r[c] || 0) || 0;
 
-    ctx += '=== PEDIDOS DETALHADOS (desde Jan/2024) ===\n';
+    ctx += '=== PEDIDOS DETALHADOS (últimos 13 meses, por data do pedido) ===\n';
     ctx += 'Use estes dados para responder perguntas sobre períodos específicos (hoje, semana, mês, ano).\n';
-    ctx += 'DATA está no formato DD/MM/AAAA. HOJE = ' + new Date().toLocaleDateString('pt-BR') + '\n\n';
+    { const _o = new Date(); _o.setDate(_o.getDate() - 1); ctx += 'DATA está no formato DD/MM/AAAA. HOJE = ' + new Date().toLocaleDateString('pt-BR') + ' | ONTEM = ' + _o.toLocaleDateString('pt-BR') + '\n\n'; }
 
     // Resumo por mês
     const porMes = {};
@@ -3027,7 +3112,7 @@ function buildContext() {
     ctx += '\n';
 
     // Pedidos individuais dos últimos 7 dias
-    const limite7 = new Date(hoje); limite7.setDate(hoje.getDate() - 5);
+    const limite7 = new Date(hoje); limite7.setDate(hoje.getDate() - 7);
     const recentes = cachedPedidosDetalhe.filter(r => {
       const dt = parseDt(gPd(r,'DATA'));
       return dt && dt >= limite7;
@@ -3147,11 +3232,14 @@ async function sendChat() {
   // histórico gerido após resposta
 
   const thinking = addMsg('A analisar os dados...', 'bot thinking');
+  try { await _carregarDadosChat(); } catch (e) { console.warn('Chat — dados detalhados indisponíveis:', e.message); }
 
   const systemPrompt = `És um assistente especializado em análise comercial de uma empresa de moda/vestuário.
 Responde SEMPRE em português do Brasil.
 
 CAPACIDADES:
+- Responder sobre vendas por DIA, semana e mês: usa a secção "PEDIDOS DETALHADOS" (resumo mensal, pedidos por dia dos últimos 30 dias e pedidos individuais recentes). NUNCA digas que só tens dados por coleção.
+- "Ontem" = o dia anterior a HOJE; se não houver linha para esse dia, diz que não houve pedidos nesse dia.
 - Analisar vendas, metas, crescimento, comparativos entre coleções
 - Calcular variações percentuais, crescimentos, rankings
 - Identificar tendências por representante, cliente, estado ou coleção
