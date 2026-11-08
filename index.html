@@ -2997,7 +2997,114 @@ function calcularCrescimento(anterior, atual) {
   return ((atual - anterior) / Math.abs(anterior) * 100).toFixed(1);
 }
 
-function buildContext() {
+// ══ HISTÓRICO DE CLIENTES (mesma base e regras da aba Clientes) ══
+function _normTxt(t) { return String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim(); }
+
+function _contextoHistClientes(question) {
+  if (!cachedClientes2 || !cachedClientes2.length) return '';
+  const gV = (r, c) => { const k = Object.keys(r).find(k=>k.toUpperCase().includes(c.toUpperCase()))||c; return r[k]??null; };
+  const fmtR = v => 'R$' + Math.round(v).toLocaleString('pt-BR');
+
+  const loc = {};
+  (cachedClientesLoc||[]).forEach(r => { const c = String(gV(r,'CODCLI')||'').trim(); if (c) loc[c] = { cidade:String(gV(r,'CIDADE')||''), estado:String(gV(r,'ESTADO')||'') }; });
+  const repsAtivos = new Set((cachedData||[]).filter(d => d.meta > 0).map(d => String(d.rep||'').trim()).filter(Boolean));
+
+  const repUlt = {}, nomeUlt = {};
+  cachedClientes2.forEach(r => {
+    const cod = String(gV(r,'CODCLI')||''), col = String(gV(r,'COLECAO')||'');
+    if (!cod || !col) return;
+    repUlt[cod] = String(gV(r,'REP')||''); nomeUlt[cod] = String(gV(r,'CLIENTE')||cod);
+  });
+  const porCli = {};
+  cachedClientes2.forEach(r => {
+    const cod = String(gV(r,'CODCLI')||''), marca = String(gV(r,'MARCA')||''), col = String(gV(r,'COLECAO')||'');
+    if (!cod || !marca || !col) return;
+    const venda = parseFloat(gV(r,'VENDA')||0) || 0;
+    if (!porCli[cod]) { const rr = repUlt[cod]||''; porCli[cod] = { cod, nome:nomeUlt[cod]||cod, rep: repsAtivos.has(rr) ? rr : '', l: loc[cod]||{}, marcas:{}, total:0 }; }
+    const m = porCli[cod].marcas[marca] = porCli[cod].marcas[marca] || {};
+    m[col] = (m[col]||0) + venda;
+    porCli[cod].total += venda;
+  });
+
+  // Coleções por marca (mais recente primeiro) → status igual à aba Clientes
+  const colsPorMarca = {};
+  cachedClientes2.forEach(r => { const m = String(gV(r,'MARCA')||''), c = String(gV(r,'COLECAO')||''); if (m && c) (colsPorMarca[m] = colsPorMarca[m] || new Set()).add(c); });
+  Object.keys(colsPorMarca).forEach(m => colsPorMarca[m] = [...colsPorMarca[m]].sort().reverse());
+  const statusDe = (marca, dm) => {
+    const cols = colsPorMarca[marca] || [];
+    if (cols.length < 2) return 'Novo';
+    const at = (dm[cols[0]]||0) > 0, ant = (dm[cols[1]]||0) > 0, antes = cols.slice(1).some(c => (dm[c]||0) > 0);
+    if (at && ant) return 'Mantido';
+    if (at && !antes) return 'Novo';
+    if (at && !ant) return 'Recuperado';
+    if (!at && antes) return 'Não repetido';
+    return 'Novo';
+  };
+
+  const linhaCli = c => {
+    let t = `CLIENTE: ${c.nome} (cód ${c.cod}) | REP: ${c.rep || 'sem rep ativo'} | ${c.l.cidade||'?'}-${c.l.estado||'?'} | Total histórico ${fmtR(c.total)}\n`;
+    Object.keys(c.marcas).sort().forEach(marca => {
+      const dm = c.marcas[marca];
+      const cols = (colsPorMarca[marca]||[]).filter(col => dm[col] !== undefined);
+      const ultimas = (colsPorMarca[marca]||[]).slice(0,2);
+      const semCompra = ultimas.filter(col => !(dm[col] > 0));
+      t += `  ${marca} [${statusDe(marca, dm)}]: ` + cols.map(col => `${col}=${fmtR(dm[col])}`).join('; ');
+      if (semCompra.length) t += ` | não comprou: ${semCompra.join(', ')}`;
+      t += '\n';
+    });
+    return t;
+  };
+
+  // Seleção: clientes citados na pergunta (nome ou código) → rep citado → resumo geral
+  const q = ' ' + _normTxt(question) + ' ';
+  const STOP = new Set(['LTDA','ME','EIRELI','EPP','COMERCIO','DE','DA','DO','DAS','DOS','E','MODAS','MODA','CONFECCOES','LOJA','LOJAS','SA','S','A','CIA']);
+  const lista = Object.values(porCli);
+  let alvo = lista.filter(c => {
+    if (q.includes(' ' + String(c.cod).replace(/^0+/,'') + ' ') || q.includes(' ' + c.cod + ' ')) return true;
+    const nn = _normTxt(c.nome);
+    if (nn.length >= 4 && q.includes(' ' + nn + ' ')) return true;
+    const pal = nn.split(' ').filter(w => w.length >= 4 && !STOP.has(w));
+    if (!pal.length) return false;
+    const hits = pal.filter(w => q.includes(' ' + w + ' ')).length;
+    return hits >= Math.min(2, pal.length);
+  });
+  let titulo = 'clientes citados na pergunta';
+  if (!alvo.length) {
+    const reps = [...new Set(lista.map(c => c.rep).filter(Boolean))];
+    const repCit = reps.filter(r => { const w = _normTxt(r).split(' ').filter(x => x.length >= 4); return w.length && w.some(x => q.includes(' ' + x + ' ')); });
+    if (repCit.length) { alvo = lista.filter(c => repCit.includes(c.rep)); titulo = 'carteira do(s) representante(s) ' + repCit.join(', '); }
+  }
+
+  let ctx = '=== HISTÓRICO DE CLIENTES POR MARCA E COLEÇÃO (mesmos dados da aba Clientes) ===\n';
+  ctx += 'FONTE PRINCIPAL para "histórico do cliente", "o que o cliente comprou", "clientes que não repetiram", status por marca.\n';
+  ctx += 'Valores = venda (FAT_LIQ) do cliente em cada coleção, separada por MARCA. REP = rep da última compra (só reps ativos).\n';
+  ctx += 'Status por marca (compara as 2 últimas coleções da marca): Mantido, Recuperado, Não repetido, Novo.\n';
+  ctx += 'Coleções mais recentes por marca: ' + Object.keys(colsPorMarca).sort().map(m => `${m}: ${colsPorMarca[m].slice(0,3).join(', ')}`).join(' | ') + '\n\n';
+
+  if (alvo.length) {
+    ctx += `-- Detalhe: ${titulo} (${alvo.length}) --\n`;
+    alvo.sort((a,b) => b.total - a.total).slice(0, 250).forEach(c => ctx += linhaCli(c));
+  } else {
+    ctx += 'Nenhum cliente específico citado. Se pedirem o histórico de um cliente, peça o nome ou código exato.\n';
+    // Resumo por marca: contagem de status
+    Object.keys(colsPorMarca).sort().forEach(marca => {
+      const cont = {};
+      lista.forEach(c => { if (c.marcas[marca]) { const st = statusDe(marca, c.marcas[marca]); cont[st] = (cont[st]||0) + 1; } });
+      ctx += `  ${marca}: ` + Object.entries(cont).map(([k,v]) => `${k} ${v}`).join(' | ') + '\n';
+    });
+    const filtroSt = /NAO REPET|NAO COMPR|SEM COMPRA|PERDID|DEIXOU/.test(q) ? 'Não repetido' : /RECUPER/.test(q) ? 'Recuperado' : /NOVOS?\b|PRIMEIRA COMPRA/.test(q) ? 'Novo' : /MANTID|REPETIU|REPETIRAM/.test(q) ? 'Mantido' : '';
+    if (filtroSt) {
+      const sel = lista.filter(c => Object.keys(c.marcas).some(m => statusDe(m, c.marcas[m]) === filtroSt));
+      ctx += `\n-- Clientes com status "${filtroSt}" em pelo menos uma marca (${sel.length}) --\n`;
+      sel.sort((a,b) => b.total - a.total).slice(0, 200).forEach(c => ctx += linhaCli(c));
+    }
+    ctx += '\n-- Top 60 clientes por venda histórica --\n';
+    lista.sort((a,b) => b.total - a.total).slice(0, 60).forEach(c => ctx += linhaCli(c));
+  }
+  return ctx + '\n';
+}
+
+function buildContext(question) {
   if (!cachedData || cachedData.length === 0) return "Dados não carregados.";
 
   const gP  = (r,c) => r['PEDIDO['+c+']']        || r[c] || '';
@@ -3285,6 +3392,9 @@ function buildContext() {
     });
   }
 
+  // ══ 11. HISTÓRICO DE CLIENTES (aba Clientes) ══
+  ctx += _contextoHistClientes(question);
+
   return ctx;
 }
 
@@ -3367,8 +3477,12 @@ QUANTIDADES NOS PEDIDOS:
 - Pedidos recentes podem ter QTDE_FATURADA=0 pois ainda estão em processamento
 - Para detalhar por produto/SKU, cliente ou coleção usa a secção PRODUTOS/SKU
 
+HISTÓRICO DE CLIENTES:
+- Para histórico de um cliente use SEMPRE a secção "HISTÓRICO DE CLIENTES POR MARCA E COLEÇÃO" (mesmos dados da aba Clientes).
+- Apresente dividido por MARCA e, dentro de cada marca, coleção a coleção (mais recente primeiro), com o status da marca (Mantido/Recuperado/Não repetido/Novo) e as coleções em que não comprou.
+
 DADOS COMPLETOS:
-${buildContext()}`;
+${buildContext(question)}`;
 
   const messages = [
     { role: 'user', parts: [{ text: systemPrompt + '\n\nPergunta do utilizador: ' + question }] }
