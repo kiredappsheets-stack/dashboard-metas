@@ -3523,7 +3523,15 @@ ${buildContext(question)}`;
     }
 
     const json = await res.json();
-    const answer = json.content?.[0]?.text || 'Não consegui obter uma resposta. Tenta novamente.';
+    if (json.type === 'error' || json.error) {
+      const msg = String(json.error?.message || json.error || '');
+      let aviso = '⚠️ O assistente está indisponível: ' + (msg || 'erro desconhecido') + '.';
+      if (/credit balance/i.test(msg)) aviso = '⚠️ O assistente está sem créditos na API da Anthropic. É preciso adicionar créditos em console.anthropic.com → Plans & Billing.';
+      else if (/overloaded|rate.?limit/i.test(msg)) aviso = '⚠️ O assistente está sobrecarregado neste momento. Tenta de novo em alguns segundos.';
+      else if (/prompt is too long|too many tokens/i.test(msg)) aviso = '⚠️ A pergunta gerou dados demais para o assistente. Tenta ser mais específico (ex: uma marca, coleção ou representante).';
+      throw Object.assign(new Error(aviso), { aviso: true });
+    }
+    const answer = (json.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim() || 'Não consegui obter uma resposta. Tenta novamente.';
 
     thinking.className = 'chat-msg bot';
     thinking.innerHTML = formatMsg(answer);
@@ -3542,7 +3550,8 @@ ${buildContext(question)}`;
 
   } catch(e) {
     thinking.className = 'chat-msg bot';
-    thinking.textContent = 'Erro ao contactar o assistente. Verifica a tua ligação e tenta novamente.';
+    thinking.textContent = e.aviso ? e.message : 'Erro ao contactar o assistente. Verifica a tua ligação e tenta novamente.';
+    if (thinking.parentElement) { thinking.parentElement._text = thinking.textContent; thinking.parentElement.classList.remove('pending'); }
   }
 
   sendBtn.disabled = false;
