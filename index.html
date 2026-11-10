@@ -467,6 +467,20 @@ CALCULATETABLE(
 ORDER BY 'PEDIDO CANCELADOS'[COLECAO] DESC, 'PEDIDO CANCELADOS'[REPRESENTANTE] ASC, [FAT_LIQ] DESC
 `;
 
+const DAX_RESTRICOES_HIST = `
+EVALUATE
+SUMMARIZECOLUMNS(
+  'PEDIDO CANCELADOS'[COLECAO],
+  'PEDIDO CANCELADOS'[REPRESENTANTE],
+  'PEDIDO CANCELADOS'[CLIENTE],
+  'PEDIDO CANCELADOS'[PEDIDO],
+  'PEDIDO CANCELADOS'[DESCRICAO],
+  'PEDIDO CANCELADOS'[OBS],
+  "FAT_LIQ", SUM('PEDIDO CANCELADOS'[FAT_LIQ])
+)
+ORDER BY 'PEDIDO CANCELADOS'[COLECAO] DESC, 'PEDIDO CANCELADOS'[REPRESENTANTE] ASC, [FAT_LIQ] DESC
+`;
+
 const DAX_KPIS_FAT = `
 EVALUATE
 ROW(
@@ -1013,7 +1027,77 @@ function renderDashboard(data) {
     return h;
   }
 
+  function buildRestricoesHist() {
+    if(!cachedRestricoesHist||!cachedRestricoesHist.length) return '<div class="empty-state">Nenhuma restrição histórica encontrada.</div>';
+    const gR=(r,c)=>r["PEDIDO CANCELADOS["+c+"]"]||r[c]||'';
+    const gM=(r,c)=>parseFloat(r["["+c+"]"]||r[c]||0)||0;
 
+    // Coleções únicas ordenadas decrescente
+    const colsR=[...new Set(cachedRestricoesHist.map(r=>gR(r,'COLECAO')))].sort().reverse();
+
+    // Filtro por coleção — selector no topo
+    const filterId = 'restHist_col_sel';
+    const totalGeral=cachedRestricoesHist.reduce((a,r)=>a+gM(r,'FAT_LIQ'),0);
+
+    let h=`<div style="padding:12px 16px 8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <label style="font-size:12px;font-weight:600;color:var(--muted)">Coleção:</label>
+      <select id="${filterId}" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:5px 10px;cursor:pointer">
+        <option value="">Todas (${fmtR(totalGeral)})</option>
+        ${colsR.map(col=>{
+          const tot=cachedRestricoesHist.filter(r=>gR(r,'COLECAO')===col).reduce((a,r)=>a+gM(r,'FAT_LIQ'),0);
+          return `<option value="${col}">${col} — ${fmtR(tot)}</option>`;
+        }).join('')}
+      </select>
+      <span id="restHist_count" style="font-size:11px;color:var(--muted)"></span>
+    </div>
+    <div class="tbl-wrap" id="restHist_tbl_wrap"><table class="dash-table"><thead><tr>
+      <th>Coleção</th><th>Representante</th><th>Cliente</th><th>Descrição</th>
+      <th style="text-align:center">Pedido</th><th style="text-align:right">Fat. Líq.</th><th>Obs.</th>
+    </tr></thead><tbody id="restHist_tbody"></tbody>
+    <tfoot><tr class="tbl-foot"><td colspan="6" id="restHist_foot_lbl">Total geral</td><td style="text-align:right" id="restHist_foot_val">${fmtR(totalGeral)}</td></tr></tfoot>
+    </table></div>`;
+
+    // Render via JS após injeção no DOM
+    setTimeout(() => {
+      const sel = document.getElementById(filterId);
+      if (!sel) return;
+      const renderHist = (colFiltro) => {
+        const rows = colFiltro
+          ? cachedRestricoesHist.filter(r=>gR(r,'COLECAO')===colFiltro)
+          : cachedRestricoesHist;
+        const cols = [...new Set(rows.map(r=>gR(r,'COLECAO')))].sort().reverse();
+        const total = rows.reduce((a,r)=>a+gM(r,'FAT_LIQ'),0);
+        let tb='';
+        cols.forEach(col=>{
+          const cr=rows.filter(r=>gR(r,'COLECAO')===col);
+          const tc=cr.reduce((a,r)=>a+gM(r,'FAT_LIQ'),0);
+          if (!colFiltro) tb+=`<tr class="tbl-group"><td colspan="6" class="tbl-group-cell">${col}</td><td class="tbl-group-cell" style="text-align:right">${fmtR(tc)}</td></tr>`;
+          cr.forEach((r,i)=>{
+            tb+=`<tr class="${i%2===0?'tbl-even':'tbl-odd'}">
+              <td style="color:var(--muted);font-size:11px">${colFiltro?col:''}</td>
+              <td>${gR(r,'REPRESENTANTE')}</td><td>${gR(r,'CLIENTE')}</td>
+              <td class="tbl-danger">${gR(r,'DESCRICAO')}</td>
+              <td style="text-align:center;font-family:monospace;color:var(--muted)">${gR(r,'PEDIDO')}</td>
+              <td style="text-align:right;font-weight:600">${fmtR(gM(r,'FAT_LIQ'))}</td>
+              <td class="tbl-obs">${gR(r,'OBS')||'—'}</td>
+            </tr>`;
+          });
+        });
+        const tbody = document.getElementById('restHist_tbody');
+        const footLbl = document.getElementById('restHist_foot_lbl');
+        const footVal = document.getElementById('restHist_foot_val');
+        const cnt = document.getElementById('restHist_count');
+        if(tbody) tbody.innerHTML=tb;
+        if(footLbl) footLbl.textContent = colFiltro ? `Total — ${colFiltro}` : 'Total geral';
+        if(footVal) footVal.textContent = fmtR(total);
+        if(cnt) cnt.textContent = `${rows.length} pedido${rows.length!==1?'s':''}`;
+      };
+      renderHist('');
+      sel.addEventListener('change', ()=>renderHist(sel.value));
+    }, 0);
+
+    return h;
+  }
 
   function buildHistorico() {
     if (!cachedHistMarca || !cachedHistMarca.length) return '<div class="empty-state">Dados históricos não disponíveis.</div>';
@@ -2437,6 +2521,7 @@ function renderDashboard(data) {
       <button class="tab-btn" data-tab="periodo">Histórico Semanal</button>
       <button class="tab-btn" data-tab="margem">💰 Margem por Pedido</button>
       <button class="tab-btn" data-tab="restricoes">Restrições <span class="tab-badge">${cachedRestricoes?cachedRestricoes.length:0}</span></button>
+      <button class="tab-btn" data-tab="restricoes-hist">Restr. Históricas <span class="tab-badge">${cachedRestricoesHist?cachedRestricoesHist.length:0}</span></button>
       <button class="tab-btn" data-tab="metas-admin">⚙ Metas</button>
       <button class="tab-btn" data-tab="leads">🏪 Leads</button>
     </div>
@@ -2447,6 +2532,7 @@ function renderDashboard(data) {
     <div class="tab-content hidden" id="tab-clientes">${buildClientes()}</div>
     <div class="tab-content hidden" id="tab-margem"><div class="loading-tab"><div class="spinner"></div>Abrindo…</div></div>
     <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
+    <div class="tab-content hidden" id="tab-restricoes-hist">${buildRestricoesHist()}</div>
     <div class="tab-content hidden" id="tab-metas-admin" style="padding:0;height:100%;overflow:hidden"><div class="loading-tab"><div class="spinner"></div>Aguardando dados…</div></div>
     <div class="tab-content hidden" id="tab-leads" style="padding:0;height:100%;overflow:hidden"><iframe src="https://lojistas.myrockdenim.com.br/admin.html" style="width:100%;height:100%;border:none;display:block" allow="identity-credentials-get" title="Leads de Lojistas"></iframe></div>
   `;
@@ -2575,6 +2661,7 @@ function applyCache(cached) {
   cachedKpis            = cached.kpis            || null;
   cachedMetasHist       = cached.metasHist       || [];
   cachedRestricoes      = cached.restricoes      || [];
+  cachedRestricoesHist  = cached.restricoesHist  || [];
   cachedHistMarca       = cached.histMarca       || [];
   cachedHistPeriodo     = cached.histPeriodo     || [];
   cachedClientes2       = cached.clientes2       || [];
@@ -2620,12 +2707,13 @@ async function loadDashboard() {
       try {
         const token = await getToken();
         const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
-        const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes] = await Promise.all([
+        const [data, kpis, kpisFat, metasHist, restricoes, restricoesHist, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes] = await Promise.all([
           safe(() => runDaxQuery(token, DAX_QUERY, false)),
           safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
           safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
           safe(() => runDaxQuery(token, DAX_METAS_HIST, true)),
           safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
+          safe(() => runDaxQuery(token, DAX_RESTRICOES_HIST, true)),
           safe(() => runDaxQuery(token, DAX_HIST_MARCA, true)),
           safe(() => runDaxQuery(token, DAX_HIST_PERIODO, true)),
           safe(() => runDaxQuery(token, DAX_HIST_CLIENTES, true)),
@@ -2642,7 +2730,7 @@ async function loadDashboard() {
           document.getElementById('lastUpdate').textContent = 'Dados do cache (atualização falhou)';
           return;
         }
-        cachedData = data; cachedMetasHist = metasHist; cachedRestricoes = restricoes;
+        cachedData = data; cachedMetasHist = metasHist; cachedRestricoes = restricoes; cachedRestricoesHist = restricoesHist;
         cachedHistMarca = histMarca||[]; cachedHistPeriodo = histPeriodo||[];
         cachedClientes2 = clientes2||[]; cachedCrmJustif = crmJustif||[]; cachedClientesLoc = clientesLoc||[];
         cachedGestaoCom = gestaoCom||[]; cachedColecoesDatas = colecoesDatas||[]; cachedCrmRetorno = crmRetorno||[];
@@ -2650,7 +2738,7 @@ async function loadDashboard() {
         cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
         if (kpisFat && kpisFat.length > 0) cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
 
-        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas, representantes: cachedRepresentantes });
+        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, restricoesHist: cachedRestricoesHist, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas, representantes: cachedRepresentantes });
         // Reatualizar as abas com dados novos
         renderDashboard(cachedData);
         const now2 = new Date();
@@ -2679,12 +2767,13 @@ async function loadDashboard() {
     if (lu) lu.textContent = 'A carregar dados do Power BI…';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, kpis, kpisFat, metasHist, restricoes, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes] = await Promise.all([
+    const [data, kpis, kpisFat, metasHist, restricoes, restricoesHist, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
       safe(() => runDaxQuery(token, DAX_METAS_HIST, true)),
       safe(() => runDaxQuery(token, DAX_RESTRICOES, true)),
+      safe(() => runDaxQuery(token, DAX_RESTRICOES_HIST, true)),
       safe(() => runDaxQuery(token, DAX_HIST_MARCA, true)),
       safe(() => runDaxQuery(token, DAX_HIST_PERIODO, true)),
       safe(() => runDaxQuery(token, DAX_HIST_CLIENTES, true)),
@@ -2704,6 +2793,7 @@ async function loadDashboard() {
     cachedData = data;
     cachedMetasHist = metasHist;
     cachedRestricoes = restricoes;
+    cachedRestricoesHist = restricoesHist;
     cachedHistMarca = histMarca || [];
     cachedHistPeriodo = histPeriodo || [];
     cachedClientes2 = clientes2 || [];
@@ -2718,7 +2808,7 @@ async function loadDashboard() {
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
-    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas, representantes: cachedRepresentantes });
+    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, restricoesHist: cachedRestricoesHist, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas, representantes: cachedRepresentantes });
     renderDashboard(data);
     _crmLoadFromSheets();
 
@@ -2777,6 +2867,7 @@ let cachedData = null;
 let cachedMetasHist = null;
 let cachedKpis = null;
 let cachedRestricoes = null;
+let cachedRestricoesHist = null;
 let cachedHistMarca = [];
 let cachedHistPeriodo = [];
 let cachedClientes2 = [];
