@@ -527,9 +527,11 @@ const DAX_CLIENTES_LOC = `
 EVALUATE
 SELECTCOLUMNS(
   CLIENTES,
-  "CODCLI", CLIENTES[CODCLI],
-  "CIDADE", CLIENTES[CIDADE],
-  "ESTADO", CLIENTES[ESTADO]
+  "CODCLI",  CLIENTES[CODCLI],
+  "CIDADE",  CLIENTES[CIDADE],
+  "ESTADO",  CLIENTES[ESTADO],
+  "CODREP",  CLIENTES[CODREP],
+  "REP",     CLIENTES[REP]
 )
 `;
 
@@ -1841,14 +1843,16 @@ function renderDashboard(data) {
       });
     }
 
-    // Índice de localização: codcli -> { cidade, estado }
+    // Índice de localização: codcli -> { cidade, estado, codrep, rep }
     const locPorCod = {};
     if (cachedClientesLoc && cachedClientesLoc.length) {
       cachedClientesLoc.forEach(r => {
         const cod    = String(gV(r,'CODCLI')||'').trim();
         const cidade = String(gV(r,'CIDADE')||'');
         const estado = String(gV(r,'ESTADO')||'');
-        if (cod) locPorCod[cod] = { cidade, estado };
+        const codrep = String(gV(r,'CODREP')||'').trim();
+        const rep    = String(gV(r,'REP')||'').trim();
+        if (cod) locPorCod[cod] = { cidade, estado, codrep, rep };
       });
     }
 
@@ -1878,7 +1882,9 @@ function renderDashboard(data) {
       const cod    = String(gV(r,'CODCLI')||'');
       const nome   = nomeUltimaVenda[cod] || String(gV(r,'CLIENTE')||cod);
       // Rep da última venda; se não tem meta na col atual → desativado → agrupa como sem rep
-      const repRaw = repUltimaVenda[cod]  || String(gV(r,'REP')||'');
+      // Prioridade: rep do cadastro CLIENTES (vínculo fixo) → fallback: última venda
+      const locRep = (locPorCod[cod]||{}).rep || '';
+      const repRaw = locRep || repUltimaVenda[cod] || String(gV(r,'REP')||'');
       const rep    = repsAtivos.has(repRaw) ? repRaw : '';
       const marca  = String(gV(r,'MARCA')||'');
       const col    = String(gV(r,'COLECAO')||'');
