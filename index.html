@@ -1700,8 +1700,13 @@ function renderDashboard(data) {
       // Coleções anteriores ordenadas desc (para pegar as 3 mais recentes)
       const colsAnter = todasCols.filter(c => !colVigSet.has(c)).sort().reverse();
 
-      // Consolidar stats por rep
-      const todosReps = new Set([...Object.keys(metaPorRep), ...Object.keys(cliColVig||{})]);
+      // Consolidar stats por rep — inclui TODOS os reps que aparecem em cliPorRepCol
+      // (não apenas os que têm meta ou compraram na vigente)
+      const todosReps = new Set([
+        ...Object.keys(metaPorRep),
+        ...Object.keys(cliColVig||{}),
+        ...Object.keys(cliPorRepCol||{})
+      ]);
       todosReps.forEach(rep => {
         const vigSet   = cliColVig[rep]    || new Set();
         const anterSet = cliColAnter[rep]  || new Set();
@@ -1811,7 +1816,8 @@ function renderDashboard(data) {
     // Preencher vendas por marca+rep (gcRows = dados Power BI por REP+MARCA)
     if (gcRows && gcRows.length) {
       gcRows.forEach(r => {
-        const rep    = String(gV(r,'REP')||'').trim();
+        const repRaw = String(gV(r,'REP')||'').trim();
+        const rep    = traduzRepGC(repRaw); // traduz código numérico → nome (igual ao repStats)
         const codRep = String(gV(r,'COD_REP')||'').trim();
         const marca  = String(gV(r,'MARCA')||'').trim() || '(sem marca)';
         const pecas  = parseFloat(gV(r,'PECAS')||0)||0;
