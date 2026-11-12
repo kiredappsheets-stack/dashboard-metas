@@ -1701,13 +1701,17 @@ function renderDashboard(data) {
         const naoRep    = [...carteira].filter(c => !vigSet.has(c)).length;
         const valorNovos = [...vigSet].filter(c => !anterSet.has(c)).reduce((s,c) => s + (valorMap[c]||0), 0);
 
-        // Ex-clientes = já compraram alguma vez mas não estão na carteira nem na vigente
+        // Todos os clientes históricos do rep
         const todasColsRep = Object.keys(cliPorRepCol[rep] || {});
         const todosClis = new Set();
         todasColsRep.forEach(c => (cliPorRepCol[rep][c] || new Set()).forEach(cli => todosClis.add(cli)));
+        // Ex-clientes = já compraram alguma vez mas não estão na carteira ativa nem na vigente
         const exClientes = [...todosClis].filter(c => !carteira.has(c) && !vigSet.has(c)).length;
+        // Carteira total = todos os clientes históricos (igual soma da aba Clientes)
+        const carteiraTotal = todosClis.size;
 
-        repStats[rep] = { atendidos, novos, mantidos, naoRep, exClientes, valorNovos, carteira: carteira.size, carteiraCods: carteira };
+        repStats[rep] = { atendidos, novos, mantidos, naoRep, exClientes, valorNovos,
+                          carteiraAtiva: carteira.size, carteira: carteiraTotal, carteiraCods: carteira };
       });
     }
 
@@ -1851,7 +1855,10 @@ function renderDashboard(data) {
           <span style="font-weight:600;color:#E84A4A">Ex-clientes</span> — clientes que já compraram mas não estão na carteira (últ. 3 coleções)
         </span>
         <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
-          <span style="font-weight:600;color:#9B8FFF">Carteira</span> — clientes distintos comprados nas últimas 3 coleções (excl. atual)
+          <span style="font-weight:600;color:var(--tx)">Carteira</span> — total de clientes com histórico de compra (soma da aba Clientes)
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
+          <span style="font-weight:600;color:#9B8FFF">Carteira ativa</span> — clientes distintos comprados nas últimas 3 coleções (excl. atual)
         </span>
         <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
           <span style="font-weight:600;color:#dc2626">Inadimp.</span> — clientes com saldo em atraso (Fluxo de Caixa)
@@ -1882,7 +1889,8 @@ function renderDashboard(data) {
         const pcPed  = rd.pedidos > 0 ? rd.pecas / rd.pedidos : 0;
         const pedMed = rd.clisA > 0 ? rd.venda / rd.clisA : 0;
         return { rep, ...rd, meta, pct, pcPed, pedMed,
-                 naoRep: st.naoRep||0, novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, carteira: st.carteira||0, valorNovos: st.valorNovos };
+                 naoRep: st.naoRep||0, novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes,
+                 carteiraAtiva: st.carteiraAtiva||0, carteira: st.carteira||0, valorNovos: st.valorNovos };
       }).sort((a,b) => b.venda - a.venda);
 
       // Adicionar reps com meta nesta marca mas sem venda (mesmo critério da Visão Geral)
@@ -1893,14 +1901,15 @@ function renderDashboard(data) {
         repRows.push({ rep, codRep: ufPorRep[rep]?.cod||'', uf: ufPorRep[rep]?.uf||'',
                        pecas:0, pedidos:0, clisA:0, venda:0, meta, pct:0, pcPed:0, pedMed:0,
                        naoRep:st.naoRep||0, novos:st.novos, mantidos:st.mantidos, exClientes:st.exClientes,
-                       carteira:st.carteira||0, valorNovos:st.valorNovos });
+                       carteiraAtiva:st.carteiraAtiva||0, carteira:st.carteira||0, valorNovos:st.valorNovos });
       });
 
       // Totais da marca
       const totM = repRows.reduce((a,r)=>({ pecas:a.pecas+r.pecas, meta:a.meta+r.meta, venda:a.venda+r.venda,
         clisA:a.clisA+r.clisA, novos:a.novos+r.novos, mantidos:a.mantidos+r.mantidos,
-        naoRep:a.naoRep+r.naoRep, exClientes:a.exClientes+r.exClientes, carteira:a.carteira+r.carteira, valorNovos:a.valorNovos+r.valorNovos }),
-        {pecas:0,meta:0,venda:0,clisA:0,novos:0,mantidos:0,naoRep:0,exClientes:0,carteira:0,valorNovos:0});
+        naoRep:a.naoRep+r.naoRep, exClientes:a.exClientes+r.exClientes,
+        carteiraAtiva:a.carteiraAtiva+r.carteiraAtiva, carteira:a.carteira+r.carteira, valorNovos:a.valorNovos+r.valorNovos }),
+        {pecas:0,meta:0,venda:0,clisA:0,novos:0,mantidos:0,naoRep:0,exClientes:0,carteiraAtiva:0,carteira:0,valorNovos:0});
       const totPctM = totM.meta > 0 ? totM.venda / totM.meta : 0;
       const totNaoRepM = totM.naoRep;
       const totColor = colorPct(totPctM);
@@ -1925,7 +1934,8 @@ function renderDashboard(data) {
         + '<th class="r">% Meta</th>'
         + '<th class="r">Pc/Pedido</th>'
         + '<th class="r">Ped. médio</th>'
-        + '<th class="r" style="color:#9B8FFF">Carteira</th>'
+        + '<th class="r" style="color:var(--tx)">Carteira</th>'
+        + '<th class="r" style="color:#9B8FFF">Carteira ativa</th>'
         + '<th class="r">Atendidos</th>'
         + '<th class="r" style="color:var(--green)">Novos</th>'
         + '<th class="r" style="color:#4C9EF1">Mantidos</th>'
@@ -1949,7 +1959,8 @@ function renderDashboard(data) {
         html += td(r.meta > 0 ? (r.pct*100).toFixed(1)+'%' : '—', 'color:' + pctColor + ';font-weight:700');
         html += td(r.pcPed > 0 ? Math.round(r.pcPed) : '—');
         html += td(r.pedMed > 0 ? fmtR(r.pedMed) : '—');
-        html += td(r.carteira > 0 ? r.carteira : '—', 'color:#9B8FFF');
+        html += td(r.carteira > 0 ? r.carteira : '—', 'color:var(--tx);font-weight:600');
+        html += td(r.carteiraAtiva > 0 ? r.carteiraAtiva : '—', 'color:#9B8FFF');
         html += td(r.clisA > 0 ? r.clisA : '—');
         html += td(r.novos > 0 ? r.novos : '—', 'color:var(--green)');
         html += td(r.mantidos > 0 ? r.mantidos : '—', 'color:#4C9EF1');
@@ -1969,7 +1980,8 @@ function renderDashboard(data) {
       html += td(fmtR(totM.venda), 'color:' + totColor);
       html += td((totPctM*100).toFixed(1)+'%', 'color:' + totColor);
       html += td('—') + td('—');
-      html += td(totM.carteira > 0 ? totM.carteira : '—', 'color:#9B8FFF');
+      html += td(totM.carteira > 0 ? totM.carteira : '—', 'color:var(--tx);font-weight:600');
+      html += td(totM.carteiraAtiva > 0 ? totM.carteiraAtiva : '—', 'color:#9B8FFF');
       html += td(totM.clisA > 0 ? totM.clisA : '—');
       html += td(totM.novos > 0 ? totM.novos : '—', 'color:var(--green)');
       html += td(totM.mantidos > 0 ? totM.mantidos : '—', 'color:#4C9EF1');
