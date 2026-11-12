@@ -2776,6 +2776,11 @@ function renderDashboard(data) {
         const canvas = document.getElementById(id);
         if (!canvas) return;
         if (canvas._chartInst) { canvas._chartInst.destroy(); canvas._chartInst = null; }
+        // Registra plugin datalabels se disponível
+        if (window.ChartDataLabels && !Chart._datalabelsRegistered) {
+          Chart.register(ChartDataLabels);
+          Chart._datalabelsRegistered = true;
+        }
         canvas._chartInst = new Chart(canvas, {
           type: 'bar',
           data: { labels: colecoes, datasets },
@@ -2789,8 +2794,28 @@ function renderDashboard(data) {
                     ? ' ' + ctx.dataset.label + ': R$ ' + ctx.parsed.y.toLocaleString('pt-BR',{minimumFractionDigits:0})
                     : ' ' + ctx.dataset.label + ': ' + ctx.parsed.y.toLocaleString('pt-BR') + ' pç'
                 }
+              },
+              datalabels: {
+                anchor: 'end',
+                align: 'end',
+                offset: 2,
+                color: '#94a3b8',
+                font: { size: 9, weight: '600' },
+                formatter: (val) => {
+                  if (!val) return '';
+                  if (isMoney) {
+                    return val >= 1e6
+                      ? 'R$' + (val/1e6).toFixed(1) + 'M'
+                      : 'R$' + (val/1e3).toFixed(0) + 'k';
+                  }
+                  return val >= 1000
+                    ? (val/1e3).toFixed(1) + 'k'
+                    : val.toLocaleString('pt-BR');
+                },
+                clip: false,
               }
             },
+            layout: { padding: { top: 20 } },
             scales: {
               x: { ticks:{color:'#64748b',font:{size:10}}, grid:{color:'rgba(148,163,184,0.08)'} },
               y: { ticks:{color:'#64748b',font:{size:10},
@@ -2823,20 +2848,28 @@ function renderDashboard(data) {
       _grafRenderCharts();
     }
 
-    // Carrega Chart.js se necessário
-    if (typeof Chart === 'undefined') {
+    // Carrega Chart.js + datalabels se necessário
+    function loadChartJs(cb) {
+      if (typeof Chart !== 'undefined' && window._chartDatalabelsLoaded) { cb(); return; }
       if (!document.getElementById('chartjs-cdn')) {
         const s = document.createElement('script');
         s.id = 'chartjs-cdn';
         s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
-        s.onload = buildAndRender;
+        s.onload = () => {
+          const dl = document.createElement('script');
+          dl.id = 'chartjs-datalabels-cdn';
+          dl.src = 'https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js';
+          dl.onload = () => { window._chartDatalabelsLoaded = true; cb(); };
+          document.head.appendChild(dl);
+        };
         document.head.appendChild(s);
+      } else if (!window._chartDatalabelsLoaded) {
+        setTimeout(() => loadChartJs(cb), 100);
       } else {
-        setTimeout(buildAndRender, 100);
+        cb();
       }
-    } else {
-      buildAndRender();
     }
+    loadChartJs(buildAndRender);
   }
 
   container.querySelectorAll('.tab-btn').forEach(btn => {
