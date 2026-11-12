@@ -1687,7 +1687,7 @@ function renderDashboard(data) {
         const atendidos   = vigSet.size;
         const novos       = [...vigSet].filter(c => !anterSet.has(c)).length;
         const mantidos    = [...vigSet].filter(c => anterSet.has(c)).length;
-        const exClientes  = [...anterSet].filter(c => !vigSet.has(c)).length;
+        const naoRep      = [...anterSet].filter(c => !vigSet.has(c)).length;
         const valorNovos  = [...vigSet].filter(c => !anterSet.has(c)).reduce((s,c) => s + (valorMap[c]||0), 0);
 
         // Carteira = clientes distintos nas últimas 3 coleções antes da vigente
@@ -1696,7 +1696,13 @@ function renderDashboard(data) {
         const carteira = new Set();
         cols3.forEach(c => (cliPorRepCol[rep][c] || new Set()).forEach(cli => carteira.add(cli)));
 
-        repStats[rep] = { atendidos, novos, mantidos, exClientes, valorNovos, carteira: carteira.size, carteiraCods: carteira };
+        // Ex-clientes = já compraram alguma vez mas não estão na carteira (últ. 3 cols excl. atual)
+        const todasColsRep = Object.keys(cliPorRepCol[rep] || {});
+        const todosClis = new Set();
+        todasColsRep.forEach(c => (cliPorRepCol[rep][c] || new Set()).forEach(cli => todosClis.add(cli)));
+        const exClientes = [...todosClis].filter(c => !carteira.has(c) && !vigSet.has(c)).length;
+
+        repStats[rep] = { atendidos, novos, mantidos, naoRep, exClientes, valorNovos, carteira: carteira.size, carteiraCods: carteira };
       });
     }
 
@@ -1837,7 +1843,7 @@ function renderDashboard(data) {
           <span style="font-weight:600;color:var(--amber)">Não rep.</span> — clientes da coleção anterior que não repetiram
         </span>
         <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
-          <span style="font-weight:600;color:#E84A4A">Ex-clientes</span> — clientes que já compraram mas não estão ativos na coleção atual
+          <span style="font-weight:600;color:#E84A4A">Ex-clientes</span> — clientes que já compraram mas não estão na carteira (últ. 3 coleções)
         </span>
         <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
           <span style="font-weight:600;color:#9B8FFF">Carteira</span> — clientes distintos comprados nas últimas 3 coleções (excl. atual)
@@ -1867,32 +1873,31 @@ function renderDashboard(data) {
       let repRows = Object.entries(repsNaMarca).map(([rep, rd]) => {
         const meta   = metaDestaMarca[rep] || 0;
         const pct    = meta > 0 ? rd.venda / meta : 0;
-        const st     = repStats[rep] || { novos:0, mantidos:0, exClientes:0, carteira:0, valorNovos:0 };
+        const st     = repStats[rep] || { novos:0, mantidos:0, naoRep:0, exClientes:0, carteira:0, valorNovos:0 };
         const pcPed  = rd.pedidos > 0 ? rd.pecas / rd.pedidos : 0;
         const pedMed = rd.clisA > 0 ? rd.venda / rd.clisA : 0;
-        const naoRep = Math.max(0, st.mantidos - st.novos);
-        return { rep, ...rd, meta, pct, pcPed, pedMed, naoRep,
-                 novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, carteira: st.carteira||0, valorNovos: st.valorNovos };
+        return { rep, ...rd, meta, pct, pcPed, pedMed,
+                 naoRep: st.naoRep||0, novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, carteira: st.carteira||0, valorNovos: st.valorNovos };
       }).sort((a,b) => b.venda - a.venda);
 
       // Adicionar reps com meta nesta marca mas sem venda (mesmo critério da Visão Geral)
       Object.keys(metaDestaMarca).forEach(rep => {
         if (repsNaMarca[rep]) return; // já tem venda, já está na lista
         const meta = metaDestaMarca[rep] || 0;
-        const st   = repStats[rep] || { novos:0, mantidos:0, exClientes:0, valorNovos:0 };
+        const st   = repStats[rep] || { novos:0, mantidos:0, naoRep:0, exClientes:0, valorNovos:0 };
         repRows.push({ rep, codRep: ufPorRep[rep]?.cod||'', uf: ufPorRep[rep]?.uf||'',
                        pecas:0, pedidos:0, clisA:0, venda:0, meta, pct:0, pcPed:0, pedMed:0,
-                       naoRep:0, novos:st.novos, mantidos:st.mantidos, exClientes:st.exClientes,
+                       naoRep:st.naoRep||0, novos:st.novos, mantidos:st.mantidos, exClientes:st.exClientes,
                        carteira:st.carteira||0, valorNovos:st.valorNovos });
       });
 
       // Totais da marca
       const totM = repRows.reduce((a,r)=>({ pecas:a.pecas+r.pecas, meta:a.meta+r.meta, venda:a.venda+r.venda,
         clisA:a.clisA+r.clisA, novos:a.novos+r.novos, mantidos:a.mantidos+r.mantidos,
-        exClientes:a.exClientes+r.exClientes, carteira:a.carteira+r.carteira, valorNovos:a.valorNovos+r.valorNovos }),
-        {pecas:0,meta:0,venda:0,clisA:0,novos:0,mantidos:0,exClientes:0,carteira:0,valorNovos:0});
+        naoRep:a.naoRep+r.naoRep, exClientes:a.exClientes+r.exClientes, carteira:a.carteira+r.carteira, valorNovos:a.valorNovos+r.valorNovos }),
+        {pecas:0,meta:0,venda:0,clisA:0,novos:0,mantidos:0,naoRep:0,exClientes:0,carteira:0,valorNovos:0});
       const totPctM = totM.meta > 0 ? totM.venda / totM.meta : 0;
-      const totNaoRepM = Math.max(0, totM.mantidos - totM.novos);
+      const totNaoRepM = totM.naoRep;
       const totColor = colorPct(totPctM);
 
       html += '<div>';
@@ -2727,20 +2732,24 @@ function renderDashboard(data) {
         .cli-status.mantido    { background:rgba(0,200,150,.18); color:#00c896; border:1px solid rgba(0,200,150,.35); }
         .cli-status.recuperado { background:rgba(76,158,241,.18); color:#4c9ef1; border:1px solid rgba(76,158,241,.35); }
         .cli-status.nao-rep    { background:rgba(245,166,35,.15); color:#f5a623; border:1px solid rgba(245,166,35,.35); }
+        .cli-status.ex-cliente { background:rgba(220,38,38,.10);  color:#E84A4A; border:1px solid rgba(220,38,38,.30); }
         .cli-status.novo       { background:rgba(180,100,255,.15); color:#b464ff; border:1px solid rgba(180,100,255,.35); }
         .cli-status.inadimplente { background:rgba(220,38,38,.13); color:#dc2626; border:1px solid rgba(220,38,38,.4); }
       `;
       document.head.appendChild(s);
     }
 
-    // Calcular status por marca (Mantido/Recuperado/Não repetido/Novo)
-    // Compara as duas últimas coleções de cada marca
-    const statusPorMarcaCli = {}; // statusPorMarcaCli[marca][cod] = 'mantido'|'recuperado'|'nao-rep'|'novo'
+    // Calcular status por marca
+    // Mantido     = comprou na atual E na anterior
+    // Recuperado  = comprou na atual, não na anterior mas comprou antes
+    // Novo        = comprou na atual, nunca comprou antes
+    // Não rep.    = comprou na anterior mas não na atual (ainda na carteira)
+    // Ex-cliente  = não comprou nas últimas 3 coleções excl. atual (fora da carteira)
+    const statusPorMarcaCli = {}; // statusPorMarcaCli[marca][cod] = 'mantido'|'recuperado'|'nao-rep'|'ex-cliente'|'novo'
     todasMarcas.forEach(marca => {
       const cols = colsPorMarca[marca];
       statusPorMarcaCli[marca] = {};
       if (cols.length < 2) {
-        // Só uma coleção → todos são "novo"
         Object.keys(porCliente).forEach(cod => {
           if (porCliente[cod].marcas[marca]) statusPorMarcaCli[marca][cod] = 'novo';
         });
@@ -2749,21 +2758,26 @@ function renderDashboard(data) {
       // cols está em ordem decrescente (mais recente primeiro)
       const colAtual    = cols[0];
       const colAnterior = cols[1];
+      // carteira = últimas 3 coleções excl. atual (cols[1], cols[2], cols[3])
+      const cols3 = cols.slice(1, 4);
       Object.keys(porCliente).forEach(cod => {
         const dm = porCliente[cod].marcas[marca];
         if (!dm) return;
         const comprou_atual    = (dm[colAtual]    || 0) > 0;
         const comprou_anterior = (dm[colAnterior] || 0) > 0;
-        const comprouAntes = cols.slice(1).some(c => (dm[c] || 0) > 0);
+        const comprouAntes     = cols.slice(1).some(c => (dm[c] || 0) > 0);
+        const naCarteira       = cols3.some(c => (dm[c] || 0) > 0);
         if (comprou_atual && comprou_anterior)  statusPorMarcaCli[marca][cod] = 'mantido';
         else if (comprou_atual && !comprouAntes) statusPorMarcaCli[marca][cod] = 'novo';
         else if (comprou_atual && !comprou_anterior) statusPorMarcaCli[marca][cod] = 'recuperado';
-        else if (!comprou_atual && comprouAntes) statusPorMarcaCli[marca][cod] = 'nao-rep';
+        else if (!comprou_atual && comprou_anterior) statusPorMarcaCli[marca][cod] = 'nao-rep';
+        else if (!comprou_atual && naCarteira)   statusPorMarcaCli[marca][cod] = 'nao-rep';
+        else if (!comprou_atual && comprouAntes) statusPorMarcaCli[marca][cod] = 'ex-cliente';
         else statusPorMarcaCli[marca][cod] = 'novo';
       });
     });
 
-    const statusLabel = { 'mantido':'Mantido', 'recuperado':'Recuperado', 'nao-rep':'Ex-cliente', 'novo':'Novo', 'inadimplente':'Inadimplente' };
+    const statusLabel = { 'mantido':'Mantido', 'recuperado':'Recuperado', 'nao-rep':'Não rep.', 'ex-cliente':'Ex-cliente', 'novo':'Novo', 'inadimplente':'Inadimplente' };
 
     // ── Set de inadimplentes (codNorm) para badge e filtro ──
     const normI = c => String(parseInt(c,10)||0);
@@ -2955,8 +2969,9 @@ function renderDashboard(data) {
           <option value="">Todos os status</option>
           <option value="mantido">Mantido</option>
           <option value="recuperado">Recuperado</option>
-          <option value="nao-rep">Ex-cliente</option>
           <option value="novo">Novo</option>
+          <option value="nao-rep">Não rep.</option>
+          <option value="ex-cliente">Ex-cliente</option>
           <option value="inadimplente">Inadimplente</option>
         </select>
         <button id="${uid}_col_toggle" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap">⚙ Coleções</button>
@@ -2970,10 +2985,11 @@ function renderDashboard(data) {
         </button>
         <span id="${uid}_count" style="font-size:11px;color:var(--hint);margin-left:4px"></span>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;font-size:10px">
-          <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status mantido" style="margin:0">Mantido</span><span style="color:var(--muted)">comprou nas 2 últimas coleções</span></span>
+          <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status mantido" style="margin:0">Mantido</span><span style="color:var(--muted)">comprou na atual e na anterior</span></span>
           <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status recuperado" style="margin:0">Recuperado</span><span style="color:var(--muted)">comprou na atual, não na anterior</span></span>
-          <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status nao-rep" style="margin:0">Ex-cliente</span><span style="color:var(--muted)">não comprou na coleção atual</span></span>
           <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status novo" style="margin:0">Novo</span><span style="color:var(--muted)">nunca comprou antes</span></span>
+          <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status nao-rep" style="margin:0">Não rep.</span><span style="color:var(--muted)">comprou na anterior, não na atual</span></span>
+          <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status ex-cliente" style="margin:0">Ex-cliente</span><span style="color:var(--muted)">não está na carteira (últ. 3 coleções)</span></span>
           <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status inadimplente" style="margin:0">Inadimplente</span><span style="color:var(--muted)">saldo em atraso no Fluxo de Caixa</span></span>
         </div>
       </div>
@@ -3087,7 +3103,7 @@ function renderDashboard(data) {
 
         // Abre WhatsApp com mensagem curta pedindo para anexar o PDF
         const statusLabel2 = statusSel?.value
-          ? ({mantido:'Mantido',recuperado:'Recuperado','nao-rep':'Ex-cliente',novo:'Novo'})[statusSel.value] || statusSel.value
+          ? ({mantido:'Mantido',recuperado:'Recuperado','nao-rep':'Não rep.','ex-cliente':'Ex-cliente',novo:'Novo'})[statusSel.value] || statusSel.value
           : '';
         const statusTxt = statusLabel2 ? ` | Status: ${statusLabel2}` : '';
         const msg = `📋 *Relatório de Clientes — ${dataHora}*\nRepresentante: *${repSelecionado}*${statusTxt}\nTotal: ${countTxt}\n\n_(O relatório PDF foi gerado — salve e anexe aqui)_`;
@@ -3105,7 +3121,7 @@ function renderDashboard(data) {
       const abrirPdf = (modo) => {
         const repLabel     = repSel.value || 'Todos os representantes';
         const statusLabel2 = statusSel?.value
-          ? ({mantido:'Mantido',recuperado:'Recuperado','nao-rep':'Ex-cliente',novo:'Novo'})[statusSel.value] || statusSel.value
+          ? ({mantido:'Mantido',recuperado:'Recuperado','nao-rep':'Não rep.','ex-cliente':'Ex-cliente',novo:'Novo'})[statusSel.value] || statusSel.value
           : 'Todos os status';
         const busca2   = buscaEl.value.trim();
         const countTxt = countEl ? countEl.textContent : '';
@@ -3156,6 +3172,7 @@ function renderDashboard(data) {
             .cli-status.mantido{color:#007a5a;border-color:#007a5a;background:rgba(0,122,90,.12)!important}
             .cli-status.recuperado{color:#1a5fa8;border-color:#1a5fa8;background:rgba(26,95,168,.12)!important}
             .cli-status.nao-rep{color:#a06000;border-color:#a06000;background:rgba(160,96,0,.12)!important}
+            .cli-status.ex-cliente{color:#b71c1c;border-color:#b71c1c;background:rgba(183,28,28,.10)!important}
             .cli-status.novo{color:#6b2fad;border-color:#6b2fad;background:rgba(107,47,173,.12)!important}
             .tbl-foot td{background:#e8e8e8!important;font-weight:700;color:#333!important;border-top:2px solid #aaa!important;position:static!important}
             span[title*="mais"]{color:#007a5a!important}
@@ -4096,6 +4113,7 @@ function _contextoHistClientes(question) {
     if (at && ant) return 'Mantido';
     if (at && !antes) return 'Novo';
     if (at && !ant) return 'Recuperado';
+    if (!at && ant) return 'Não rep.';
     if (!at && antes) return 'Ex-cliente';
     return 'Novo';
   };
@@ -4137,7 +4155,7 @@ function _contextoHistClientes(question) {
   let ctx = '=== HISTÓRICO DE CLIENTES POR MARCA E COLEÇÃO (mesmos dados da aba Clientes) ===\n';
   ctx += 'FONTE PRINCIPAL para "histórico do cliente", "o que o cliente comprou", "clientes que não repetiram", status por marca.\n';
   ctx += 'Valores = venda (FAT_LIQ) do cliente em cada coleção, separada por MARCA. REP = rep da última compra (só reps ativos).\n';
-  ctx += 'Status por marca (compara as 2 últimas coleções da marca): Mantido, Recuperado, Ex-cliente (não comprou na coleção atual), Novo.\n';
+  ctx += 'Status por marca: Mantido (comprou atual+anterior), Recuperado (atual sim, anterior não), Novo (nunca comprou antes), Não rep. (anterior sim, atual não — ainda na carteira), Ex-cliente (fora da carteira = sem compra nas últimas 3 coleções excl. atual).\n';
   ctx += 'Coleções mais recentes por marca: ' + Object.keys(colsPorMarca).sort().map(m => `${m}: ${colsPorMarca[m].slice(0,3).join(', ')}`).join(' | ') + '\n\n';
 
   if (alvo.length) {
@@ -4151,7 +4169,7 @@ function _contextoHistClientes(question) {
       lista.forEach(c => { if (c.marcas[marca]) { const st = statusDe(marca, c.marcas[marca]); cont[st] = (cont[st]||0) + 1; } });
       ctx += `  ${marca}: ` + Object.entries(cont).map(([k,v]) => `${k} ${v}`).join(' | ') + '\n';
     });
-    const filtroSt = /NAO REPET|NAO COMPR|SEM COMPRA|PERDID|DEIXOU|EX.CLIEN|EX CLIEN/.test(q) ? 'Ex-cliente' : /RECUPER/.test(q) ? 'Recuperado' : /NOVOS?\b|PRIMEIRA COMPRA/.test(q) ? 'Novo' : /MANTID|REPETIU|REPETIRAM/.test(q) ? 'Mantido' : '';
+    const filtroSt = /EX.CLIEN|EX CLIEN|FORA DA CARTEIRA|SEM COMPRA NAS/.test(q) ? 'Ex-cliente' : /NAO REPET|NAO COMPR|SEM COMPRA|PERDID|DEIXOU/.test(q) ? 'Não rep.' : /RECUPER/.test(q) ? 'Recuperado' : /NOVOS?\b|PRIMEIRA COMPRA/.test(q) ? 'Novo' : /MANTID|REPETIU|REPETIRAM/.test(q) ? 'Mantido' : '';
     if (filtroSt) {
       const sel = lista.filter(c => Object.keys(c.marcas).some(m => statusDe(m, c.marcas[m]) === filtroSt));
       ctx += `\n-- Clientes com status "${filtroSt}" em pelo menos uma marca (${sel.length}) --\n`;
