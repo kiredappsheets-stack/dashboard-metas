@@ -1111,15 +1111,29 @@ function renderDashboard(data) {
 
     return `
     <div style="padding:16px">
+      <!-- Filtro de marca -->
+      <div id="graficos-marca-filter" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
+        <span style="font-size:11px;color:var(--muted);font-weight:600;margin-right:4px">Marca:</span>
+        <button onclick="graficosToggleMarca('__all__')" data-marca="__all__"
+          style="padding:4px 12px;border-radius:16px;border:1px solid var(--border);background:var(--accent);color:#fff;font-size:11px;font-weight:600;cursor:pointer">
+          Todas
+        </button>
+        ${marcas.map(m => `
+        <button onclick="graficosToggleMarca('${m}')" data-marca="${m}"
+          style="padding:4px 12px;border-radius:16px;border:2px solid ${corPorMarca[m]};background:transparent;color:var(--tx);font-size:11px;font-weight:600;cursor:pointer">
+          ${m}
+        </button>`).join('')}
+      </div>
+
       <!-- Totalizadores rápidos -->
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+      <div id="graficos-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">
         ${marcas.map(m => {
           const rows   = cachedGraficosMarcaCol.filter(r=>gG(r,'MARCA')===m);
           const totalV = rows.reduce((a,r)=>a+gN(r,'VENDA'),0);
           const totalP = rows.reduce((a,r)=>a+gN(r,'PECAS'),0);
           const totalF = rows.reduce((a,r)=>a+gN(r,'PECAS_FAT'),0);
           const aberto = Math.max(0, totalP - totalF);
-          return `<div style="background:var(--surface2);border-radius:8px;padding:10px 14px;border-left:3px solid ${corPorMarca[m]};min-width:160px">
+          return `<div data-card-marca="${m}" style="background:var(--surface2);border-radius:8px;padding:10px 14px;border-left:3px solid ${corPorMarca[m]};min-width:160px">
             <div style="font-size:11px;color:var(--muted);font-weight:600">${m}</div>
             <div style="font-size:14px;font-weight:700;color:var(--tx)">R$ ${(totalV/1e6).toFixed(1)}M</div>
             <div style="font-size:11px;color:var(--muted)">${totalP.toLocaleString('pt-BR')} peças vendidas</div>
@@ -2673,7 +2687,51 @@ function renderDashboard(data) {
   `;
 
   // ── Chart.js: gráficos de marca × coleção ──────────────────────────────
+  let _grafMarcasSel = new Set(); // marcas selecionadas (vazio = todas)
+
+  window.graficosToggleMarca = function(marca) {
+    if (marca === '__all__') {
+      _grafMarcasSel.clear();
+    } else {
+      if (_grafMarcasSel.has(marca)) {
+        _grafMarcasSel.delete(marca);
+      } else {
+        _grafMarcasSel.add(marca);
+      }
+    }
+    // Atualiza visual dos botões
+    document.querySelectorAll('#graficos-marca-filter button').forEach(btn => {
+      const bm = btn.dataset.marca;
+      if (bm === '__all__') {
+        btn.style.background = _grafMarcasSel.size === 0 ? 'var(--accent)' : 'transparent';
+        btn.style.color      = _grafMarcasSel.size === 0 ? '#fff' : 'var(--muted)';
+      } else {
+        const ativo = _grafMarcasSel.has(bm);
+        btn.style.background = ativo ? btn._cor : 'transparent';
+        btn.style.color      = ativo ? '#fff'   : 'var(--tx)';
+        btn.style.opacity    = (_grafMarcasSel.size > 0 && !ativo) ? '0.4' : '1';
+      }
+    });
+    // Mostra/oculta cards
+    document.querySelectorAll('#graficos-cards [data-card-marca]').forEach(card => {
+      const cm = card.dataset.cardMarca;
+      card.style.display = (_grafMarcasSel.size === 0 || _grafMarcasSel.has(cm)) ? '' : 'none';
+    });
+    // Rerenderiza gráficos
+    _grafRenderCharts();
+  };
+
+  let _grafRenderCharts = () => {};
+
   function initGraficosChart() {
+    // guarda cor nos botões para toggle
+    document.querySelectorAll('#graficos-marca-filter button[data-marca]').forEach(btn => {
+      if (btn.dataset.marca !== '__all__') {
+        const style = btn.style.borderColor || btn.style.border;
+        btn._cor = btn.style.borderColor;
+      }
+    });
+
     function buildAndRender() {
       if (typeof Chart === 'undefined') { setTimeout(buildAndRender, 100); return; }
       if (!cachedGraficosMarcaCol || !cachedGraficosMarcaCol.length) return;
@@ -2681,11 +2739,16 @@ function renderDashboard(data) {
       const gG = (r,c) => r['PEDIDO['+c+']'] || r['['+c+']'] || r[c] || '';
       const gN = (r,c) => parseFloat(r['['+c+']'] || r[c] || 0) || 0;
 
-      const colecoes = [...new Set(cachedGraficosMarcaCol.map(r=>gG(r,'COLECAO')))].sort();
-      const marcas   = [...new Set(cachedGraficosMarcaCol.map(r=>gG(r,'MARCA')))].sort();
-      const cores    = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#8b5cf6','#14b8a6','#f97316','#84cc16'];
+      const colecoes  = [...new Set(cachedGraficosMarcaCol.map(r=>gG(r,'COLECAO')))].sort();
+      const todasMarcas = [...new Set(cachedGraficosMarcaCol.map(r=>gG(r,'MARCA')))].sort();
+      const cores     = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#8b5cf6','#14b8a6','#f97316','#84cc16'];
       const corPorMarca = {};
-      marcas.forEach((m,i) => { corPorMarca[m] = cores[i % cores.length]; });
+      todasMarcas.forEach((m,i) => { corPorMarca[m] = cores[i % cores.length]; });
+
+      // Guarda cor nos botões
+      document.querySelectorAll('#graficos-marca-filter button[data-marca]').forEach(btn => {
+        if (btn.dataset.marca !== '__all__') btn._cor = corPorMarca[btn.dataset.marca] || '#6366f1';
+      });
 
       const idx = {};
       cachedGraficosMarcaCol.forEach(r => {
@@ -2700,13 +2763,6 @@ function renderDashboard(data) {
           pecas_aberto: Math.max(0, pecas - pecasFat),
         };
       });
-
-      const mkDatasets = tipo => marcas.map(m => ({
-        label: m,
-        data: colecoes.map(c => idx[c]?.[m]?.[tipo] || 0),
-        backgroundColor: corPorMarca[m],
-        borderRadius: 4,
-      }));
 
       function mkChart(id, datasets, yLabel, isMoney) {
         const canvas = document.getElementById(id);
@@ -2740,9 +2796,22 @@ function renderDashboard(data) {
         });
       }
 
-      mkChart('chartVendas',       mkDatasets('venda'),        'Faturamento (R$)', true);
-      mkChart('chartPecas',        mkDatasets('pecas'),        'Peças vendidas', false);
-      mkChart('chartPecasAFaturar',mkDatasets('pecas_aberto'), 'Peças não faturadas', false);
+      _grafRenderCharts = function() {
+        const marcas = _grafMarcasSel.size > 0
+          ? todasMarcas.filter(m => _grafMarcasSel.has(m))
+          : todasMarcas;
+        const mkDatasets = tipo => marcas.map(m => ({
+          label: m,
+          data: colecoes.map(c => idx[c]?.[m]?.[tipo] || 0),
+          backgroundColor: corPorMarca[m],
+          borderRadius: 4,
+        }));
+        mkChart('chartVendas',        mkDatasets('venda'),        'Faturamento (R$)', true);
+        mkChart('chartPecas',         mkDatasets('pecas'),        'Peças vendidas', false);
+        mkChart('chartPecasAFaturar', mkDatasets('pecas_aberto'), 'Peças não faturadas', false);
+      };
+
+      _grafRenderCharts();
     }
 
     // Carrega Chart.js se necessário
