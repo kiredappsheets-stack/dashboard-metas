@@ -648,11 +648,13 @@ ORDER BY PEDIDO[MARCA] ASC
 
 const DAX_REPRESENTANTES = `
 EVALUATE
-SUMMARIZE(
-  REPRESENTANTE,
-  REPRESENTANTE[CODREP],
-  REPRESENTANTE[REPRESENTANTE],
-  REPRESENTANTE[TELEFONE]
+ADDCOLUMNS(
+  SUMMARIZE(
+    REPRESENTANTE,
+    REPRESENTANTE[CODREP],
+    REPRESENTANTE[REPRESENTANTE]
+  ),
+  "TELEFONE", RELATED(CLIENTES[TELEFONE])
 )
 ORDER BY REPRESENTANTE[REPRESENTANTE] ASC
 `;
@@ -1797,10 +1799,11 @@ function renderDashboard(data) {
 
     // Índice case-insensitive para repStats — resolve diferença de maiúsculas entre
     // cachedClientesLoc (campo REP textual) e cachedRepresentantes (campo REPRESENTANTE)
-    const repStatsCI = {}; // repNormUppercase -> repStats entry
+    // var em vez de const para que buildClientes (hoisted) possa acessar via closure
+    var repStatsCI = {}; // repNormUppercase -> repStats entry
     Object.keys(repStats).forEach(k => { repStatsCI[k.toUpperCase().trim()] = repStats[k]; });
     // Função helper: busca repStats com fallback case-insensitive
-    const getRepStats = rep => repStats[rep] || repStatsCI[String(rep||'').toUpperCase().trim()] || null;
+    function getRepStats(rep) { return repStats[rep] || repStatsCI[String(rep||'').toUpperCase().trim()] || null; }
 
     // ── Helpers de estilo ──
     const shortRep = n => n.replace(/\b(REPRESENTACOES|REPRESENTACAO|COMERCIAL|LTDA\.?|LIMITADA|UNIPESSOAL|S\/S|& CIA)\b/gi,'').replace(/\s+/g,' ').trim();
@@ -3627,10 +3630,10 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v50';
+const CACHE_KEY = 'dashCache_v51';
 // Limpar TODAS as versões antigas — também limpa tudo se quota atingida
 try {
-  for(let i=1;i<=49;i++) localStorage.removeItem('dashCache_v'+i);
+  for(let i=1;i<=50;i++) localStorage.removeItem('dashCache_v'+i);
   // Se ainda há chaves antigas ocupando espaço, limpa tudo
   const keysToRemove = [];
   for(let i=0;i<localStorage.length;i++){
