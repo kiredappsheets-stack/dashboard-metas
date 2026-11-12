@@ -2102,6 +2102,12 @@ function renderDashboard(data) {
         inadMap[cn].rep = repCad;
       } else if (naCarteiraPed) {
         inadMap[cn].rep = repPed;
+      } else if (repCad) {
+        // Está no cadastro do rep mas sem pedido recente — ainda pertence ao rep
+        inadMap[cn].rep = repCad;
+      } else if (repPed) {
+        // Nunca teve cadastro mas já pediu com esse rep
+        inadMap[cn].rep = repPed;
       } else {
         inadMap[cn].rep = '(sem carteira ativa)';
       }
