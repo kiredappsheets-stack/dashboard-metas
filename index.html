@@ -2244,8 +2244,51 @@ function renderDashboard(data) {
     if (temFiltro) {
       html += '<button class="inad-filter-clear" onclick="window._inadFiltros={rep:\'\',cliente:\'\'};window._reRenderInad()">✕ Limpar filtros</button>';
     }
-    html += '</div>'
-      + '<div class="inad-cols-grid" style="overflow-y:auto;flex:1;grid-template-columns:repeat(' + nCols + ',minmax(0,1fr))">';
+    // ── Resumo por marca ──
+    // Mapa CODCLI → marca principal (via cachedClientes2)
+    const marcaPorCodI = {};
+    (cachedClientes2||[]).forEach(r => {
+      const cod   = normI(String(gV(r,'CODCLI')||'').trim());
+      const marca = String(gV(r,'MARCA')||gV(r,'BRAND')||'').trim().toUpperCase();
+      if (cod && marca && !marcaPorCodI[cod]) marcaPorCodI[cod] = marca;
+    });
+    // Acumular por marca usando porRepFiltrado
+    const resumoMarca = {};
+    Object.values(porRepFiltrado).flat().forEach(r => {
+      const marca = marcaPorCodI[r.cn] || '(SEM MARCA)';
+      if (!resumoMarca[marca]) resumoMarca[marca] = { clientes: 0, saldo: 0 };
+      resumoMarca[marca].clientes++;
+      resumoMarca[marca].saldo += r.saldo;
+    });
+    // Também acumular "sem carteira ativa" se não houver filtro
+    if (!temFiltro && porRep['(sem carteira ativa)']) {
+      porRep['(sem carteira ativa)'].forEach(r => {
+        const marca = marcaPorCodI[r.cn] || '(SEM MARCA)';
+        if (!resumoMarca[marca]) resumoMarca[marca] = { clientes: 0, saldo: 0 };
+        resumoMarca[marca].clientes++;
+        resumoMarca[marca].saldo += r.saldo;
+      });
+    }
+    const marcasOrdenadas = Object.keys(resumoMarca).sort((a,b) => resumoMarca[b].saldo - resumoMarca[a].saldo);
+    if (marcasOrdenadas.length > 0) {
+      html += '<div style="padding:0 16px 12px"><div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
+        + '<div style="padding:8px 14px;font-size:11px;font-weight:700;color:var(--muted);border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.06em">Resumo por marca</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:0">';
+      marcasOrdenadas.forEach((marca, i) => {
+        const d = resumoMarca[marca];
+        const isMyr = marca.includes('MYROCK');
+        const cor = isMyr ? '#2563eb' : '#7c3aed';
+        html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-right:1px solid var(--border);border-bottom:' + (i < marcasOrdenadas.length - 1 ? '0' : '0') + 'px solid var(--border);min-width:200px;flex:1">'
+          + '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + cor + ';flex-shrink:0"></span>'
+          + '<span style="font-size:12px;font-weight:600;color:var(--tx);flex:1">' + marca + '</span>'
+          + '<span style="font-size:11px;color:var(--muted);white-space:nowrap">' + d.clientes + ' cli.</span>'
+          + '<span style="font-size:12px;font-weight:700;color:#dc2626;white-space:nowrap;margin-left:8px">' + fmtR(d.saldo) + '</span>'
+          + '</div>';
+      });
+      html += '</div></div></div>';
+    }
+
+    html += '<div class="inad-cols-grid" style="overflow-y:auto;flex:1;grid-template-columns:repeat(' + nCols + ',minmax(0,1fr))">';
 
     if (repsVisiveis.length === 0) {
       html += '<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--muted)">Nenhum resultado para os filtros selecionados.</div>';
