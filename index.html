@@ -2158,6 +2158,13 @@ function renderDashboard(data) {
       ...repsSemCarteira.filter(r => porRep[r])
     ];
 
+    // ── Listas para os selects ──
+    const todosReps = repsOrdenados.filter(r => r !== '(sem carteira ativa)');
+    const todosClientes = Object.values(inadMap)
+      .filter(c => c.rep !== '(sem carteira ativa)')
+      .map(c => ({ cn: Object.keys(inadMap).find(k => inadMap[k] === c), nome: c.nome, rep: c.rep }))
+      .sort((a,b) => (a.nome||'').localeCompare(b.nome||'','pt-BR'));
+
     const totalGeral = Object.values(inadMap).reduce((s,r)=>s+r.saldo, 0);
     const totalClients = Object.keys(inadMap).length;
 
@@ -2176,29 +2183,74 @@ function renderDashboard(data) {
         .inad-tbl tfoot td { background:var(--sidebar)!important; font-weight:700; color:var(--muted); border-top:2px solid var(--border); position:sticky; bottom:0; }
         .inad-cols-grid { display:grid; gap:20px; padding:0 16px 24px; }
         .inad-section-header { grid-column:1/-1; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; padding:6px 4px 2px; border-bottom:2px solid; margin-bottom:2px; }
+        .inad-filter-select { background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--tx); font-size:12px; padding:5px 10px; min-width:180px; max-width:280px; cursor:pointer; }
+        .inad-filter-select:focus { outline:none; border-color:#dc2626; }
+        .inad-filter-clear { background:none; border:none; color:var(--muted); font-size:11px; cursor:pointer; padding:4px 8px; border-radius:4px; }
+        .inad-filter-clear:hover { color:#dc2626; background:var(--surface2); }
       `;
       document.head.appendChild(s);
     }
 
-    // Layout em grid de colunas: N reps lado a lado
-    const nReps = repsOrdenados.filter(r=>!['(sem carteira ativa)'].includes(r)).length;
-    // até 3 colunas por linha
+    // ── Estado dos filtros ──
+    if (!window._inadFiltros) window._inadFiltros = { rep: '', cliente: '' };
+    const filtros = window._inadFiltros;
+
+    // Aplicar filtros ao porRep
+    const porRepFiltrado = {};
+    Object.keys(porRep).forEach(rep => {
+      if (rep === '(sem carteira ativa)') return;
+      if (filtros.rep && rep !== filtros.rep) return;
+      const rows = porRep[rep].filter(r => {
+        if (!filtros.cliente) return true;
+        return r.cn === filtros.cliente || (r.nome||'').toUpperCase().includes(filtros.cliente.toUpperCase());
+      });
+      if (rows.length) porRepFiltrado[rep] = rows;
+    });
+
+    const repsVisiveis = repsOrdenados.filter(r => r !== '(sem carteira ativa)' && porRepFiltrado[r]);
+    const totalFiltrado = Object.values(porRepFiltrado).flat().reduce((s,r)=>s+r.saldo, 0);
+    const countFiltrado = Object.values(porRepFiltrado).flat().length;
+    const temFiltro = filtros.rep || filtros.cliente;
+
+    // Layout em grid de colunas
+    const nReps = repsVisiveis.length;
     const nCols = Math.min(Math.max(nReps,1), 3);
 
-    let html = '<div style="padding:16px 20px 8px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">'
-      + '<div style="font-size:15px;font-weight:700;color:#dc2626">Inadimplentes</div>'
+    // ── Cabeçalho com filtros ──
+    let html = '<div style="padding:16px 20px 8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+      + '<div style="font-size:15px;font-weight:700;color:#dc2626;margin-right:4px">Inadimplentes</div>'
       + '<div style="font-size:12px;color:var(--muted)">'
-      + totalClients + ' cliente' + (totalClients!==1?'s':'')
-      + ' · Saldo total em atraso: <span style="color:#dc2626;font-weight:700">' + fmtR(totalGeral) + '</span>'
-      + '</div></div>'
+      + (temFiltro ? countFiltrado + ' de ' + totalClients : totalClients)
+      + ' cliente' + (totalClients!==1?'s':'')
+      + ' · Saldo: <span style="color:#dc2626;font-weight:700">' + fmtR(temFiltro ? totalFiltrado : totalGeral) + '</span>'
+      + '</div>'
+      + '<div style="flex:1"></div>'
+      // Select de Representante
+      + '<select class="inad-filter-select" id="inad-sel-rep" onchange="window._inadFiltros.rep=this.value;window._inadFiltros.cliente=\'\';document.getElementById(\'tab-inadimplentes\').innerHTML=buildInadimplentes()">'
+      + '<option value="">Todos os representantes</option>'
+      + todosReps.map(r => '<option value="' + r.replace(/"/g,'&quot;') + '"' + (filtros.rep===r?' selected':'') + '>' + shortRep(r) + '</option>').join('')
+      + '</select>'
+      // Select de Cliente
+      + '<select class="inad-filter-select" id="inad-sel-cli" onchange="window._inadFiltros.cliente=this.value;document.getElementById(\'tab-inadimplentes\').innerHTML=buildInadimplentes()">'
+      + '<option value="">Todos os clientes</option>'
+      + todosClientes
+          .filter(c => !filtros.rep || c.rep === filtros.rep)
+          .map(c => '<option value="' + (c.cn||'').replace(/"/g,'&quot;') + '"' + (filtros.cliente===c.cn?' selected':'') + '>' + (c.nome||c.cn) + '</option>')
+          .join('')
+      + '</select>';
+    if (temFiltro) {
+      html += '<button class="inad-filter-clear" onclick="window._inadFiltros={rep:\'\',cliente:\'\'};document.getElementById(\'tab-inadimplentes\').innerHTML=buildInadimplentes()">✕ Limpar filtros</button>';
+    }
+    html += '</div>'
       + '<div class="inad-cols-grid" style="overflow-y:auto;flex:1;grid-template-columns:repeat(' + nCols + ',minmax(0,1fr))">';
+
+    if (repsVisiveis.length === 0) {
+      html += '<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--muted)">Nenhum resultado para os filtros selecionados.</div>';
+    }
 
     // Renderizar com separadores por grupo de marca
     let lastSection = null;
-    repsOrdenados.forEach(rep => {
-      if (rep === '(sem carteira ativa)') return; // pular grupo sem carteira por enquanto
-
-      // Determinar seção deste rep
+    repsVisiveis.forEach(rep => {
       const marca = marcaPrincipalPorRep[rep] || '';
       const secao = marca.includes('MYROCK') ? 'MYROCK' : (marca || 'OUTRAS MARCAS');
 
@@ -2208,39 +2260,32 @@ function renderDashboard(data) {
         html += '<div class="inad-section-header" style="color:' + corSecao + ';border-color:' + corSecao + '">' + secao + '</div>';
       }
 
-      const rows = porRep[rep].sort((a,b) => a.saldo - b.saldo); // mais devedor primeiro
+      const rows = porRepFiltrado[rep].sort((a,b) => a.saldo - b.saldo);
       const totRep = rows.reduce((s,r)=>s+r.saldo, 0);
 
       html += '<div style="display:flex;flex-direction:column">';
-      // Cabeçalho do representante
       html += '<div style="font-size:13px;font-weight:700;padding:8px 12px;background:var(--surface2);border-radius:6px 6px 0 0;border-left:3px solid #dc2626;color:var(--tx);display:flex;align-items:center;gap:8px;min-height:48px">'
         + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + rep + '">' + shortRep(rep) + '</span>'
         + '<span style="font-size:10px;font-weight:400;color:#dc2626;white-space:nowrap">' + rows.length + ' cli.</span>'
         + '</div>';
-      // Total do rep abaixo do cabeçalho
       html += '<div style="font-size:11px;font-weight:700;color:#dc2626;padding:4px 12px 6px;background:var(--surface2);border-radius:0;border-left:3px solid #dc2626;border-bottom:1px solid var(--border)">'
-        + fmtR(totRep)
-        + '</div>';
-
-      // Tabela de clientes
+        + fmtR(totRep) + '</div>';
       html += '<div style="overflow:auto;border-radius:0 0 6px 6px;border:1px solid var(--border);border-top:none;flex:1">'
         + '<table class="inad-tbl"><thead><tr>'
         + '<th class="l" style="min-width:140px">Cliente</th>'
         + '<th class="r" style="color:#dc2626">Saldo</th>'
         + '</tr></thead><tbody>';
-
       rows.forEach(r => {
         html += '<tr>'
           + '<td style="font-weight:500;color:var(--tx);max-width:220px;overflow:hidden;text-overflow:ellipsis" title="' + (r.nome||r.cn) + '">' + (r.nome||'—') + '</td>'
           + '<td style="text-align:right;color:#dc2626;font-weight:700;white-space:nowrap">' + fmtR(r.saldo) + '</td>'
           + '</tr>';
       });
-
       html += '</tbody></table></div></div>';
     });
 
-    // Grupo "sem carteira ativa" por último, se existir
-    if (porRep['(sem carteira ativa)']) {
+    // Grupo "sem carteira ativa" — só mostrar se não há filtro ativo
+    if (!temFiltro && porRep['(sem carteira ativa)']) {
       const rep = '(sem carteira ativa)';
       const rows = porRep[rep].sort((a,b) => a.saldo - b.saldo);
       const totRep = rows.reduce((s,r)=>s+r.saldo, 0);
@@ -3355,10 +3400,10 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v41';
+const CACHE_KEY = 'dashCache_v42';
 // Limpar TODAS as versões antigas — também limpa tudo se quota atingida
 try {
-  for(let i=1;i<=40;i++) localStorage.removeItem('dashCache_v'+i);
+  for(let i=1;i<=41;i++) localStorage.removeItem('dashCache_v'+i);
   // Se ainda há chaves antigas ocupando espaço, limpa tudo
   const keysToRemove = [];
   for(let i=0;i<localStorage.length;i++){
