@@ -1150,7 +1150,7 @@ function renderDashboard(data) {
         </div>
       </div>
 
-      <!-- Gráfico de Peças Vendidas -->
+      <!-- Gráfico de Peças Vendidas (total pedido) -->
       <div style="background:var(--surface2);border-radius:10px;padding:16px;margin-bottom:16px">
         <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">📦 Peças Vendidas por Marca e Coleção</div>
         <div style="position:relative;height:280px">
@@ -1158,9 +1158,17 @@ function renderDashboard(data) {
         </div>
       </div>
 
+      <!-- Gráfico de Peças Faturadas -->
+      <div style="background:var(--surface2);border-radius:10px;padding:16px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">✅ Peças Faturadas por Marca e Coleção</div>
+        <div style="position:relative;height:280px">
+          <canvas id="chartPecasFat"></canvas>
+        </div>
+      </div>
+
       <!-- Gráfico de Peças a Faturar -->
       <div style="background:var(--surface2);border-radius:10px;padding:16px">
-        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">⏳ Peças Vendidas Não Faturadas por Marca e Coleção</div>
+        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">⏳ Peças a Faturar por Marca e Coleção</div>
         <div style="position:relative;height:280px">
           <canvas id="chartPecasAFaturar"></canvas>
         </div>
@@ -2806,9 +2814,10 @@ function renderDashboard(data) {
           backgroundColor: corPorMarca[m],
           borderRadius: 4,
         }));
-        mkChart('chartVendas',        mkDatasets('venda'),        'Faturamento (R$)', true);
-        mkChart('chartPecas',         mkDatasets('pecas'),        'Peças vendidas', false);
-        mkChart('chartPecasAFaturar', mkDatasets('pecas_aberto'), 'Peças não faturadas', false);
+        mkChart('chartVendas',        mkDatasets('venda'),     'Faturamento (R$)', true);
+        mkChart('chartPecas',         mkDatasets('pecas'),     'Peças vendidas (total pedido)', false);
+        mkChart('chartPecasFat',      mkDatasets('pecas_fat'), 'Peças faturadas', false);
+        mkChart('chartPecasAFaturar', mkDatasets('pecas_aberto'), 'Peças a faturar', false);
       };
 
       _grafRenderCharts();
