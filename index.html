@@ -651,7 +651,8 @@ EVALUATE
 SUMMARIZE(
   REPRESENTANTE,
   REPRESENTANTE[CODREP],
-  REPRESENTANTE[REPRESENTANTE]
+  REPRESENTANTE[REPRESENTANTE],
+  REPRESENTANTE[TELEFONE]
 )
 ORDER BY REPRESENTANTE[REPRESENTANTE] ASC
 `;
@@ -3599,10 +3600,10 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v47';
+const CACHE_KEY = 'dashCache_v48';
 // Limpar TODAS as versões antigas — também limpa tudo se quota atingida
 try {
-  for(let i=1;i<=46;i++) localStorage.removeItem('dashCache_v'+i);
+  for(let i=1;i<=47;i++) localStorage.removeItem('dashCache_v'+i);
   // Se ainda há chaves antigas ocupando espaço, limpa tudo
   const keysToRemove = [];
   for(let i=0;i<localStorage.length;i++){
