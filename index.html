@@ -2080,12 +2080,28 @@ function renderDashboard(data) {
       carteiraPorRep[rep] = s;
     });
 
-    // ── Enriquecer inadMap com rep — só se o cliente estiver na carteira desse rep ──
+    // ── Rep do pedido (fallback quando não está no cadastro) ──
+    const repPedidoPorCodI = {};
+    (cachedClientes2||[]).forEach(r => {
+      const cod = normI(String(gV(r,'CODCLI')||'').trim());
+      const rep = String(gV(r,'REP')||'').trim();
+      if (cod && rep) repPedidoPorCodI[cod] = rep;
+    });
+
+    // ── Enriquecer inadMap com rep — cadastro tem prioridade, fallback = rep do pedido ──
     Object.keys(inadMap).forEach(cn => {
-      const rep = repPorCod[cn] || '';
-      // Verificar se este CODCLI está na carteira do rep cadastrado
-      const naCarteira = rep && carteiraPorRep[rep] && carteiraPorRep[rep].has(cn);
-      inadMap[cn].rep = naCarteira ? rep : '(sem carteira ativa)';
+      const repCad  = repPorCod[cn] || '';
+      const repPed  = repPedidoPorCodI[cn] || '';
+      // Tenta carteira pelo rep do cadastro primeiro, depois pelo rep do pedido
+      const naCarteiraCad = repCad && carteiraPorRep[repCad] && carteiraPorRep[repCad].has(cn);
+      const naCarteiraPed = repPed && carteiraPorRep[repPed] && carteiraPorRep[repPed].has(cn);
+      if (naCarteiraCad) {
+        inadMap[cn].rep = repCad;
+      } else if (naCarteiraPed) {
+        inadMap[cn].rep = repPed;
+      } else {
+        inadMap[cn].rep = '(sem carteira ativa)';
+      }
     });
 
     // ── Agrupar por representante ──
@@ -3339,10 +3355,10 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v40';
+const CACHE_KEY = 'dashCache_v41';
 // Limpar TODAS as versões antigas — também limpa tudo se quota atingida
 try {
-  for(let i=1;i<=39;i++) localStorage.removeItem('dashCache_v'+i);
+  for(let i=1;i<=40;i++) localStorage.removeItem('dashCache_v'+i);
   // Se ainda há chaves antigas ocupando espaço, limpa tudo
   const keysToRemove = [];
   for(let i=0;i<localStorage.length;i++){
