@@ -1142,36 +1142,15 @@ function renderDashboard(data) {
         }).join('')}
       </div>
 
-      <!-- Gráfico de Vendas -->
-      <div style="background:var(--surface2);border-radius:10px;padding:16px;margin-bottom:16px">
-        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">📊 Faturamento por Marca e Coleção</div>
-        <div style="position:relative;height:280px">
-          <canvas id="chartVendas"></canvas>
-        </div>
-      </div>
-
-      <!-- Gráfico de Peças Vendidas (total pedido) -->
-      <div style="background:var(--surface2);border-radius:10px;padding:16px;margin-bottom:16px">
-        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">📦 Peças Vendidas por Marca e Coleção</div>
-        <div style="position:relative;height:280px">
-          <canvas id="chartPecas"></canvas>
-        </div>
-      </div>
-
-      <!-- Gráfico de Peças Faturadas -->
-      <div style="background:var(--surface2);border-radius:10px;padding:16px;margin-bottom:16px">
-        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">✅ Peças Faturadas por Marca e Coleção</div>
-        <div style="position:relative;height:280px">
-          <canvas id="chartPecasFat"></canvas>
-        </div>
-      </div>
-
-      <!-- Gráfico de Peças a Faturar -->
-      <div style="background:var(--surface2);border-radius:10px;padding:16px">
-        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">⏳ Peças a Faturar por Marca e Coleção</div>
-        <div style="position:relative;height:280px">
-          <canvas id="chartPecasAFaturar"></canvas>
-        </div>
+      <!-- Gráficos individuais por marca -->
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        ${marcas.map(m => `
+        <div data-chart-marca="${m}" style="flex:1;min-width:280px;background:var(--surface2);border-radius:10px;padding:16px;border-top:3px solid ${corPorMarca[m]}">
+          <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">📦 ${m}</div>
+          <div style="position:relative;height:260px">
+            <canvas id="chartMarca_${m.replace(/\s+/g,'_')}"></canvas>
+          </div>
+        </div>`).join('')}
       </div>
     </div>
 
@@ -2830,19 +2809,32 @@ function renderDashboard(data) {
       }
 
       _grafRenderCharts = function() {
-        const marcas = _grafMarcasSel.size > 0
+        const marcasFiltradas = _grafMarcasSel.size > 0
           ? todasMarcas.filter(m => _grafMarcasSel.has(m))
           : todasMarcas;
-        const mkDatasets = tipo => marcas.map(m => ({
-          label: m,
-          data: colecoes.map(c => idx[c]?.[m]?.[tipo] || 0),
-          backgroundColor: corPorMarca[m],
-          borderRadius: 4,
-        }));
-        mkChart('chartVendas',        mkDatasets('venda'),     'Faturamento (R$)', true);
-        mkChart('chartPecas',         mkDatasets('pecas'),     'Peças vendidas (total pedido)', false);
-        mkChart('chartPecasFat',      mkDatasets('pecas_fat'), 'Peças faturadas', false);
-        mkChart('chartPecasAFaturar', mkDatasets('pecas_aberto'), 'Peças a faturar', false);
+
+        // Mostra/oculta painéis de marca
+        document.querySelectorAll('[data-chart-marca]').forEach(el => {
+          el.style.display = marcasFiltradas.includes(el.dataset.chartMarca) ? '' : 'none';
+        });
+
+        // Um gráfico por marca
+        marcasFiltradas.forEach(m => {
+          const canvasId = 'chartMarca_' + m.replace(/\s+/g,'_');
+          mkChart(
+            canvasId,
+            [{
+              label: 'Peças Vendidas',
+              data: colecoes.map(c => idx[c]?.[m]?.pecas || 0),
+              backgroundColor: corPorMarca[m] + 'cc',
+              borderColor: corPorMarca[m],
+              borderWidth: 1,
+              borderRadius: 4,
+            }],
+            'Peças',
+            false
+          );
+        });
       };
 
       _grafRenderCharts();
