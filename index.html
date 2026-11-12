@@ -2268,7 +2268,13 @@ function renderDashboard(data) {
         if (!cols.length) return;
 
         let codsNaMarca = codigos.filter(c => porCliente[c].marcas[marca] && cols.some(col=>(porCliente[c].marcas[marca][col]||0)>0));
-        if (statusFiltro) codsNaMarca = codsNaMarca.filter(c => (statusPorMarcaCli[marca]?.[c] || 'novo') === statusFiltro);
+        if (statusFiltro === 'inadimplente') {
+          const gRR2 = (r,c) => r["PEDIDO CANCELADOS["+c+"]"] || r[c] || '';
+          const inadNomes = new Set((cachedRestricoes||[]).map(r => (gRR2(r,'CLIENTE')||'').trim().toUpperCase()));
+          codsNaMarca = codsNaMarca.filter(c => inadNomes.has((porCliente[c].nome||'').trim().toUpperCase()));
+        } else if (statusFiltro) {
+          codsNaMarca = codsNaMarca.filter(c => (statusPorMarcaCli[marca]?.[c] || 'novo') === statusFiltro);
+        }
         if (!codsNaMarca.length) return;
 
         const isMY  = marca.toUpperCase().includes('MYROCK');
@@ -2423,6 +2429,7 @@ function renderDashboard(data) {
           <option value="recuperado">Recuperado</option>
           <option value="nao-rep">Não repetido</option>
           <option value="novo">Novo</option>
+          <option value="inadimplente">Inadimplente</option>
         </select>
         <button id="${uid}_col_toggle" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap">⚙ Coleções</button>
         <button id="${uid}_pdf_btn" title="Exportar lista atual como PDF" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px">
