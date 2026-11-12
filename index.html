@@ -1680,7 +1680,7 @@ function renderDashboard(data) {
         const carteira = new Set();
         cols3.forEach(c => (cliPorRepCol[rep][c] || new Set()).forEach(cli => carteira.add(cli)));
 
-        repStats[rep] = { atendidos, novos, mantidos, exClientes, valorNovos, carteira: carteira.size };
+        repStats[rep] = { atendidos, novos, mantidos, exClientes, valorNovos, carteira: carteira.size, carteiraCods: carteira };
       });
     }
 
@@ -1699,10 +1699,18 @@ function renderDashboard(data) {
       const rep = String(gVg(r,'REP')||'').trim();
       if (cod && rep) repPorCodGC[cod] = rep;
     });
+    // inadPorRep: conta só os inadimplentes que estão na carteira do rep
+    // (carteira = clientes das últimas 3 coleções, via repStats[rep].carteiraCods)
+    // carteiraCods usa CODCLI como string do PEDIDO; normalizamos para comparar
     const inadPorRep = {}; // rep -> count
     Object.keys(inadMapGC).forEach(cn => {
       const rep = repPorCodGC[cn];
-      if (rep) { inadPorRep[rep] = (inadPorRep[rep]||0) + 1; }
+      if (!rep) return;
+      const st = repStats[rep];
+      if (!st || !st.carteiraCods) return;
+      // carteiraCods tem os CODCLIs como strings do PEDIDO — normalizar para int
+      const naCarteira = [...st.carteiraCods].some(c => normGC(String(c)) === cn);
+      if (naCarteira) { inadPorRep[rep] = (inadPorRep[rep]||0) + 1; }
     });
 
     // ── Helpers de estilo ──
@@ -2012,7 +2020,7 @@ function renderDashboard(data) {
       if (!inadMap[cn]) inadMap[cn] = { codOrig: cod, nome, saldo };
     });
 
-    // ── Cruzar com cachedClientesLoc para obter REP do cadastro do cliente (CLIENTES[REP]) ──
+    // ── Rep do cadastro do cliente (CLIENTES[REP]) ──
     const repPorCod = {};
     (cachedClientesLoc||[]).forEach(r => {
       const cod = normI(String(gV(r,'CODCLI')||'').trim());
@@ -2020,9 +2028,35 @@ function renderDashboard(data) {
       if (cod && rep) repPorCod[cod] = rep;
     });
 
-    // ── Enriquecer inadMap com rep ──
+    // ── Carteira por rep: CODCLIs nas últimas 3 coleções (via PEDIDO, igual à Gestão Comercial) ──
+    const colVigSetI = new Set((cachedData||[]).map(d=>d.col).filter(Boolean));
+    const cliPorRepColI = {}; // rep -> col -> Set(codNorm)
+    (cachedClientes2||[]).forEach(r => {
+      const cod = normI(String(gV(r,'CODCLI')||'').trim());
+      const rep = String(gV(r,'REP')||'').trim();
+      const col = String(gV(r,'COLECAO')||'').trim();
+      if (!cod || !rep || !col) return;
+      if (!cliPorRepColI[rep]) cliPorRepColI[rep] = {};
+      if (!cliPorRepColI[rep][col]) cliPorRepColI[rep][col] = new Set();
+      cliPorRepColI[rep][col].add(cod);
+    });
+    const carteiraPorRep = {}; // rep -> Set(codNorm) das últimas 3 coleções antes da vigente
+    Object.keys(cliPorRepColI).forEach(rep => {
+      const colsAnter = Object.keys(cliPorRepColI[rep]).filter(c => !colVigSetI.has(c)).sort().reverse();
+      const cols3 = colsAnter.slice(0, 3);
+      const s = new Set();
+      cols3.forEach(c => cliPorRepColI[rep][c].forEach(cod => s.add(cod)));
+      // incluir também coleção vigente
+      Object.keys(cliPorRepColI[rep]).filter(c => colVigSetI.has(c)).forEach(c => cliPorRepColI[rep][c].forEach(cod => s.add(cod)));
+      carteiraPorRep[rep] = s;
+    });
+
+    // ── Enriquecer inadMap com rep — só se o cliente estiver na carteira desse rep ──
     Object.keys(inadMap).forEach(cn => {
-      inadMap[cn].rep = repPorCod[cn] || '(sem representante)';
+      const rep = repPorCod[cn] || '';
+      // Verificar se este CODCLI está na carteira do rep cadastrado
+      const naCarteira = rep && carteiraPorRep[rep] && carteiraPorRep[rep].has(cn);
+      inadMap[cn].rep = naCarteira ? rep : '(sem carteira ativa)';
     });
 
     // ── Agrupar por representante ──
@@ -3194,7 +3228,7 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v32';
+const CACHE_KEY = 'dashCache_v33';
 // Limpar versões antigas do cache
 try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14','dashCache_v15','dashCache_v16','dashCache_v17','dashCache_v18','dashCache_v19','dashCache_v20','dashCache_v21'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
