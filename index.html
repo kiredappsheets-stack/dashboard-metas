@@ -2484,13 +2484,29 @@ function renderDashboard(data) {
       });
     }
 
+    // Mapa CODREP → nome do representante
+    const nomeRepPorCod = {};
+    (cachedRepresentantes||[]).forEach(r => {
+      const cod  = String(r['REPRESENTANTE[CODREP]']||r['[CODREP]']||r['CODREP']||'').trim();
+      const nome = String(r['REPRESENTANTE[REPRESENTANTE]']||r['[REPRESENTANTE]']||r['REPRESENTANTE']||'').trim();
+      if (cod && nome) nomeRepPorCod[cod] = nome;
+    });
+    // Também de cachedClientesLoc: REP pode já ser o nome (vindo do campo REP da tabela CLIENTES)
+    // mas se for código (numérico), traduzir para nome
+    const traduzRep = raw => {
+      if (!raw) return '';
+      // Se parece código numérico (só dígitos), traduz via nomeRepPorCod
+      if (/^\d+$/.test(raw)) return nomeRepPorCod[raw] || raw;
+      return raw;
+    };
+
     // Reps com meta na coleção atual (= rep ativo)
     // Inclui também reps cadastrados (cachedRepresentantes e cachedClientesLoc) para não perder
     // clientes vinculados a reps sem meta ainda (ex: rep novo ou sem metas cadastradas)
     const repsAtivos = new Set([
       ...(cachedData||[]).filter(d => d.meta > 0).map(d => String(d.rep||'').trim()).filter(Boolean),
-      ...(cachedRepresentantes||[]).map(r => String(r['REPRESENTANTE[REP]']||r['[REP]']||r['REP']||'').trim()).filter(Boolean),
-      ...(cachedClientesLoc||[]).map(r => String(gV(r,'REP')||'').trim()).filter(Boolean)
+      ...Object.values(nomeRepPorCod),
+      ...(cachedClientesLoc||[]).map(r => traduzRep(String(gV(r,'REP')||'').trim())).filter(Boolean)
     ]);
 
     // Determinar rep da última coleção por cliente (independente de marca)
@@ -2515,7 +2531,7 @@ function renderDashboard(data) {
       const nome   = nomeUltimaVenda[cod] || String(gV(r,'CLIENTE')||cod);
       // Rep da última venda; se não tem meta na col atual → desativado → agrupa como sem rep
       // Prioridade: rep do cadastro CLIENTES (vínculo fixo) → fallback: última venda
-      const locRep = (locPorCod[cod]||{}).rep || '';
+      const locRep = traduzRep((locPorCod[cod]||{}).rep || '');
       const repRaw = locRep || repUltimaVenda[cod] || String(gV(r,'REP')||'');
       const rep    = repsAtivos.has(repRaw) ? repRaw : '';
       const marca  = String(gV(r,'MARCA')||'');
