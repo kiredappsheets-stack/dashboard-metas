@@ -86,6 +86,8 @@
   #tab-leads.hidden { display:none; }
   #tab-gestao { overflow:hidden; padding:0; display:flex; flex-direction:column; }
   #tab-gestao.hidden { display:none; }
+  #tab-inadimplentes { overflow:hidden; padding:0; display:flex; flex-direction:column; }
+  #tab-inadimplentes.hidden { display:none; }
 
   /* KPI ROW */
   .kpi-row { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
@@ -511,12 +513,16 @@ SELECTCOLUMNS(
   FILTER(
     ADDCOLUMNS(
       VALUES(INADIMPLENCIA[CODCLI]),
+      "NOME",        CALCULATE(FIRSTNONBLANK(INADIMPLENCIA[NOME], 1)),
       "SALDO_ATRASO", CALCULATE(SUM(INADIMPLENCIA[SALDO]), INADIMPLENCIA[ATRASO] = "ATRASO")
     ),
     [SALDO_ATRASO] < 0
   ),
-  "CODCLI", INADIMPLENCIA[CODCLI]
+  "CODCLI", INADIMPLENCIA[CODCLI],
+  "NOME",   [NOME],
+  "SALDO",  [SALDO_ATRASO]
 )
+ORDER BY [SALDO] ASC
 `;
 
 const DAX_KPIS_FAT = `
@@ -1983,6 +1989,140 @@ function renderDashboard(data) {
     return html;
   }
 
+  // ════════════════════════════════════════════
+  //  ABA INADIMPLENTES
+  // ════════════════════════════════════════════
+  function buildInadimplentes() {
+    const gV = (r, c) => { const k = Object.keys(r).find(k2=>k2.toUpperCase().includes(c.toUpperCase()))||c; return r[k]??null; };
+    const fmtR = v => 'R$ ' + Math.abs(Number(v)).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const normI = c => String(parseInt(c,10)||0);
+
+    if (!cachedInadimplentes || !cachedInadimplentes.length) {
+      return '<div class="empty-state" style="padding:40px;text-align:center;color:var(--muted)">Nenhum cliente inadimplente encontrado.</div>';
+    }
+
+    // ── Montar mapa CODCLI → { nome, saldo } ──
+    const inadMap = {}; // codNorm -> { codOrig, nome, saldo }
+    cachedInadimplentes.forEach(r => {
+      const cod  = String(r['INADIMPLENCIA[CODCLI]']||r['[CODCLI]']||r['CODCLI']||'').trim();
+      const nome = String(r['INADIMPLENCIA[NOME]']||r['[NOME]']||r['NOME']||'').trim();
+      const saldo= parseFloat(r['INADIMPLENCIA[SALDO]']||r['[SALDO]']||r['SALDO']||0)||0;
+      if (!cod) return;
+      const cn = normI(cod);
+      if (!inadMap[cn]) inadMap[cn] = { codOrig: cod, nome, saldo };
+    });
+
+    // ── Cruzar com cachedClientes2 para obter REP e MARCA ──
+    // repPorCod: codNorm -> rep (última venda)
+    // marcasPorCod: codNorm -> Set de marcas
+    const repPorCod   = {};
+    const marcasPorCod = {};
+    if (cachedClientes2 && cachedClientes2.length) {
+      cachedClientes2.forEach(r => {
+        const cod   = normI(String(gV(r,'CODCLI')||'').trim());
+        const rep   = String(gV(r,'REP')||'').trim();
+        const marca = String(gV(r,'MARCA')||'').trim();
+        if (!cod) return;
+        if (rep) repPorCod[cod] = rep; // sobrescreve → mais recente
+        if (marca) {
+          if (!marcasPorCod[cod]) marcasPorCod[cod] = new Set();
+          marcasPorCod[cod].add(marca);
+        }
+      });
+    }
+
+    // ── Enriquecer inadMap com rep/marcas ──
+    Object.keys(inadMap).forEach(cn => {
+      inadMap[cn].rep    = repPorCod[cn]   || '—';
+      inadMap[cn].marcas = marcasPorCod[cn] ? [...marcasPorCod[cn]] : [];
+    });
+
+    // ── Agrupar por marca ──
+    const porMarca = {}; // marca -> [{ codNorm, ...inadMap entry }]
+    Object.entries(inadMap).forEach(([cn, info]) => {
+      const marcas = info.marcas.length ? info.marcas : ['(sem marca)'];
+      marcas.forEach(marca => {
+        if (!porMarca[marca]) porMarca[marca] = [];
+        porMarca[marca].push({ cn, ...info });
+      });
+    });
+
+    // Ordenar marcas por total de saldo (mais negativo primeiro = maior dívida)
+    const marcasOrdenadas = Object.keys(porMarca).sort((a,b) => {
+      const sA = porMarca[a].reduce((s,r)=>s+r.saldo, 0);
+      const sB = porMarca[b].reduce((s,r)=>s+r.saldo, 0);
+      return sA - sB; // mais negativo primeiro
+    });
+
+    const totalGeral = Object.values(inadMap).reduce((s,r)=>s+r.saldo, 0);
+    const totalClients = Object.keys(inadMap).length;
+
+    // ── CSS ──
+    if (!document.getElementById('inad-css')) {
+      const s = document.createElement('style');
+      s.id = 'inad-css';
+      s.textContent = `
+        .inad-tbl { border-collapse:collapse; width:100%; font-size:12px; }
+        .inad-tbl th { padding:8px 10px; font-size:11px; font-weight:600; color:var(--muted); white-space:nowrap; border-bottom:2px solid var(--border); position:sticky; top:0; background:var(--sidebar); z-index:2; }
+        .inad-tbl th.l { text-align:left; }
+        .inad-tbl th.r { text-align:right; }
+        .inad-tbl td { padding:7px 10px; white-space:nowrap; border-bottom:1px solid var(--border); font-size:12px; }
+        .inad-tbl tr:nth-child(even) td { background:var(--surface2); }
+        .inad-tbl tr:nth-child(odd) td { background:var(--surface); }
+        .inad-tbl tfoot td { background:var(--sidebar)!important; font-weight:700; color:var(--muted); border-top:2px solid var(--border); position:sticky; bottom:0; }
+      `;
+      document.head.appendChild(s);
+    }
+
+    let html = '<div style="padding:16px 20px 8px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">'
+      + '<div style="font-size:15px;font-weight:700;color:#dc2626">Inadimplentes</div>'
+      + '<div style="font-size:12px;color:var(--muted)">'
+      + totalClients + ' cliente' + (totalClients!==1?'s':'')
+      + ' · Saldo total em atraso: <span style="color:#dc2626;font-weight:700">' + fmtR(totalGeral) + '</span>'
+      + '</div></div>'
+      + '<div style="overflow-y:auto;flex:1;padding:0 16px 24px;display:flex;flex-direction:column;gap:24px">';
+
+    marcasOrdenadas.forEach(marca => {
+      const rows = porMarca[marca].sort((a,b) => a.saldo - b.saldo); // mais devedor primeiro
+      const totMarca = rows.reduce((s,r)=>s+r.saldo, 0);
+      const isMY  = marca.toUpperCase().includes('MYROCK');
+      const acento = isMY ? 'var(--green)' : 'var(--blue)';
+
+      html += '<div>';
+      html += '<div style="font-size:13px;font-weight:700;padding:8px 12px;background:var(--surface2);border-radius:6px;border-left:3px solid '
+        + acento + ';margin-bottom:10px;color:var(--tx);display:flex;align-items:center;gap:10px">'
+        + '<span>' + marca + '</span>'
+        + '<span style="font-size:11px;font-weight:400;color:#dc2626">' + rows.length + ' inadimplente' + (rows.length!==1?'s':'') + '</span>'
+        + '<span style="font-size:11px;font-weight:600;color:#dc2626;margin-left:auto">' + fmtR(totMarca) + '</span>'
+        + '</div>';
+
+      html += '<div style="overflow:auto;border-radius:6px;border:1px solid var(--border)">'
+        + '<table class="inad-tbl"><thead><tr>'
+        + '<th class="l">Cód.</th>'
+        + '<th class="l" style="min-width:200px">Cliente</th>'
+        + '<th class="l" style="min-width:160px">Representante</th>'
+        + '<th class="r" style="color:#dc2626">Saldo em Atraso</th>'
+        + '</tr></thead><tbody>';
+
+      rows.forEach(r => {
+        html += '<tr>'
+          + '<td style="font-family:monospace;color:var(--muted);font-size:11px">' + (r.codOrig||r.cn) + '</td>'
+          + '<td style="font-weight:600;color:var(--tx)">' + (r.nome||'—') + '</td>'
+          + '<td style="color:var(--muted)">' + r.rep + '</td>'
+          + '<td style="text-align:right;color:#dc2626;font-weight:700">' + fmtR(r.saldo) + '</td>'
+          + '</tr>';
+      });
+
+      html += '</tbody><tfoot><tr>'
+        + '<td colspan="3" style="text-align:right;padding-right:12px">Total ' + marca + '</td>'
+        + '<td style="text-align:right;color:#dc2626">' + fmtR(totMarca) + '</td>'
+        + '</tr></tfoot></table></div></div>';
+    });
+
+    html += '</div>';
+    return html;
+  }
+
   function buildClientes() {
     if (!cachedClientes2 || !cachedClientes2.length) return '<div class="empty-state">Dados de clientes não disponíveis.</div>';
 
@@ -2120,6 +2260,26 @@ function renderDashboard(data) {
       if (!porCliente[cod]) porCliente[cod] = {nome, rep, cidade, estado, marcas:{}};
       if (!porCliente[cod].marcas[marca]) porCliente[cod].marcas[marca] = {};
       porCliente[cod].marcas[marca][col] = (porCliente[cod].marcas[marca][col]||0) + venda;
+    });
+
+    // ── Excluir representantes da lista de clientes ──
+    // Qualquer CODCLI cujo nome seja igual ao de um representante cadastrado não é cliente
+    const nomesReps = new Set(
+      (cachedRepresentantes||[]).map(r => {
+        const n = String(r['REPRESENTANTE[REPRESENTANTE]']||r['[REPRESENTANTE]']||r['REPRESENTANTE']||'').trim().toUpperCase();
+        return n;
+      }).filter(Boolean)
+    );
+    // Também excluir pelo CODREP → CODCLI match via locPorCod (CLIENTES tem CODREP)
+    const codrepsDosReps = new Set(
+      (cachedRepresentantes||[]).map(r => String(r['REPRESENTANTE[CODREP]']||r['[CODREP]']||r['CODREP']||'').trim()).filter(Boolean)
+    );
+    Object.keys(porCliente).forEach(cod => {
+      const nomeUp = (porCliente[cod].nome||'').trim().toUpperCase();
+      const codrep = (locPorCod[cod]||{}).codrep || '';
+      if (nomesReps.has(nomeUp) || (codrep && codrepsDosReps.has(codrep))) {
+        delete porCliente[cod];
+      }
     });
 
     // Marcas (MYROCK primeiro)
@@ -2763,6 +2923,7 @@ function renderDashboard(data) {
       <button class="tab-btn active" data-tab="overview">Visão Geral</button>
       <button class="tab-btn" data-tab="gestao">Gestão Comercial</button>
       <button class="tab-btn" data-tab="clientes">Clientes</button>
+      <button class="tab-btn" data-tab="inadimplentes">🔴 Inadimplentes <span class="tab-badge" style="background:rgba(220,38,38,.2);color:#dc2626">${cachedInadimplentes?cachedInadimplentes.length:0}</span></button>
       <button class="tab-btn" data-tab="historico">Histórico Mensal</button>
       <button class="tab-btn" data-tab="periodo">Histórico Semanal</button>
       <button class="tab-btn" data-tab="margem">💰 Margem por Pedido</button>
@@ -2777,6 +2938,7 @@ function renderDashboard(data) {
     <div class="tab-content hidden" id="tab-historico">${buildHistorico()}</div>
     <div class="tab-content hidden" id="tab-periodo">${buildHistoricoPeriodo()}</div>
     <div class="tab-content hidden" id="tab-clientes">${buildClientes()}</div>
+    <div class="tab-content hidden" id="tab-inadimplentes" style="padding:0;display:flex;flex-direction:column;overflow:hidden">${buildInadimplentes()}</div>
     <div class="tab-content hidden" id="tab-margem"><div class="loading-tab"><div class="spinner"></div>Abrindo…</div></div>
     <div class="tab-content hidden" id="tab-graficos">${buildGraficos()}</div>
     <div class="tab-content hidden" id="tab-restricoes">${buildRestricoes()}</div>
@@ -3045,7 +3207,7 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v24';
+const CACHE_KEY = 'dashCache_v25';
 // Limpar versões antigas do cache
 try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14','dashCache_v15','dashCache_v16','dashCache_v17','dashCache_v18','dashCache_v19','dashCache_v20','dashCache_v21'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
