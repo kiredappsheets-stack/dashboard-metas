@@ -1837,7 +1837,7 @@ function renderDashboard(data) {
           <span style="font-weight:600;color:var(--amber)">Não rep.</span> — clientes da coleção anterior que não repetiram
         </span>
         <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
-          <span style="font-weight:600;color:#E84A4A">Ex-clientes</span> — clientes sem compra há 2 ou mais coleções
+          <span style="font-weight:600;color:#E84A4A">Ex-clientes</span> — clientes que já compraram mas não estão ativos na coleção atual
         </span>
         <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
           <span style="font-weight:600;color:#9B8FFF">Carteira</span> — clientes distintos comprados nas últimas 3 coleções (excl. atual)
@@ -2763,7 +2763,7 @@ function renderDashboard(data) {
       });
     });
 
-    const statusLabel = { 'mantido':'Mantido', 'recuperado':'Recuperado', 'nao-rep':'Não repetido', 'novo':'Novo', 'inadimplente':'Inadimplente' };
+    const statusLabel = { 'mantido':'Mantido', 'recuperado':'Recuperado', 'nao-rep':'Ex-cliente', 'novo':'Novo', 'inadimplente':'Inadimplente' };
 
     // ── Set de inadimplentes (codNorm) para badge e filtro ──
     const normI = c => String(parseInt(c,10)||0);
@@ -2955,7 +2955,7 @@ function renderDashboard(data) {
           <option value="">Todos os status</option>
           <option value="mantido">Mantido</option>
           <option value="recuperado">Recuperado</option>
-          <option value="nao-rep">Não repetido</option>
+          <option value="nao-rep">Ex-cliente</option>
           <option value="novo">Novo</option>
           <option value="inadimplente">Inadimplente</option>
         </select>
@@ -2972,7 +2972,7 @@ function renderDashboard(data) {
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;font-size:10px">
           <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status mantido" style="margin:0">Mantido</span><span style="color:var(--muted)">comprou nas 2 últimas coleções</span></span>
           <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status recuperado" style="margin:0">Recuperado</span><span style="color:var(--muted)">comprou na atual, não na anterior</span></span>
-          <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status nao-rep" style="margin:0">Não repetido</span><span style="color:var(--muted)">não comprou na coleção atual</span></span>
+          <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status nao-rep" style="margin:0">Ex-cliente</span><span style="color:var(--muted)">não comprou na coleção atual</span></span>
           <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status novo" style="margin:0">Novo</span><span style="color:var(--muted)">nunca comprou antes</span></span>
           <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status inadimplente" style="margin:0">Inadimplente</span><span style="color:var(--muted)">saldo em atraso no Fluxo de Caixa</span></span>
         </div>
@@ -3087,7 +3087,7 @@ function renderDashboard(data) {
 
         // Abre WhatsApp com mensagem curta pedindo para anexar o PDF
         const statusLabel2 = statusSel?.value
-          ? ({mantido:'Mantido',recuperado:'Recuperado','nao-rep':'Não repetido',novo:'Novo'})[statusSel.value] || statusSel.value
+          ? ({mantido:'Mantido',recuperado:'Recuperado','nao-rep':'Ex-cliente',novo:'Novo'})[statusSel.value] || statusSel.value
           : '';
         const statusTxt = statusLabel2 ? ` | Status: ${statusLabel2}` : '';
         const msg = `📋 *Relatório de Clientes — ${dataHora}*\nRepresentante: *${repSelecionado}*${statusTxt}\nTotal: ${countTxt}\n\n_(O relatório PDF foi gerado — salve e anexe aqui)_`;
@@ -3105,7 +3105,7 @@ function renderDashboard(data) {
       const abrirPdf = (modo) => {
         const repLabel     = repSel.value || 'Todos os representantes';
         const statusLabel2 = statusSel?.value
-          ? ({mantido:'Mantido',recuperado:'Recuperado','nao-rep':'Não repetido',novo:'Novo'})[statusSel.value] || statusSel.value
+          ? ({mantido:'Mantido',recuperado:'Recuperado','nao-rep':'Ex-cliente',novo:'Novo'})[statusSel.value] || statusSel.value
           : 'Todos os status';
         const busca2   = buscaEl.value.trim();
         const countTxt = countEl ? countEl.textContent : '';
@@ -4096,7 +4096,7 @@ function _contextoHistClientes(question) {
     if (at && ant) return 'Mantido';
     if (at && !antes) return 'Novo';
     if (at && !ant) return 'Recuperado';
-    if (!at && antes) return 'Não repetido';
+    if (!at && antes) return 'Ex-cliente';
     return 'Novo';
   };
 
@@ -4137,7 +4137,7 @@ function _contextoHistClientes(question) {
   let ctx = '=== HISTÓRICO DE CLIENTES POR MARCA E COLEÇÃO (mesmos dados da aba Clientes) ===\n';
   ctx += 'FONTE PRINCIPAL para "histórico do cliente", "o que o cliente comprou", "clientes que não repetiram", status por marca.\n';
   ctx += 'Valores = venda (FAT_LIQ) do cliente em cada coleção, separada por MARCA. REP = rep da última compra (só reps ativos).\n';
-  ctx += 'Status por marca (compara as 2 últimas coleções da marca): Mantido, Recuperado, Não repetido, Novo.\n';
+  ctx += 'Status por marca (compara as 2 últimas coleções da marca): Mantido, Recuperado, Ex-cliente (não comprou na coleção atual), Novo.\n';
   ctx += 'Coleções mais recentes por marca: ' + Object.keys(colsPorMarca).sort().map(m => `${m}: ${colsPorMarca[m].slice(0,3).join(', ')}`).join(' | ') + '\n\n';
 
   if (alvo.length) {
@@ -4151,7 +4151,7 @@ function _contextoHistClientes(question) {
       lista.forEach(c => { if (c.marcas[marca]) { const st = statusDe(marca, c.marcas[marca]); cont[st] = (cont[st]||0) + 1; } });
       ctx += `  ${marca}: ` + Object.entries(cont).map(([k,v]) => `${k} ${v}`).join(' | ') + '\n';
     });
-    const filtroSt = /NAO REPET|NAO COMPR|SEM COMPRA|PERDID|DEIXOU/.test(q) ? 'Não repetido' : /RECUPER/.test(q) ? 'Recuperado' : /NOVOS?\b|PRIMEIRA COMPRA/.test(q) ? 'Novo' : /MANTID|REPETIU|REPETIRAM/.test(q) ? 'Mantido' : '';
+    const filtroSt = /NAO REPET|NAO COMPR|SEM COMPRA|PERDID|DEIXOU|EX.CLIEN|EX CLIEN/.test(q) ? 'Ex-cliente' : /RECUPER/.test(q) ? 'Recuperado' : /NOVOS?\b|PRIMEIRA COMPRA/.test(q) ? 'Novo' : /MANTID|REPETIU|REPETIRAM/.test(q) ? 'Mantido' : '';
     if (filtroSt) {
       const sel = lista.filter(c => Object.keys(c.marcas).some(m => statusDe(m, c.marcas[m]) === filtroSt));
       ctx += `\n-- Clientes com status "${filtroSt}" em pelo menos uma marca (${sel.length}) --\n`;
@@ -4543,7 +4543,7 @@ QUANTIDADES NOS PEDIDOS:
 
 HISTÓRICO DE CLIENTES:
 - Para histórico de um cliente use SEMPRE a secção "HISTÓRICO DE CLIENTES POR MARCA E COLEÇÃO" (mesmos dados da aba Clientes).
-- Apresente dividido por MARCA e, dentro de cada marca, coleção a coleção (mais recente primeiro), com o status da marca (Mantido/Recuperado/Não repetido/Novo) e as coleções em que não comprou.
+- Apresente dividido por MARCA e, dentro de cada marca, coleção a coleção (mais recente primeiro), com o status da marca (Mantido/Recuperado/Ex-cliente/Novo) e as coleções em que não comprou.
 
 DADOS COMPLETOS:
 ${buildContext(question)}`;
