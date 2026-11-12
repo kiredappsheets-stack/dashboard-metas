@@ -757,10 +757,26 @@ async function getToken() {
 // ════════════════════════════════════════════
 //  API Power BI — executa DAX
 // ════════════════════════════════════════════
+// Utilitário: retry com backoff exponencial para erros 429
+async function fetchWithRetry(url, options, maxRetries=3) {
+  let delay = 15000; // 15s inicial
+  for (let i = 0; i <= maxRetries; i++) {
+    const res = await fetch(url, options);
+    if (res.status !== 429) return res;
+    if (i < maxRetries) {
+      console.warn(`429 rate limit — aguardando ${delay/1000}s antes de tentar novamente...`);
+      await new Promise(r => setTimeout(r, delay));
+      delay *= 2; // backoff exponencial
+    } else {
+      return res; // última tentativa — deixa o caller tratar o erro
+    }
+  }
+}
+
 async function runDaxQueryFluxo(token, query, raw=false) {
   const url = `https://api.powerbi.com/v1.0/myorg/datasets/${CONFIG.fluxoCaixaDatasetId}/executeQueries`;
   const body = { queries: [{ query: query }], serializerSettings: { includeNulls: true } };
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: "POST",
     headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body)
@@ -776,7 +792,7 @@ async function runDaxQuery(token, query, raw=false) {
   const url = `https://api.powerbi.com/v1.0/myorg/datasets/${CONFIG.datasetId}/executeQueries`;
   const body = { queries: [{ query: query }], serializerSettings: { includeNulls: true } };
 
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: "POST",
     headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body)
@@ -3144,7 +3160,8 @@ async function loadDashboard() {
       try {
         const token = await getToken();
         const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
-        const [data, kpis, kpisFat, metasHist, restricoes, restricoesHist, graficosMarcaCol, metaMarcaCol, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes, inadimplentes] = await Promise.all([
+        // Queries principais (dataset de metas)
+        const [data, kpis, kpisFat, metasHist, restricoes, restricoesHist, graficosMarcaCol, metaMarcaCol, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes] = await Promise.all([
           safe(() => runDaxQuery(token, DAX_QUERY, false)),
           safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
           safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -3163,7 +3180,6 @@ async function loadDashboard() {
           safe(() => runDaxQuery(token, DAX_CRM_RETORNO, true)),
           safe(() => runDaxQuery(token, DAX_LISTA_MARCAS, true)),
           safe(() => runDaxQuery(token, DAX_REPRESENTANTES, true)),
-          safe(() => runDaxQueryFluxo(token, DAX_INADIMPLENTES, true)),
         ]);
         if (!data || data.length === 0) {
           console.warn('DAX_QUERY retornou vazio — não atualiza cache');
@@ -3176,6 +3192,8 @@ async function loadDashboard() {
         cachedClientes2 = clientes2||[]; cachedCrmJustif = crmJustif||[]; cachedClientesLoc = clientesLoc||[];
         cachedGestaoCom = gestaoCom||[]; cachedColecoesDatas = colecoesDatas||[]; cachedCrmRetorno = crmRetorno||[];
         cachedListaMarcas = listaMarcas||[]; cachedRepresentantes = representantes||[];
+        // Query do Fluxo de Caixa separada (dataset diferente) — rodar após as principais para evitar 429
+        const inadimplentes = await safe(() => runDaxQueryFluxo(token, DAX_INADIMPLENTES, true));
         cachedInadimplentes = inadimplentes||[];
         cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
         if (kpisFat && kpisFat.length > 0) cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
@@ -3209,7 +3227,8 @@ async function loadDashboard() {
     if (lu) lu.textContent = 'A carregar dados do Power BI…';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, kpis, kpisFat, metasHist, restricoes, restricoesHist, graficosMarcaCol, metaMarcaCol, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes, inadimplentes] = await Promise.all([
+    // Queries principais (dataset de metas)
+    const [data, kpis, kpisFat, metasHist, restricoes, restricoesHist, graficosMarcaCol, metaMarcaCol, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -3228,7 +3247,6 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_CRM_RETORNO, true)),
       safe(() => runDaxQuery(token, DAX_LISTA_MARCAS, true)),
       safe(() => runDaxQuery(token, DAX_REPRESENTANTES, true)),
-      safe(() => runDaxQueryFluxo(token, DAX_INADIMPLENTES, true)),
     ]);
     clearTimeout(_loadTimeout);
     if (!data || data.length === 0) {
@@ -3251,6 +3269,8 @@ async function loadDashboard() {
     cachedCrmRetorno = crmRetorno || [];
     cachedListaMarcas = listaMarcas || [];
     cachedRepresentantes = representantes || [];
+    // Query do Fluxo de Caixa separada (dataset diferente) — rodar após as principais para evitar 429
+    const inadimplentes = await safe(() => runDaxQueryFluxo(token, DAX_INADIMPLENTES, true));
     cachedInadimplentes = inadimplentes || [];
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     if (kpisFat && kpisFat.length > 0) {
