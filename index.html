@@ -511,18 +511,19 @@ const DAX_INADIMPLENTES = `
 EVALUATE
 SELECTCOLUMNS(
   FILTER(
-    ADDCOLUMNS(
-      VALUES(INADIMPLENCIA[CODCLI]),
-      "NOME",        CALCULATE(FIRSTNONBLANK(INADIMPLENCIA[NOME], 1)),
-      "SALDO_ATRASO", CALCULATE(SUM(INADIMPLENCIA[SALDO]), INADIMPLENCIA[ATRASO] = "ATRASO")
+    SUMMARIZECOLUMNS(
+      DADOS[CODCLI],
+      FILTER(VALUES(DADOS[CODCLI]), CALCULATE(COUNTROWS(FILTER(DADOS, DADOS[ATRASO] = "ATRASO"))) > 0),
+      "NOME",  CALCULATE(FIRSTNONBLANK(DADOS[NOME], 1)),
+      "SALDO", CALCULATE(SUM(DADOS[PROJETADO]), DADOS[ATRASO] = "ATRASO")
     ),
-    [SALDO_ATRASO] < 0
+    [SALDO] > 0
   ),
-  "CODCLI", INADIMPLENCIA[CODCLI],
+  "CODCLI", DADOS[CODCLI],
   "NOME",   [NOME],
-  "SALDO",  [SALDO_ATRASO]
+  "SALDO",  [SALDO]
 )
-ORDER BY [SALDO] ASC
+ORDER BY [SALDO] DESC
 `;
 
 const DAX_KPIS_FAT = `
@@ -2043,9 +2044,9 @@ function renderDashboard(data) {
     // ── Montar mapa CODCLI → { nome, saldo } ──
     const inadMap = {}; // codNorm -> { codOrig, nome, saldo }
     cachedInadimplentes.forEach(r => {
-      const cod  = String(r['INADIMPLENCIA[CODCLI]']||r['[CODCLI]']||r['CODCLI']||'').trim();
-      const nome = String(r['INADIMPLENCIA[NOME]']||r['[NOME]']||r['NOME']||'').trim();
-      const saldo= parseFloat(r['INADIMPLENCIA[SALDO]']||r['[SALDO]']||r['SALDO']||0)||0;
+      const cod  = String(r['DADOS[CODCLI]']||r['INADIMPLENCIA[CODCLI]']||r['[CODCLI]']||r['CODCLI']||'').trim();
+      const nome = String(r['DADOS[NOME]']||r['INADIMPLENCIA[NOME]']||r['[NOME]']||r['NOME']||'').trim();
+      const saldo= parseFloat(r['DADOS[SALDO]']||r['INADIMPLENCIA[SALDO]']||r['[SALDO]']||r['SALDO']||0)||0;
       if (!cod) return;
       const cn = normI(cod);
       if (!inadMap[cn]) inadMap[cn] = { codOrig: cod, nome, saldo };
@@ -3426,10 +3427,10 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v46';
+const CACHE_KEY = 'dashCache_v47';
 // Limpar TODAS as versões antigas — também limpa tudo se quota atingida
 try {
-  for(let i=1;i<=45;i++) localStorage.removeItem('dashCache_v'+i);
+  for(let i=1;i<=46;i++) localStorage.removeItem('dashCache_v'+i);
   // Se ainda há chaves antigas ocupando espaço, limpa tudo
   const keysToRemove = [];
   for(let i=0;i<localStorage.length;i++){
