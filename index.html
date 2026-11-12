@@ -2453,6 +2453,20 @@ function renderDashboard(data) {
       });
     }
 
+    // Mapa CODREP → nome do representante (deve vir antes de locPorCod)
+    const nomeRepPorCod = {};
+    (cachedRepresentantes||[]).forEach(r => {
+      const cod  = String(r['REPRESENTANTE[CODREP]']||r['[CODREP]']||r['CODREP']||'').trim();
+      const nome = String(r['REPRESENTANTE[REPRESENTANTE]']||r['[REPRESENTANTE]']||r['REPRESENTANTE']||'').trim();
+      if (cod && nome) nomeRepPorCod[cod] = nome;
+    });
+    // Se campo REP for código numérico, traduz via nomeRepPorCod
+    const traduzRep = raw => {
+      if (!raw) return '';
+      if (/^\d+$/.test(raw)) return nomeRepPorCod[raw] || raw;
+      return raw;
+    };
+
     // Índice de localização: codcli -> { cidade, estado, codrep, rep }
     const locPorCod = {};
     // 1. Fonte primária: tabela CLIENTES (cadastro) — tem CODCLI, CIDADE, ESTADO, REP
@@ -2462,7 +2476,9 @@ function renderDashboard(data) {
         const cidade = String(gV(r,'CIDADE')||'');
         const estado = String(gV(r,'ESTADO')||'');
         const codrep = String(gV(r,'CODREP')||'').trim();
-        const rep    = String(gV(r,'REP')||'').trim();
+        const repRaw = String(gV(r,'REP')||'').trim();
+        // Prioridade: nome via CODREP > campo REP traduzido > campo REP bruto
+        const rep = nomeRepPorCod[codrep] || traduzRep(repRaw) || repRaw;
         if (cod) locPorCod[cod] = { cidade, estado, codrep, rep };
       });
     }
@@ -2474,31 +2490,13 @@ function renderDashboard(data) {
         const estado = String(gV(r,'ESTADO')||'').trim();
         if (!cod) return;
         if (!locPorCod[cod]) {
-          // Cliente não está no cadastro — usar dados do pedido
           locPorCod[cod] = { cidade, estado, codrep: '', rep: '' };
         } else if (!locPorCod[cod].cidade && cidade) {
-          // Está no cadastro mas sem cidade — complementar com dados do pedido
           locPorCod[cod].cidade = cidade;
           locPorCod[cod].estado = locPorCod[cod].estado || estado;
         }
       });
     }
-
-    // Mapa CODREP → nome do representante
-    const nomeRepPorCod = {};
-    (cachedRepresentantes||[]).forEach(r => {
-      const cod  = String(r['REPRESENTANTE[CODREP]']||r['[CODREP]']||r['CODREP']||'').trim();
-      const nome = String(r['REPRESENTANTE[REPRESENTANTE]']||r['[REPRESENTANTE]']||r['REPRESENTANTE']||'').trim();
-      if (cod && nome) nomeRepPorCod[cod] = nome;
-    });
-    // Também de cachedClientesLoc: REP pode já ser o nome (vindo do campo REP da tabela CLIENTES)
-    // mas se for código (numérico), traduzir para nome
-    const traduzRep = raw => {
-      if (!raw) return '';
-      // Se parece código numérico (só dígitos), traduz via nomeRepPorCod
-      if (/^\d+$/.test(raw)) return nomeRepPorCod[raw] || raw;
-      return raw;
-    };
 
     // Reps com meta na coleção atual (= rep ativo)
     // Inclui também reps cadastrados (cachedRepresentantes e cachedClientesLoc) para não perder
@@ -2809,11 +2807,16 @@ function renderDashboard(data) {
         let maxVal = 0;
         codsNaMarca.forEach(c => cols.forEach(col => { const v=porCliente[c].marcas[marca]?.[col]||0; if(v>maxVal)maxVal=v; }));
 
-        // Agrupar por representante dentro da marca — sem-rep vai para o final
+        // Agrupar por representante dentro da marca — com meta primeiro, depois sem meta, sem-rep no final
         const SEM_REP = '__SEM_REP__';
+        const repsComMeta = new Set((cachedData||[]).filter(d=>d.meta>0).map(d=>String(d.rep||'').trim()).filter(Boolean));
         const repsMarca = [...new Set(codsNaMarca.map(c=>porCliente[c].rep||SEM_REP))].sort((a,b)=>{
           if (a===SEM_REP) return 1;
           if (b===SEM_REP) return -1;
+          const aMeta = repsComMeta.has(a);
+          const bMeta = repsComMeta.has(b);
+          if (aMeta && !bMeta) return -1;
+          if (!aMeta && bMeta) return 1;
           return a.localeCompare(b,'pt-BR');
         });
 
