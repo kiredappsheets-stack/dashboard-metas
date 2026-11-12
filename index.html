@@ -1684,6 +1684,27 @@ function renderDashboard(data) {
       });
     }
 
+    // ── Inadimplentes por rep ──
+    const normGC = c => String(parseInt(c,10)||0);
+    const inadMapGC = {}; // codNorm -> { rep }
+    (cachedInadimplentes||[]).forEach(r => {
+      const cod = String(r['INADIMPLENCIA[CODCLI]']||r['[CODCLI]']||r['CODCLI']||'').trim();
+      if (cod) inadMapGC[normGC(cod)] = true;
+    });
+    // repPorCodGC: codNorm -> rep (via cachedClientes2)
+    const repPorCodGC = {};
+    (cachedClientes2||[]).forEach(r => {
+      const gVg = (row,c) => { const k=Object.keys(row).find(k2=>k2.toUpperCase().includes(c.toUpperCase()))||c; return row[k]??null; };
+      const cod = normGC(String(gVg(r,'CODCLI')||'').trim());
+      const rep = String(gVg(r,'REP')||'').trim();
+      if (cod && rep) repPorCodGC[cod] = rep;
+    });
+    const inadPorRep = {}; // rep -> count
+    Object.keys(inadMapGC).forEach(cn => {
+      const rep = repPorCodGC[cn];
+      if (rep) { inadPorRep[rep] = (inadPorRep[rep]||0) + 1; }
+    });
+
     // ── Helpers de estilo ──
     const shortRep = n => n.replace(/\b(REPRESENTACOES|REPRESENTACAO|COMERCIAL|LTDA\.?|LIMITADA|UNIPESSOAL|S\/S|& CIA)\b/gi,'').replace(/\s+/g,' ').trim();
     const thStyle  = 'padding:8px 10px;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;text-align:right;border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--sidebar);z-index:2';
@@ -1781,6 +1802,9 @@ function renderDashboard(data) {
         <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
           <span style="font-weight:600;color:#9B8FFF">Carteira</span> — clientes distintos comprados nas últimas 3 coleções (excl. atual)
         </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
+          <span style="font-weight:600;color:#dc2626">Inadimp.</span> — clientes com saldo em atraso (Fluxo de Caixa)
+        </span>
       </div>`;
 
     let html = '<div style="padding:16px 20px 8px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">'
@@ -1858,6 +1882,7 @@ function renderDashboard(data) {
         + '<th class="r" style="color:var(--amber)">Não rep.</th>'
         + '<th class="r" style="color:#E84A4A">Ex-clientes</th>'
         + '<th class="r" style="color:var(--green)">Valor novos</th>'
+        + '<th class="r" style="color:#dc2626">Inadimp.</th>'
         + '</tr></thead><tbody>';
 
       repRows.forEach((r, i) => {
@@ -1881,6 +1906,8 @@ function renderDashboard(data) {
         html += td(r.naoRep > 0 ? r.naoRep : '—', 'color:var(--amber)');
         html += td(r.exClientes > 0 ? r.exClientes : '—', 'color:#E84A4A');
         html += td(r.valorNovos > 0 ? fmtR(r.valorNovos) : '—', 'color:var(--green)');
+        const inadCnt = inadPorRep[r.rep]||0;
+        html += td(inadCnt > 0 ? inadCnt : '—', inadCnt > 0 ? 'color:#dc2626;font-weight:700' : 'color:var(--hint)');
         html += '</tr>';
       });
 
@@ -1899,6 +1926,8 @@ function renderDashboard(data) {
       html += td(totNaoRepM > 0 ? totNaoRepM : '—', 'color:var(--amber)');
       html += td(totM.exClientes > 0 ? totM.exClientes : '—', 'color:#E84A4A');
       html += td(totM.valorNovos > 0 ? fmtR(totM.valorNovos) : '—', 'color:var(--green)');
+      const totInadM = repRows.reduce((s,r) => s + (inadPorRep[r.rep]||0), 0);
+      html += td(totInadM > 0 ? totInadM : '—', totInadM > 0 ? 'color:#dc2626;font-weight:700' : 'color:var(--hint)');
       html += '</tr></tfoot></table></div></div>';
     });
 
@@ -1966,6 +1995,7 @@ function renderDashboard(data) {
     const gV = (r, c) => { const k = Object.keys(r).find(k2=>k2.toUpperCase().includes(c.toUpperCase()))||c; return r[k]??null; };
     const fmtR = v => 'R$ ' + Math.abs(Number(v)).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
     const normI = c => String(parseInt(c,10)||0);
+    const shortRep = n => n.replace(/\b(REPRESENTACOES|REPRESENTACAO|COMERCIAL|LTDA\.?|LIMITADA|UNIPESSOAL|S\/S|& CIA)\b/gi,'').replace(/\s+/g,' ').trim();
 
     if (!cachedInadimplentes || !cachedInadimplentes.length) {
       return '<div class="empty-state" style="padding:40px;text-align:center;color:var(--muted)">Nenhum cliente inadimplente encontrado.</div>';
@@ -1982,45 +2012,32 @@ function renderDashboard(data) {
       if (!inadMap[cn]) inadMap[cn] = { codOrig: cod, nome, saldo };
     });
 
-    // ── Cruzar com cachedClientes2 para obter REP e MARCA ──
-    // repPorCod: codNorm -> rep (última venda)
-    // marcasPorCod: codNorm -> Set de marcas
-    const repPorCod   = {};
-    const marcasPorCod = {};
+    // ── Cruzar com cachedClientes2 para obter REP ──
+    const repPorCod = {};
     if (cachedClientes2 && cachedClientes2.length) {
       cachedClientes2.forEach(r => {
-        const cod   = normI(String(gV(r,'CODCLI')||'').trim());
-        const rep   = String(gV(r,'REP')||'').trim();
-        const marca = String(gV(r,'MARCA')||'').trim();
-        if (!cod) return;
-        if (rep) repPorCod[cod] = rep; // sobrescreve → mais recente
-        if (marca) {
-          if (!marcasPorCod[cod]) marcasPorCod[cod] = new Set();
-          marcasPorCod[cod].add(marca);
-        }
+        const cod = normI(String(gV(r,'CODCLI')||'').trim());
+        const rep = String(gV(r,'REP')||'').trim();
+        if (cod && rep) repPorCod[cod] = rep;
       });
     }
 
-    // ── Enriquecer inadMap com rep/marcas ──
+    // ── Enriquecer inadMap com rep ──
     Object.keys(inadMap).forEach(cn => {
-      inadMap[cn].rep    = repPorCod[cn]   || '—';
-      inadMap[cn].marcas = marcasPorCod[cn] ? [...marcasPorCod[cn]] : [];
+      inadMap[cn].rep = repPorCod[cn] || '(sem representante)';
     });
 
-    // ── Agrupar por marca ──
-    const porMarca = {}; // marca -> [{ codNorm, ...inadMap entry }]
+    // ── Agrupar por representante ──
+    const porRep = {}; // rep -> [{ cn, ...inadMap entry }]
     Object.entries(inadMap).forEach(([cn, info]) => {
-      const marcas = info.marcas.length ? info.marcas : ['(sem marca)'];
-      marcas.forEach(marca => {
-        if (!porMarca[marca]) porMarca[marca] = [];
-        porMarca[marca].push({ cn, ...info });
-      });
+      if (!porRep[info.rep]) porRep[info.rep] = [];
+      porRep[info.rep].push({ cn, ...info });
     });
 
-    // Ordenar marcas por total de saldo (mais negativo primeiro = maior dívida)
-    const marcasOrdenadas = Object.keys(porMarca).sort((a,b) => {
-      const sA = porMarca[a].reduce((s,r)=>s+r.saldo, 0);
-      const sB = porMarca[b].reduce((s,r)=>s+r.saldo, 0);
+    // Ordenar reps por total de saldo (mais negativo primeiro = maior dívida)
+    const repsOrdenados = Object.keys(porRep).sort((a,b) => {
+      const sA = porRep[a].reduce((s,r)=>s+r.saldo, 0);
+      const sB = porRep[b].reduce((s,r)=>s+r.saldo, 0);
       return sA - sB; // mais negativo primeiro
     });
 
@@ -2040,9 +2057,15 @@ function renderDashboard(data) {
         .inad-tbl tr:nth-child(even) td { background:var(--surface2); }
         .inad-tbl tr:nth-child(odd) td { background:var(--surface); }
         .inad-tbl tfoot td { background:var(--sidebar)!important; font-weight:700; color:var(--muted); border-top:2px solid var(--border); position:sticky; bottom:0; }
+        .inad-cols-grid { display:grid; gap:20px; padding:0 16px 24px; }
       `;
       document.head.appendChild(s);
     }
+
+    // Layout em grid de colunas: N reps lado a lado
+    const nReps = repsOrdenados.length;
+    // até 3 colunas por linha
+    const nCols = Math.min(nReps, 3);
 
     let html = '<div style="padding:16px 20px 8px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">'
       + '<div style="font-size:15px;font-weight:700;color:#dc2626">Inadimplentes</div>'
@@ -2050,43 +2073,38 @@ function renderDashboard(data) {
       + totalClients + ' cliente' + (totalClients!==1?'s':'')
       + ' · Saldo total em atraso: <span style="color:#dc2626;font-weight:700">' + fmtR(totalGeral) + '</span>'
       + '</div></div>'
-      + '<div style="overflow-y:auto;flex:1;padding:0 16px 24px;display:flex;flex-direction:column;gap:24px">';
+      + '<div class="inad-cols-grid" style="overflow-y:auto;flex:1;grid-template-columns:repeat(' + nCols + ',minmax(0,1fr))">';
 
-    marcasOrdenadas.forEach(marca => {
-      const rows = porMarca[marca].sort((a,b) => a.saldo - b.saldo); // mais devedor primeiro
-      const totMarca = rows.reduce((s,r)=>s+r.saldo, 0);
-      const isMY  = marca.toUpperCase().includes('MYROCK');
-      const acento = isMY ? 'var(--green)' : 'var(--blue)';
+    repsOrdenados.forEach(rep => {
+      const rows = porRep[rep].sort((a,b) => a.saldo - b.saldo); // mais devedor primeiro
+      const totRep = rows.reduce((s,r)=>s+r.saldo, 0);
 
-      html += '<div>';
-      html += '<div style="font-size:13px;font-weight:700;padding:8px 12px;background:var(--surface2);border-radius:6px;border-left:3px solid '
-        + acento + ';margin-bottom:10px;color:var(--tx);display:flex;align-items:center;gap:10px">'
-        + '<span>' + marca + '</span>'
-        + '<span style="font-size:11px;font-weight:400;color:#dc2626">' + rows.length + ' inadimplente' + (rows.length!==1?'s':'') + '</span>'
-        + '<span style="font-size:11px;font-weight:600;color:#dc2626;margin-left:auto">' + fmtR(totMarca) + '</span>'
+      html += '<div style="display:flex;flex-direction:column">';
+      // Cabeçalho do representante
+      html += '<div style="font-size:13px;font-weight:700;padding:8px 12px;background:var(--surface2);border-radius:6px 6px 0 0;border-left:3px solid #dc2626;color:var(--tx);display:flex;align-items:center;gap:8px;min-height:48px">'
+        + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + rep + '">' + shortRep(rep) + '</span>'
+        + '<span style="font-size:10px;font-weight:400;color:#dc2626;white-space:nowrap">' + rows.length + ' cli.</span>'
+        + '</div>';
+      // Total do rep abaixo do cabeçalho
+      html += '<div style="font-size:11px;font-weight:700;color:#dc2626;padding:4px 12px 6px;background:var(--surface2);border-radius:0;border-left:3px solid #dc2626;border-bottom:1px solid var(--border)">'
+        + fmtR(totRep)
         + '</div>';
 
-      html += '<div style="overflow:auto;border-radius:6px;border:1px solid var(--border)">'
+      // Tabela de clientes
+      html += '<div style="overflow:auto;border-radius:0 0 6px 6px;border:1px solid var(--border);border-top:none;flex:1">'
         + '<table class="inad-tbl"><thead><tr>'
-        + '<th class="l">Cód.</th>'
-        + '<th class="l" style="min-width:200px">Cliente</th>'
-        + '<th class="l" style="min-width:160px">Representante</th>'
-        + '<th class="r" style="color:#dc2626">Saldo em Atraso</th>'
+        + '<th class="l" style="min-width:140px">Cliente</th>'
+        + '<th class="r" style="color:#dc2626">Saldo</th>'
         + '</tr></thead><tbody>';
 
       rows.forEach(r => {
         html += '<tr>'
-          + '<td style="font-family:monospace;color:var(--muted);font-size:11px">' + (r.codOrig||r.cn) + '</td>'
-          + '<td style="font-weight:600;color:var(--tx)">' + (r.nome||'—') + '</td>'
-          + '<td style="color:var(--muted)">' + r.rep + '</td>'
-          + '<td style="text-align:right;color:#dc2626;font-weight:700">' + fmtR(r.saldo) + '</td>'
+          + '<td style="font-weight:500;color:var(--tx);max-width:220px;overflow:hidden;text-overflow:ellipsis" title="' + (r.nome||r.cn) + '">' + (r.nome||'—') + '</td>'
+          + '<td style="text-align:right;color:#dc2626;font-weight:700;white-space:nowrap">' + fmtR(r.saldo) + '</td>'
           + '</tr>';
       });
 
-      html += '</tbody><tfoot><tr>'
-        + '<td colspan="3" style="text-align:right;padding-right:12px">Total ' + marca + '</td>'
-        + '<td style="text-align:right;color:#dc2626">' + fmtR(totMarca) + '</td>'
-        + '</tr></tfoot></table></div></div>';
+      html += '</tbody></table></div></div>';
     });
 
     html += '</div>';
@@ -2451,7 +2469,15 @@ function renderDashboard(data) {
       });
     });
 
-    const statusLabel = { 'mantido':'Mantido', 'recuperado':'Recuperado', 'nao-rep':'Não repetido', 'novo':'Novo' };
+    const statusLabel = { 'mantido':'Mantido', 'recuperado':'Recuperado', 'nao-rep':'Não repetido', 'novo':'Novo', 'inadimplente':'Inadimplente' };
+
+    // ── Set de inadimplentes (codNorm) para badge e filtro ──
+    const normI = c => String(parseInt(c,10)||0);
+    const inadSet = new Set();
+    (cachedInadimplentes||[]).forEach(r => {
+      const cod = String(r['INADIMPLENCIA[CODCLI]']||r['[CODCLI]']||r['CODCLI']||'').trim();
+      if (cod) inadSet.add(normI(cod));
+    });
 
     // Render dos painéis
     const renderPaineis = (colsFiltroAtual) => {
@@ -2473,7 +2499,9 @@ function renderDashboard(data) {
         if (!cols.length) return;
 
         let codsNaMarca = codigos.filter(c => porCliente[c].marcas[marca] && cols.some(col=>(porCliente[c].marcas[marca][col]||0)>0));
-        if (statusFiltro) {
+        if (statusFiltro === 'inadimplente') {
+          codsNaMarca = codsNaMarca.filter(c => inadSet.has(normI(c)));
+        } else if (statusFiltro) {
           codsNaMarca = codsNaMarca.filter(c => (statusPorMarcaCli[marca]?.[c] || 'novo') === statusFiltro);
         }
         if (!codsNaMarca.length) return;
@@ -2561,11 +2589,12 @@ function renderDashboard(data) {
               if (pct < -0.02) return `<span title="Comprou menos que na última coleção (${(pct*100).toFixed(0)}%)" style="color:var(--red);font-size:12px;margin-left:4px;font-weight:700">↓</span>`;
               return `<span title="Valor similar à última coleção" style="color:var(--muted);font-size:12px;margin-left:4px">≈</span>`;
             })();
+            const isInad = inadSet.has(normI(cod));
             html += `<tr><td class="col-nome" title="${cli.nome}${loc?' — '+loc:''}">
                 ${cli.nome}
                 ${loc ? `<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:1px;overflow:hidden;text-overflow:ellipsis">${loc}</span>` : ''}
               </td>
-              <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span>${tendIcon}</td>
+              <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span>${isInad ? `<span class="cli-status inadimplente" style="margin:0 0 0 4px">Inadimplente</span>` : ''}${tendIcon}</td>
               <td class="col-crm">${(() => { const crmEstado = getCrmEstado(cod); const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : crmEstado === 'financeiro' ? ' crm-financeiro' : ''; return `<button class="crm-icon${crmClass}" data-cod="${cod}" data-nome="${cli.nome.replace(/"/g,'&quot;')}">CRM</button>`; })()}</td>`;
             const crmEventosCli = getCrmEventos(cod);
             cols.forEach((col,ci) => {
@@ -2629,6 +2658,7 @@ function renderDashboard(data) {
           <option value="recuperado">Recuperado</option>
           <option value="nao-rep">Não repetido</option>
           <option value="novo">Novo</option>
+          <option value="inadimplente">Inadimplente</option>
         </select>
         <button id="${uid}_col_toggle" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap">⚙ Coleções</button>
         <button id="${uid}_pdf_btn" title="Exportar lista atual como PDF" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px">
@@ -2645,6 +2675,7 @@ function renderDashboard(data) {
           <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status recuperado" style="margin:0">Recuperado</span><span style="color:var(--muted)">comprou na atual, não na anterior</span></span>
           <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status nao-rep" style="margin:0">Não repetido</span><span style="color:var(--muted)">não comprou na coleção atual</span></span>
           <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status novo" style="margin:0">Novo</span><span style="color:var(--muted)">nunca comprou antes</span></span>
+          <span style="display:inline-flex;align-items:center;gap:4px"><span class="cli-status inadimplente" style="margin:0">Inadimplente</span><span style="color:var(--muted)">saldo em atraso no Fluxo de Caixa</span></span>
         </div>
       </div>
       <div id="${uid}_col_panel" style="display:none;padding:14px 20px;border-bottom:1px solid var(--border);background:var(--sidebar);flex-shrink:0;overflow-y:auto;max-height:220px">
@@ -3165,7 +3196,7 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v29';
+const CACHE_KEY = 'dashCache_v30';
 // Limpar versões antigas do cache
 try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14','dashCache_v15','dashCache_v16','dashCache_v17','dashCache_v18','dashCache_v19','dashCache_v20','dashCache_v21'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
