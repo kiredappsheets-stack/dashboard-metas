@@ -2756,10 +2756,11 @@ function renderDashboard(data) {
         };
       });
 
-      function mkChart(id, datasets, yLabel, isMoney) {
+      function mkChart(id, datasets, yLabel, isMoney, labels) {
         const canvas = document.getElementById(id);
         if (!canvas) return;
         if (canvas._chartInst) { canvas._chartInst.destroy(); canvas._chartInst = null; }
+        const chartLabels = labels || colecoes;
         // Registra plugin datalabels se disponível
         if (window.ChartDataLabels && !Chart._datalabelsRegistered) {
           Chart.register(ChartDataLabels);
@@ -2767,7 +2768,7 @@ function renderDashboard(data) {
         }
         canvas._chartInst = new Chart(canvas, {
           type: 'bar',
-          data: { labels: colecoes, datasets },
+          data: { labels: chartLabels, datasets },
           options: {
             responsive: true, maintainAspectRatio: false,
             plugins: {
@@ -2818,26 +2819,44 @@ function renderDashboard(data) {
           ? todasMarcas.filter(m => _grafMarcasSel.has(m))
           : todasMarcas;
 
-        // Mostra/oculta painéis de marca
-        document.querySelectorAll('[data-chart-marca]').forEach(el => {
-          el.style.display = marcasFiltradas.includes(el.dataset.chartMarca) ? '' : 'none';
+        // Mostra/oculta painéis e reordena — MyRock primeiro
+        const container = document.querySelector('[data-chart-marca]')?.parentElement;
+        if (container) {
+          const paineis = [...container.querySelectorAll('[data-chart-marca]')];
+          paineis.sort((a,b) => {
+            const aM = a.dataset.chartMarca.toUpperCase().includes('MYROCK');
+            const bM = b.dataset.chartMarca.toUpperCase().includes('MYROCK');
+            return bM - aM;
+          }).forEach(el => container.appendChild(el));
+          paineis.forEach(el => {
+            el.style.display = marcasFiltradas.includes(el.dataset.chartMarca) ? '' : 'none';
+          });
+        }
+
+        // MyRock primeiro
+        const marcasOrdenadas = [...marcasFiltradas].sort((a,b) => {
+          const aM = a.toUpperCase().includes('MYROCK');
+          const bM = b.toUpperCase().includes('MYROCK');
+          return bM - aM;
         });
 
-        // Um gráfico por marca
-        marcasFiltradas.forEach(m => {
+        // Um gráfico por marca — só coleções com dados para aquela marca
+        marcasOrdenadas.forEach(m => {
+          const colecoesMarca = colecoes.filter(c => (idx[c]?.[m]?.pecas || 0) > 0);
           const canvasId = 'chartMarca_' + m.replace(/\s+/g,'_');
           mkChart(
             canvasId,
             [{
               label: 'Peças Vendidas',
-              data: colecoes.map(c => idx[c]?.[m]?.pecas || 0),
+              data: colecoesMarca.map(c => idx[c][m].pecas),
               backgroundColor: corPorMarca[m] + 'cc',
               borderColor: corPorMarca[m],
               borderWidth: 1,
               borderRadius: 4,
             }],
             'Peças',
-            false
+            false,
+            colecoesMarca   // eixo X específico desta marca
           );
         });
       };
