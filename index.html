@@ -1684,28 +1684,6 @@ function renderDashboard(data) {
       });
     }
 
-    // ── Inadimplentes por rep ──
-    // Conjunto de CODCLIs inadimplentes (normalizado sem zeros à esquerda)
-    const normCodGC = c => String(parseInt(c,10)||0);
-    const inadSet = new Set((cachedInadimplentes||[]).map(r => normCodGC(r['INADIMPLENCIA[CODCLI]']||r['[CODCLI]']||r['CODCLI']||'')));
-    // Para cada rep: contar clientes distintos da carteira (últimas 3 cols) que estão inadimplentes
-    const inadPorRep = {};
-    if (inadSet.size > 0 && cachedClientes2 && cachedClientes2.length) {
-      // Mapear codcli -> rep (última venda)
-      const repPorCodcli = {};
-      cachedClientes2.forEach(r => {
-        const cod = String(gV(r,'CODCLI')||'').trim();
-        const rep = String(gV(r,'REP')||'').trim();
-        if (cod && rep) repPorCodcli[cod] = rep;
-      });
-      // Contar inadimplentes por rep
-      inadSet.forEach(cod => {
-        const rep = repPorCodcli[cod];
-        if (!rep) return;
-        inadPorRep[rep] = (inadPorRep[rep]||0) + 1;
-      });
-    }
-
     // ── Helpers de estilo ──
     const shortRep = n => n.replace(/\b(REPRESENTACOES|REPRESENTACAO|COMERCIAL|LTDA\.?|LIMITADA|UNIPESSOAL|S\/S|& CIA)\b/gi,'').replace(/\s+/g,' ').trim();
     const thStyle  = 'padding:8px 10px;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;text-align:right;border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--sidebar);z-index:2';
@@ -1803,9 +1781,6 @@ function renderDashboard(data) {
         <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
           <span style="font-weight:600;color:#9B8FFF">Carteira</span> — clientes distintos comprados nas últimas 3 coleções (excl. atual)
         </span>
-        <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:4px;color:var(--muted)">
-          <span style="font-weight:600;color:#dc2626">Inadimp.</span> — clientes inadimplentes na carteira (Fluxo de Caixa)
-        </span>
       </div>`;
 
     let html = '<div style="padding:16px 20px 8px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">'
@@ -1833,8 +1808,7 @@ function renderDashboard(data) {
         const pedMed = rd.clisA > 0 ? rd.venda / rd.clisA : 0;
         const naoRep = Math.max(0, st.mantidos - st.novos);
         return { rep, ...rd, meta, pct, pcPed, pedMed, naoRep,
-                 novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, carteira: st.carteira||0, valorNovos: st.valorNovos,
-                 inadimplentes: inadPorRep[rep]||0 };
+                 novos: st.novos, mantidos: st.mantidos, exClientes: st.exClientes, carteira: st.carteira||0, valorNovos: st.valorNovos };
       }).sort((a,b) => b.venda - a.venda);
 
       // Adicionar reps com meta nesta marca mas sem venda (mesmo critério da Visão Geral)
@@ -1845,15 +1819,14 @@ function renderDashboard(data) {
         repRows.push({ rep, codRep: ufPorRep[rep]?.cod||'', uf: ufPorRep[rep]?.uf||'',
                        pecas:0, pedidos:0, clisA:0, venda:0, meta, pct:0, pcPed:0, pedMed:0,
                        naoRep:0, novos:st.novos, mantidos:st.mantidos, exClientes:st.exClientes,
-                       carteira:st.carteira||0, valorNovos:st.valorNovos, inadimplentes:inadPorRep[rep]||0 });
+                       carteira:st.carteira||0, valorNovos:st.valorNovos });
       });
 
       // Totais da marca
       const totM = repRows.reduce((a,r)=>({ pecas:a.pecas+r.pecas, meta:a.meta+r.meta, venda:a.venda+r.venda,
         clisA:a.clisA+r.clisA, novos:a.novos+r.novos, mantidos:a.mantidos+r.mantidos,
-        exClientes:a.exClientes+r.exClientes, carteira:a.carteira+r.carteira, valorNovos:a.valorNovos+r.valorNovos,
-        inadimplentes:a.inadimplentes+r.inadimplentes }),
-        {pecas:0,meta:0,venda:0,clisA:0,novos:0,mantidos:0,exClientes:0,carteira:0,valorNovos:0,inadimplentes:0});
+        exClientes:a.exClientes+r.exClientes, carteira:a.carteira+r.carteira, valorNovos:a.valorNovos+r.valorNovos }),
+        {pecas:0,meta:0,venda:0,clisA:0,novos:0,mantidos:0,exClientes:0,carteira:0,valorNovos:0});
       const totPctM = totM.meta > 0 ? totM.venda / totM.meta : 0;
       const totNaoRepM = Math.max(0, totM.mantidos - totM.novos);
       const totColor = colorPct(totPctM);
@@ -1879,7 +1852,6 @@ function renderDashboard(data) {
         + '<th class="r">Pc/Pedido</th>'
         + '<th class="r">Ped. médio</th>'
         + '<th class="r" style="color:#9B8FFF">Carteira</th>'
-        + '<th class="r" style="color:#dc2626">Inadimp.</th>'
         + '<th class="r">Atendidos</th>'
         + '<th class="r" style="color:var(--green)">Novos</th>'
         + '<th class="r" style="color:#4C9EF1">Mantidos</th>'
@@ -1903,7 +1875,6 @@ function renderDashboard(data) {
         html += td(r.pcPed > 0 ? Math.round(r.pcPed) : '—');
         html += td(r.pedMed > 0 ? fmtR(r.pedMed) : '—');
         html += td(r.carteira > 0 ? r.carteira : '—', 'color:#9B8FFF');
-        html += td(r.inadimplentes > 0 ? r.inadimplentes : '—', 'color:#dc2626;font-weight:600');
         html += td(r.clisA > 0 ? r.clisA : '—');
         html += td(r.novos > 0 ? r.novos : '—', 'color:var(--green)');
         html += td(r.mantidos > 0 ? r.mantidos : '—', 'color:#4C9EF1');
@@ -1922,7 +1893,6 @@ function renderDashboard(data) {
       html += td((totPctM*100).toFixed(1)+'%', 'color:' + totColor);
       html += td('—') + td('—');
       html += td(totM.carteira > 0 ? totM.carteira : '—', 'color:#9B8FFF');
-      html += td(totM.inadimplentes > 0 ? totM.inadimplentes : '—', 'color:#dc2626;font-weight:700');
       html += td(totM.clisA > 0 ? totM.clisA : '—');
       html += td(totM.novos > 0 ? totM.novos : '—', 'color:var(--green)');
       html += td(totM.mantidos > 0 ? totM.mantidos : '—', 'color:#4C9EF1');
@@ -2923,13 +2893,13 @@ function renderDashboard(data) {
       <button class="tab-btn active" data-tab="overview">Visão Geral</button>
       <button class="tab-btn" data-tab="gestao">Gestão Comercial</button>
       <button class="tab-btn" data-tab="clientes">Clientes</button>
-      <button class="tab-btn" data-tab="inadimplentes">🔴 Inadimplentes <span class="tab-badge" style="background:rgba(220,38,38,.2);color:#dc2626">${cachedInadimplentes?cachedInadimplentes.length:0}</span></button>
       <button class="tab-btn" data-tab="historico">Histórico Mensal</button>
       <button class="tab-btn" data-tab="periodo">Histórico Semanal</button>
       <button class="tab-btn" data-tab="margem">💰 Margem por Pedido</button>
       <button class="tab-btn" data-tab="graficos">Gráficos</button>
       <button class="tab-btn" data-tab="restricoes">Restrições <span class="tab-badge">${cachedRestricoes?cachedRestricoes.length:0}</span></button>
       <button class="tab-btn" data-tab="restricoes-hist">Restr. Históricas <span class="tab-badge">${cachedRestricoesHist?cachedRestricoesHist.length:0}</span></button>
+      <button class="tab-btn" data-tab="inadimplentes">🔴 Inadimplentes <span class="tab-badge" style="background:rgba(220,38,38,.2);color:#dc2626">${cachedInadimplentes?cachedInadimplentes.length:0}</span></button>
       <button class="tab-btn" data-tab="metas-admin">⚙ Metas</button>
       <button class="tab-btn" data-tab="leads">🏪 Leads</button>
     </div>
@@ -3207,7 +3177,7 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v25';
+const CACHE_KEY = 'dashCache_v26';
 // Limpar versões antigas do cache
 try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14','dashCache_v15','dashCache_v16','dashCache_v17','dashCache_v18','dashCache_v19','dashCache_v20','dashCache_v21'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
