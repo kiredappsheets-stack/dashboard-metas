@@ -1155,7 +1155,7 @@ function renderDashboard(data) {
               </div>
             </div>
             <div>
-              <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px">💰 Valor Vendido (R$)</div>
+              <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px">💰 Vendas (R$)</div>
               <div style="position:relative;height:220px">
                 <canvas id="chartMarca_venda_${m.replace(/\s+/g,'_')}"></canvas>
               </div>
@@ -2867,7 +2867,7 @@ function renderDashboard(data) {
             'chartMarca_venda_' + slug,
             [{ label: 'Valor Vendido', data: colecoesMarca.map(c => idx[c][m].venda),
                backgroundColor: cor + 'cc', borderColor: cor, borderWidth: 1, borderRadius: 4 }],
-            'Faturamento (R$)', true, colecoesMarca
+            'Vendas (R$)', true, colecoesMarca
           );
         });
       };
