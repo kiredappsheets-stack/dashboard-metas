@@ -1143,9 +1143,9 @@ function renderDashboard(data) {
       </div>
 
       <!-- Gráficos individuais por marca -->
-      <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div style="display:flex;flex-direction:column;gap:16px">
         ${marcas.map(m => `
-        <div data-chart-marca="${m}" style="flex:1;min-width:280px;background:var(--surface2);border-radius:10px;padding:16px;border-top:3px solid ${corPorMarca[m]}">
+        <div data-chart-marca="${m}" style="background:var(--surface2);border-radius:10px;padding:16px;border-top:3px solid ${corPorMarca[m]}">
           <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">📦 ${m}</div>
           <div style="position:relative;height:260px">
             <canvas id="chartMarca_${m.replace(/\s+/g,'_')}"></canvas>
@@ -2730,7 +2730,12 @@ function renderDashboard(data) {
       const todasMarcas = [...new Set(cachedGraficosMarcaCol.map(r=>gG(r,'MARCA')))].sort();
       const cores     = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#8b5cf6','#14b8a6','#f97316','#84cc16'];
       const corPorMarca = {};
-      todasMarcas.forEach((m,i) => { corPorMarca[m] = cores[i % cores.length]; });
+      todasMarcas.forEach((m,i) => {
+        // Cor fixa por marca conhecida
+        if (m.toUpperCase().includes('MYROCK'))   corPorMarca[m] = '#10b981'; // verde
+        else if (m.toUpperCase().includes('CHAR')) corPorMarca[m] = '#6366f1'; // índigo
+        else corPorMarca[m] = cores[i % cores.length];
+      });
 
       // Guarda cor nos botões
       document.querySelectorAll('#graficos-marca-filter button[data-marca]').forEach(btn => {
