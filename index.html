@@ -890,6 +890,7 @@ function renderError(msg) {
 }
 
 function renderDashboard(data) {
+  let repStats = {}; // elevado ao escopo de renderDashboard para ser acessível em buildClientes
   const colecoes = [...new Set(data.map(d => d.col))].sort((a, b) => b.localeCompare(a, 'pt-BR'));
   const totalMeta  = data.reduce((a, d) => a + d.meta, 0);
   const totalVenda = data.reduce((a, d) => a + d.venda, 0);
@@ -1653,7 +1654,7 @@ function renderDashboard(data) {
     });
 
     // Para cada rep: clientes que compraram em col vigente e em coleções anteriores
-    const repStats = {};
+    // repStats declarado no escopo de renderDashboard — apenas resetamos aqui
 
     if (cachedClientes2 && cachedClientes2.length) {
       // 1) Coletar clientes por rep em col vigente
@@ -1782,6 +1783,10 @@ function renderDashboard(data) {
       const st = repStats[repPed];
       const naCarteira = st && st.carteiraCods && [...st.carteiraCods].some(c => normGC(String(c)) === cn);
       if (naCarteira) { inadPorRep[repPed] = (inadPorRep[repPed]||0) + 1; }
+    });
+    // Adicionar inadimplentes ao repStats para uso na aba Clientes
+    Object.keys(inadPorRep).forEach(rep => {
+      if (repStats[rep]) repStats[rep].inadimplentes = inadPorRep[rep];
     });
 
     // ── Helpers de estilo ──
@@ -2921,10 +2926,34 @@ function renderDashboard(data) {
           const repLabelClass = isSemRep ? 'rep-label sem-rep' : 'rep-label';
           const repNomeHtml = `<span class="rep-nome">${repLabel}</span>`;
           const subColsHtml = subCols.map(v=>`<td class="col-val rep-sub-val">${v>0?fmt(v):'—'}</td>`).join('');
+
+          // Stats da Gestão Comercial para este rep
+          const gcSt = (!isSemRep && repStats[rep]) ? repStats[rep] : null;
+          const gcStatsHtml = (() => {
+            if (!gcSt) return '';
+            const fN  = v => v != null && v > 0 ? v : '—';
+            const fV  = v => v > 0 ? 'R$ ' + Number(v).toLocaleString('pt-BR',{maximumFractionDigits:0}) : '—';
+            const aAtender = Math.max(0, (gcSt.carteiraAtiva||0) - (gcSt.atendidos||0));
+            const pill = (lbl, val, color) =>
+              `<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.06);color:${color};border:1px solid rgba(255,255,255,.1);white-space:nowrap">
+                <span style="font-size:9px;font-weight:400;color:var(--muted)">${lbl}</span> ${val}
+              </span>`;
+            return `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,.07)">
+              ${pill('Carteira', fN(gcSt.carteira), 'var(--tx)')}
+              ${pill('Carteira ativa', fN(gcSt.carteiraAtiva), '#9B8FFF')}
+              ${pill('Atendidos', fN(gcSt.atendidos), 'var(--green)')}
+              ${pill('Á atender', fN(aAtender), aAtender > 0 ? 'var(--amber)' : 'var(--muted)')}
+              ${pill('Valor á atender', fV(gcSt.valorAAtender), 'var(--blue)')}
+              ${pill('Inadimp.', fN(gcSt.inadimplentes||0), 'var(--red)')}
+              ${pill('Novos', fN(gcSt.novos), '#b464ff')}
+              ${pill('Mantidos', fN(gcSt.mantidos), 'var(--green)')}
+              ${pill('Não rep.', fN(gcSt.naoRep), 'var(--amber)')}
+              ${pill('Ex-clientes', fN(gcSt.exClientes), 'var(--red)')}
+            </div>`;
+          })();
+
           html += `<tr class="rep-row">
-            <td class="col-nome"><span class="${repLabelClass}">${repNomeHtml}<span class="rep-badge">${cliDoRep.length} cliente${cliDoRep.length!==1?'s':''}</span></span></td>
-            <td class="col-status"></td>
-            <td class="col-crm"></td>
+            <td class="col-nome" colspan="3"><span class="${repLabelClass}">${repNomeHtml}<span class="rep-badge">${cliDoRep.length} cliente${cliDoRep.length!==1?'s':''}</span></span>${gcStatsHtml}</td>
             ${subColsHtml}
             <td class="col-total rep-sub-total" style="color:${acento}">${fmt(subGeral)}</td>
           </tr>`;
