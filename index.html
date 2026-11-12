@@ -3165,7 +3165,7 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v27';
+const CACHE_KEY = 'dashCache_v28';
 // Limpar versões antigas do cache
 try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14','dashCache_v15','dashCache_v16','dashCache_v17','dashCache_v18','dashCache_v19','dashCache_v20','dashCache_v21'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
@@ -3367,14 +3367,15 @@ async function loadDashboard() {
   const lu = document.getElementById('lastUpdate');
   if (lu) lu.textContent = 'A obter token de acesso…';
 
-  // Timeout de 30s para evitar skeleton infinito
+  // Timeout de 120s para evitar skeleton infinito
+  // (18 queries simultâneas + 1 sequencial podem demorar bastante na 1ª carga)
   const _loadTimeout = setTimeout(() => {
-    renderError('Tempo limite esgotado. Verifica a ligação e tenta novamente.');
-  }, 30000);
+    renderError('Tempo limite esgotado. O Power BI Desktop pode estar fechado ou lento.\nAbre o ficheiro Power BI, aguarda carregar e tenta novamente.');
+  }, 120000);
 
   try {
     const token = await getToken();
-    if (lu) lu.textContent = 'A carregar dados do Power BI…';
+    if (lu) lu.textContent = 'A carregar dados do Power BI… (pode demorar até 2 minutos na 1ª carga)';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
     // Queries principais (dataset de metas)
@@ -3420,6 +3421,7 @@ async function loadDashboard() {
     cachedListaMarcas = listaMarcas || [];
     cachedRepresentantes = representantes || [];
     // Query do Fluxo de Caixa separada (dataset diferente) — rodar após as principais para evitar 429
+    if (lu) lu.textContent = 'A carregar inadimplentes (Fluxo de Caixa)…';
     const inadimplentes = await safe(() => runDaxQueryFluxo(token, DAX_INADIMPLENTES, true));
     cachedInadimplentes = inadimplentes || [];
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
