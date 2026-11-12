@@ -1726,34 +1726,22 @@ function renderDashboard(data) {
       });
     }
 
-    // Índice de clientes atendidos na vigente por rep-do-pedido (normalizados)
-    const cliVigNormPorRepPedido = {}; // repPedido -> Set(codNorm)
-    if (cachedClientes2 && cachedClientes2.length) {
-      cachedClientes2.forEach(r => {
-        const repPedido = String(gV(r,'REP')||'').trim();
-        const codcli = normGC(String(gV(r,'CODCLI')||'').trim());
-        const col = String(gV(r,'COLECAO')||'').trim();
-        if (!codcli || !col || !colVigSet.has(col) || !repPedido) return;
-        if (!cliVigNormPorRepPedido[repPedido]) cliVigNormPorRepPedido[repPedido] = new Set();
-        cliVigNormPorRepPedido[repPedido].add(codcli);
-      });
-    }
-
-    // inadPorRep: indexado pelo rep do PEDIDO (mesmo que marcaMap/repRows)
-    // Conta inadimplentes na carteira (repStats pelo cadastro) OU atendidos na vigente
+// inadPorRep: indexado pelo rep do PEDIDO (mesmo que marcaMap/repRows)
+    // Conta apenas inadimplentes que estão na CARTEIRA (últimas 3 cols antes da vigente)
+    // — não conta os que compraram só na vigente (Novos), pois carteira exclui vigente
     const inadPorRep = {}; // repPedido -> count
     Object.keys(inadMapGC).forEach(cn => {
       // Rep do cadastro (para achar carteiraCods em repStats)
       const repCad = repPorCodGC[cn];
+      if (!repCad) return;
       // Rep do pedido (para indexar inadPorRep igual ao repRows)
       const repPed = repPedidoPorCodcli[cn] || repCad;
       if (!repPed) return;
 
-      // Verifica se está na carteira (via repStats do cadastro) OU atendido na vigente
-      const st = repCad ? repStats[repCad] : null;
+      // Conta SOMENTE se está na carteira (últimas 3 cols antes da vigente)
+      const st = repStats[repCad];
       const naCarteira = st && st.carteiraCods && [...st.carteiraCods].some(c => normGC(String(c)) === cn);
-      const naVigente  = cliVigNormPorRepPedido[repPed] && cliVigNormPorRepPedido[repPed].has(cn);
-      if (naCarteira || naVigente) { inadPorRep[repPed] = (inadPorRep[repPed]||0) + 1; }
+      if (naCarteira) { inadPorRep[repPed] = (inadPorRep[repPed]||0) + 1; }
     });
 
     // ── Helpers de estilo ──
@@ -3271,9 +3259,9 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v36';
+const CACHE_KEY = 'dashCache_v37';
 // Limpar versões antigas do cache
-try { for(let i=1;i<=35;i++) localStorage.removeItem('dashCache_v'+i); } catch(e) {}
+try { for(let i=1;i<=36;i++) localStorage.removeItem('dashCache_v'+i); } catch(e) {}
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
