@@ -1699,12 +1699,13 @@ function renderDashboard(data) {
 
     // ── Inadimplentes por rep ──
     const normGC = c => String(parseInt(c,10)||0);
-    const inadMapGC = {}; // codNorm -> { rep }
+    const inadMapGC = {}; // codNorm -> true
     (cachedInadimplentes||[]).forEach(r => {
       const cod = String(r['INADIMPLENCIA[CODCLI]']||r['[CODCLI]']||r['CODCLI']||'').trim();
       if (cod) inadMapGC[normGC(cod)] = true;
     });
-    // repPorCodGC: codNorm -> rep do cadastro do cliente (CLIENTES[REP] via cachedClientesLoc)
+
+    // repPorCodGC: codNorm -> rep do cadastro (CLIENTES[REP])
     const repPorCodGC = {};
     (cachedClientesLoc||[]).forEach(r => {
       const gVg = (row,c) => { const k=Object.keys(row).find(k2=>k2.toUpperCase().includes(c.toUpperCase()))||c; return row[k]??null; };
@@ -1712,33 +1713,47 @@ function renderDashboard(data) {
       const rep = String(gVg(r,'REP')||'').trim();
       if (cod && rep) repPorCodGC[cod] = rep;
     });
-    // inadPorRep: conta inadimplentes que estão na carteira OU atendidos na vigente
-    // (carteira = últimas 3 cols antes da vigente; atendidos = cliColVig)
-    // Assim o cliente que comprou na vigente E está inadimplente também é contado
-    const inadPorRep = {}; // rep -> count
-    // Índice de clientes atendidos na vigente por rep (normalizados)
-    const cliVigNormPorRep = {}; // rep -> Set(codNorm)
+
+    // repPedidoPorCodcli: codcli -> rep do pedido (PEDIDO[REP]) da compra mais recente
+    // Usado para resolver rep do pedido → mesmo nome usado em marcaMap/repRows
+    const repPedidoPorCodcli = {};
+    if (cachedClientes2 && cachedClientes2.length) {
+      // cachedClientes2 vem ordenado por COLECAO ASC → última sobrescreve = mais recente
+      cachedClientes2.forEach(r => {
+        const cod = normGC(String(gV(r,'CODCLI')||'').trim());
+        const rep = String(gV(r,'REP')||'').trim();
+        if (cod && rep) repPedidoPorCodcli[cod] = rep;
+      });
+    }
+
+    // Índice de clientes atendidos na vigente por rep-do-pedido (normalizados)
+    const cliVigNormPorRepPedido = {}; // repPedido -> Set(codNorm)
     if (cachedClientes2 && cachedClientes2.length) {
       cachedClientes2.forEach(r => {
         const repPedido = String(gV(r,'REP')||'').trim();
-        const codcli = String(gV(r,'CODCLI')||'').trim();
+        const codcli = normGC(String(gV(r,'CODCLI')||'').trim());
         const col = String(gV(r,'COLECAO')||'').trim();
-        if (!codcli || !col || !colVigSet.has(col)) return;
-        const rep = repCadastroPorCod[codcli] || repPedido;
-        if (!rep) return;
-        if (!cliVigNormPorRep[rep]) cliVigNormPorRep[rep] = new Set();
-        cliVigNormPorRep[rep].add(normGC(codcli));
+        if (!codcli || !col || !colVigSet.has(col) || !repPedido) return;
+        if (!cliVigNormPorRepPedido[repPedido]) cliVigNormPorRepPedido[repPedido] = new Set();
+        cliVigNormPorRepPedido[repPedido].add(codcli);
       });
     }
+
+    // inadPorRep: indexado pelo rep do PEDIDO (mesmo que marcaMap/repRows)
+    // Conta inadimplentes na carteira (repStats pelo cadastro) OU atendidos na vigente
+    const inadPorRep = {}; // repPedido -> count
     Object.keys(inadMapGC).forEach(cn => {
-      const rep = repPorCodGC[cn];
-      if (!rep) return;
-      const st = repStats[rep];
-      if (!st) return;
-      // Conta se está na carteira (últimas 3 cols) OU atendido na vigente
-      const naCarteira = st.carteiraCods && [...st.carteiraCods].some(c => normGC(String(c)) === cn);
-      const naVigente  = cliVigNormPorRep[rep] && cliVigNormPorRep[rep].has(cn);
-      if (naCarteira || naVigente) { inadPorRep[rep] = (inadPorRep[rep]||0) + 1; }
+      // Rep do cadastro (para achar carteiraCods em repStats)
+      const repCad = repPorCodGC[cn];
+      // Rep do pedido (para indexar inadPorRep igual ao repRows)
+      const repPed = repPedidoPorCodcli[cn] || repCad;
+      if (!repPed) return;
+
+      // Verifica se está na carteira (via repStats do cadastro) OU atendido na vigente
+      const st = repCad ? repStats[repCad] : null;
+      const naCarteira = st && st.carteiraCods && [...st.carteiraCods].some(c => normGC(String(c)) === cn);
+      const naVigente  = cliVigNormPorRepPedido[repPed] && cliVigNormPorRepPedido[repPed].has(cn);
+      if (naCarteira || naVigente) { inadPorRep[repPed] = (inadPorRep[repPed]||0) + 1; }
     });
 
     // ── Helpers de estilo ──
@@ -3256,9 +3271,9 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v35';
+const CACHE_KEY = 'dashCache_v36';
 // Limpar versões antigas do cache
-try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14','dashCache_v15','dashCache_v16','dashCache_v17','dashCache_v18','dashCache_v19','dashCache_v20','dashCache_v21'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
+try { for(let i=1;i<=35;i++) localStorage.removeItem('dashCache_v'+i); } catch(e) {}
 
 function getLastSyncSlot() {
   // Retorna o timestamp do início do último slot de sync (4h ou 12h)
