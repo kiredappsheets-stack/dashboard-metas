@@ -2473,13 +2473,7 @@ function renderDashboard(data) {
         if (!cols.length) return;
 
         let codsNaMarca = codigos.filter(c => porCliente[c].marcas[marca] && cols.some(col=>(porCliente[c].marcas[marca][col]||0)>0));
-        if (statusFiltro === 'inadimplente') {
-          const gRR2 = (r,c) => r["PEDIDO CANCELADOS["+c+"]"] || r[c] || '';
-          const normC = c => String(parseInt(c,10)||0);
-          const inadFluxoCod = new Set((cachedInadimplentes||[]).map(r => normC(r['INADIMPLENCIA[CODCLI]']||r['[CODCLI]']||r['CODCLI']||'')));
-          const inadNomes = new Set((cachedRestricoes||[]).map(r => (gRR2(r,'CLIENTE')||'').trim().toUpperCase()));
-          codsNaMarca = codsNaMarca.filter(c => inadFluxoCod.has(normC(c)) || inadNomes.has((porCliente[c].nome||'').trim().toUpperCase()));
-        } else if (statusFiltro) {
+        if (statusFiltro) {
           codsNaMarca = codsNaMarca.filter(c => (statusPorMarcaCli[marca]?.[c] || 'novo') === statusFiltro);
         }
         if (!codsNaMarca.length) return;
@@ -2546,11 +2540,6 @@ function renderDashboard(data) {
           const subCols2 = new Array(cols.length).fill(0);
           let subGeral2 = 0;
           const gRR = (r,c) => r["PEDIDO CANCELADOS["+c+"]"] || r[c] || '';
-          // Inadimplentes: por CODCLI do Fluxo de Caixa (mesmo código nos dois sistemas)
-          // Normaliza CODCLI removendo zeros à esquerda para comparação robusta
-          const normCod = c => String(parseInt(c,10)||0);
-          const inadimplentesFluxoCod = new Set((cachedInadimplentes||[]).map(r => normCod(r['INADIMPLENCIA[CODCLI]']||r['[CODCLI]']||r['CODCLI']||'')));
-          const inadimplentesNomes = new Set((cachedRestricoes||[]).map(r => (gRR(r,'CLIENTE')||'').trim().toUpperCase()));
           cliDoRep.forEach(cod => {
             const cli = porCliente[cod];
             const dm  = cli.marcas[marca]||{};
@@ -2576,7 +2565,7 @@ function renderDashboard(data) {
                 ${cli.nome}
                 ${loc ? `<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:1px;overflow:hidden;text-overflow:ellipsis">${loc}</span>` : ''}
               </td>
-              <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span>${(inadimplentesFluxoCod.has(normCod(cod)) || inadimplentesNomes.has((cli.nome||'').trim().toUpperCase())) ? ' <span class="cli-status inadimplente" style="margin:0">Inadimplente</span>' : ''}${tendIcon}</td>
+              <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span>${tendIcon}</td>
               <td class="col-crm">${(() => { const crmEstado = getCrmEstado(cod); const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : crmEstado === 'financeiro' ? ' crm-financeiro' : ''; return `<button class="crm-icon${crmClass}" data-cod="${cod}" data-nome="${cli.nome.replace(/"/g,'&quot;')}">CRM</button>`; })()}</td>`;
             const crmEventosCli = getCrmEventos(cod);
             cols.forEach((col,ci) => {
@@ -2640,7 +2629,6 @@ function renderDashboard(data) {
           <option value="recuperado">Recuperado</option>
           <option value="nao-rep">Não repetido</option>
           <option value="novo">Novo</option>
-          <option value="inadimplente">Inadimplente</option>
         </select>
         <button id="${uid}_col_toggle" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap">⚙ Coleções</button>
         <button id="${uid}_pdf_btn" title="Exportar lista atual como PDF" style="font-family:var(--font);font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--tx);border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px">
@@ -3177,7 +3165,7 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v26';
+const CACHE_KEY = 'dashCache_v27';
 // Limpar versões antigas do cache
 try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14','dashCache_v15','dashCache_v16','dashCache_v17','dashCache_v18','dashCache_v19','dashCache_v20','dashCache_v21'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
