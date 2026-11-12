@@ -516,6 +516,13 @@ SELECTCOLUMNS(
   "NOME",   INADIMPLENCIA[NOME]
 )
 `;
+// No Fluxo de Caixa o NOME pode ter CNPJ/CPF no início (ex: "49.051.145 KARINA TAIZI...")
+// Função para normalizar: remove sequência de dígitos/pontos/traços no início do nome
+function normInadNome(n) {
+  if (!n) return '';
+  // Remove padrão tipo "49.051.145 " ou "123.456.789-00 " do início
+  return n.replace(/^[\d.\-\/]+\s*/, '').trim().toUpperCase();
+}
 
 const DAX_KPIS_FAT = `
 EVALUATE
@@ -2298,9 +2305,9 @@ function renderDashboard(data) {
         let codsNaMarca = codigos.filter(c => porCliente[c].marcas[marca] && cols.some(col=>(porCliente[c].marcas[marca][col]||0)>0));
         if (statusFiltro === 'inadimplente') {
           const gRR2 = (r,c) => r["PEDIDO CANCELADOS["+c+"]"] || r[c] || '';
-          const inadCodsFluxo = new Set((cachedInadimplentes||[]).map(r => (r['INADIMPLENCIA[CODCLI]']||r['CODCLI']||'').trim().toUpperCase()));
+          const inadNomesFluxo = new Set((cachedInadimplentes||[]).map(r => normInadNome(r['INADIMPLENCIA[NOME]']||r['NOME']||'')));
           const inadNomes = new Set((cachedRestricoes||[]).map(r => (gRR2(r,'CLIENTE')||'').trim().toUpperCase()));
-          codsNaMarca = codsNaMarca.filter(c => inadCodsFluxo.has((c||'').trim().toUpperCase()) || inadNomes.has((porCliente[c].nome||'').trim().toUpperCase()));
+          codsNaMarca = codsNaMarca.filter(c => inadNomesFluxo.has(normInadNome(porCliente[c].nome||'')) || inadNomes.has((porCliente[c].nome||'').trim().toUpperCase()));
         } else if (statusFiltro) {
           codsNaMarca = codsNaMarca.filter(c => (statusPorMarcaCli[marca]?.[c] || 'novo') === statusFiltro);
         }
@@ -2368,8 +2375,8 @@ function renderDashboard(data) {
           const subCols2 = new Array(cols.length).fill(0);
           let subGeral2 = 0;
           const gRR = (r,c) => r["PEDIDO CANCELADOS["+c+"]"] || r[c] || '';
-          // Inadimplentes: por CODCLI do Fluxo de Caixa (fonte principal) + por nome das restrições (fallback)
-          const inadimplentesCodsFluxo = new Set((cachedInadimplentes||[]).map(r => (r['INADIMPLENCIA[CODCLI]']||r['CODCLI']||'').trim().toUpperCase()));
+          // Inadimplentes: por nome normalizado do Fluxo de Caixa + por nome das restrições
+          const inadimplentesNomesFluxo = new Set((cachedInadimplentes||[]).map(r => normInadNome(r['INADIMPLENCIA[NOME]']||r['NOME']||'')));
           const inadimplentesNomes = new Set((cachedRestricoes||[]).map(r => (gRR(r,'CLIENTE')||'').trim().toUpperCase()));
           cliDoRep.forEach(cod => {
             const cli = porCliente[cod];
@@ -2396,7 +2403,7 @@ function renderDashboard(data) {
                 ${cli.nome}
                 ${loc ? `<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:1px;overflow:hidden;text-overflow:ellipsis">${loc}</span>` : ''}
               </td>
-              <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span>${(inadimplentesCodsFluxo.has((cod||'').trim().toUpperCase()) || inadimplentesNomes.has((cli.nome||'').trim().toUpperCase())) ? ' <span class="cli-status inadimplente" style="margin:0">Inadimplente</span>' : ''}${tendIcon}</td>
+              <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span>${(inadimplentesNomesFluxo.has(normInadNome(cli.nome||'')) || inadimplentesNomes.has((cli.nome||'').trim().toUpperCase())) ? ' <span class="cli-status inadimplente" style="margin:0">Inadimplente</span>' : ''}${tendIcon}</td>
               <td class="col-crm">${(() => { const crmEstado = getCrmEstado(cod); const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : crmEstado === 'financeiro' ? ' crm-financeiro' : ''; return `<button class="crm-icon${crmClass}" data-cod="${cod}" data-nome="${cli.nome.replace(/"/g,'&quot;')}">CRM</button>`; })()}</td>`;
             const crmEventosCli = getCrmEventos(cod);
             cols.forEach((col,ci) => {
