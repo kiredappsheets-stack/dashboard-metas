@@ -1684,19 +1684,24 @@ function renderDashboard(data) {
         const anterSet = cliColAnter[rep]  || new Set();
         const valorMap = valorPorCliRep[rep] || {};
 
-        const atendidos   = vigSet.size;
-        const novos       = [...vigSet].filter(c => !anterSet.has(c)).length;
-        const mantidos    = [...vigSet].filter(c => anterSet.has(c)).length;
-        const naoRep      = [...anterSet].filter(c => !vigSet.has(c)).length;
-        const valorNovos  = [...vigSet].filter(c => !anterSet.has(c)).reduce((s,c) => s + (valorMap[c]||0), 0);
-
         // Carteira = clientes distintos nas últimas 3 coleções antes da vigente
         const colsRep = Object.keys(cliPorRepCol[rep] || {}).filter(c => !colVigSet.has(c)).sort().reverse();
         const cols3 = colsRep.slice(0, 3);
         const carteira = new Set();
         cols3.forEach(c => (cliPorRepCol[rep][c] || new Set()).forEach(cli => carteira.add(cli)));
 
-        // Ex-clientes = já compraram alguma vez mas não estão na carteira (últ. 3 cols excl. atual)
+        // Coleção anterior = primeira coleção antes da vigente
+        const colAnterRep = colsRep[0];
+        const anterImSet = colAnterRep ? (cliPorRepCol[rep][colAnterRep] || new Set()) : new Set();
+
+        const atendidos = vigSet.size;
+        const novos     = [...vigSet].filter(c => !anterSet.has(c)).length;
+        const mantidos  = [...vigSet].filter(c => anterSet.has(c)).length;
+        // Não rep. = estavam na carteira mas não compraram na vigente
+        const naoRep    = [...carteira].filter(c => !vigSet.has(c)).length;
+        const valorNovos = [...vigSet].filter(c => !anterSet.has(c)).reduce((s,c) => s + (valorMap[c]||0), 0);
+
+        // Ex-clientes = já compraram alguma vez mas não estão na carteira nem na vigente
         const todasColsRep = Object.keys(cliPorRepCol[rep] || {});
         const todosClis = new Set();
         todasColsRep.forEach(c => (cliPorRepCol[rep][c] || new Set()).forEach(cli => todosClis.add(cli)));
@@ -4110,10 +4115,11 @@ function _contextoHistClientes(question) {
     const cols = colsPorMarca[marca] || [];
     if (cols.length < 2) return 'Novo';
     const at = (dm[cols[0]]||0) > 0, ant = (dm[cols[1]]||0) > 0, antes = cols.slice(1).some(c => (dm[c]||0) > 0);
+    const naCarteira = cols.slice(1,4).some(c => (dm[c]||0) > 0);
     if (at && ant) return 'Mantido';
     if (at && !antes) return 'Novo';
     if (at && !ant) return 'Recuperado';
-    if (!at && ant) return 'Não rep.';
+    if (!at && naCarteira) return 'Não rep.';
     if (!at && antes) return 'Ex-cliente';
     return 'Novo';
   };
