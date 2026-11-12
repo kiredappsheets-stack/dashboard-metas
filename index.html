@@ -1744,6 +1744,13 @@ function renderDashboard(data) {
         repStats[rep] = { atendidos, novos, mantidos, naoRep, exClientes, valorNovos, valorAAtender,
                           carteiraAtiva: carteira.size, carteira: carteiraTotal, carteiraCods: carteira };
       });
+      // DEBUG temporário — remove depois
+      console.log('[repStats keys]', Object.keys(repStats));
+      const felipeKey = Object.keys(repStats).find(k => k.toLowerCase().includes('felipe'));
+      if (felipeKey) console.log('[repStats Felipe]', felipeKey, repStats[felipeKey]);
+      console.log('[cliPorRepCol keys]', Object.keys(cliPorRepCol));
+      console.log('[gcRows REP samples]', (gcRows||[]).slice(0,5).map(r=>gV(r,'REP')));
+      console.log('[cachedClientes2 REP samples]', (cachedClientes2||[]).slice(0,5).map(r=>String(r['PEDIDO[REP]']||r['REP']||'')));
     }
 
     // ── Inadimplentes por rep ──
