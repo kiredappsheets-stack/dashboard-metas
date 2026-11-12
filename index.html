@@ -2316,7 +2316,7 @@ function renderDashboard(data) {
         if (statusFiltro === 'inadimplente') {
           const gRR2 = (r,c) => r["PEDIDO CANCELADOS["+c+"]"] || r[c] || '';
           const normC = c => String(parseInt(c,10)||0);
-          const inadFluxoCod = new Set((cachedInadimplentes||[]).map(r => normC(r['INADIMPLENCIA[CODCLI]']||r['CODCLI']||'')));
+          const inadFluxoCod = new Set((cachedInadimplentes||[]).map(r => normC(r['INADIMPLENCIA[CODCLI]']||r['[CODCLI]']||r['CODCLI']||'')));
           const inadNomes = new Set((cachedRestricoes||[]).map(r => (gRR2(r,'CLIENTE')||'').trim().toUpperCase()));
           codsNaMarca = codsNaMarca.filter(c => inadFluxoCod.has(normC(c)) || inadNomes.has((porCliente[c].nome||'').trim().toUpperCase()));
         } else if (statusFiltro) {
@@ -2389,7 +2389,7 @@ function renderDashboard(data) {
           // Inadimplentes: por CODCLI do Fluxo de Caixa (mesmo código nos dois sistemas)
           // Normaliza CODCLI removendo zeros à esquerda para comparação robusta
           const normCod = c => String(parseInt(c,10)||0);
-          const inadimplentesFluxoCod = new Set((cachedInadimplentes||[]).map(r => normCod(r['INADIMPLENCIA[CODCLI]']||r['CODCLI']||'')));
+          const inadimplentesFluxoCod = new Set((cachedInadimplentes||[]).map(r => normCod(r['INADIMPLENCIA[CODCLI]']||r['[CODCLI]']||r['CODCLI']||'')));
           const inadimplentesNomes = new Set((cachedRestricoes||[]).map(r => (gRR(r,'CLIENTE')||'').trim().toUpperCase()));
           cliDoRep.forEach(cod => {
             const cli = porCliente[cod];
