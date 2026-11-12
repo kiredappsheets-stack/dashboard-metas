@@ -2482,14 +2482,14 @@ function renderDashboard(data) {
         return n;
       }).filter(Boolean)
     );
-    // Também excluir pelo CODREP → CODCLI match via locPorCod (CLIENTES tem CODREP)
+    // Excluir pelo CODCLI do cliente == CODREP de algum representante (cliente é na verdade um rep)
     const codrepsDosReps = new Set(
       (cachedRepresentantes||[]).map(r => String(r['REPRESENTANTE[CODREP]']||r['[CODREP]']||r['CODREP']||'').trim()).filter(Boolean)
     );
     Object.keys(porCliente).forEach(cod => {
       const nomeUp = (porCliente[cod].nome||'').trim().toUpperCase();
-      const codrep = (locPorCod[cod]||{}).codrep || '';
-      if (nomesReps.has(nomeUp) || (codrep && codrepsDosReps.has(codrep))) {
+      // Exclui se: nome igual a um rep OU o próprio CODCLI do cliente é o CODREP de um rep
+      if (nomesReps.has(nomeUp) || codrepsDosReps.has(cod)) {
         delete porCliente[cod];
       }
     });
@@ -3426,10 +3426,10 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v44';
+const CACHE_KEY = 'dashCache_v45';
 // Limpar TODAS as versões antigas — também limpa tudo se quota atingida
 try {
-  for(let i=1;i<=43;i++) localStorage.removeItem('dashCache_v'+i);
+  for(let i=1;i<=44;i++) localStorage.removeItem('dashCache_v'+i);
   // Se ainda há chaves antigas ocupando espaço, limpa tudo
   const keysToRemove = [];
   for(let i=0;i<localStorage.length;i++){
