@@ -1712,18 +1712,33 @@ function renderDashboard(data) {
       const rep = String(gVg(r,'REP')||'').trim();
       if (cod && rep) repPorCodGC[cod] = rep;
     });
-    // inadPorRep: conta só os inadimplentes que estão na carteira do rep
-    // (carteira = clientes das últimas 3 coleções, via repStats[rep].carteiraCods)
-    // carteiraCods usa CODCLI como string do PEDIDO; normalizamos para comparar
+    // inadPorRep: conta inadimplentes que estão na carteira OU atendidos na vigente
+    // (carteira = últimas 3 cols antes da vigente; atendidos = cliColVig)
+    // Assim o cliente que comprou na vigente E está inadimplente também é contado
     const inadPorRep = {}; // rep -> count
+    // Índice de clientes atendidos na vigente por rep (normalizados)
+    const cliVigNormPorRep = {}; // rep -> Set(codNorm)
+    if (cachedClientes2 && cachedClientes2.length) {
+      cachedClientes2.forEach(r => {
+        const repPedido = String(gV(r,'REP')||'').trim();
+        const codcli = String(gV(r,'CODCLI')||'').trim();
+        const col = String(gV(r,'COLECAO')||'').trim();
+        if (!codcli || !col || !colVigSet.has(col)) return;
+        const rep = repCadastroPorCod[codcli] || repPedido;
+        if (!rep) return;
+        if (!cliVigNormPorRep[rep]) cliVigNormPorRep[rep] = new Set();
+        cliVigNormPorRep[rep].add(normGC(codcli));
+      });
+    }
     Object.keys(inadMapGC).forEach(cn => {
       const rep = repPorCodGC[cn];
       if (!rep) return;
       const st = repStats[rep];
-      if (!st || !st.carteiraCods) return;
-      // carteiraCods tem os CODCLIs como strings do PEDIDO — normalizar para int
-      const naCarteira = [...st.carteiraCods].some(c => normGC(String(c)) === cn);
-      if (naCarteira) { inadPorRep[rep] = (inadPorRep[rep]||0) + 1; }
+      if (!st) return;
+      // Conta se está na carteira (últimas 3 cols) OU atendido na vigente
+      const naCarteira = st.carteiraCods && [...st.carteiraCods].some(c => normGC(String(c)) === cn);
+      const naVigente  = cliVigNormPorRep[rep] && cliVigNormPorRep[rep].has(cn);
+      if (naCarteira || naVigente) { inadPorRep[rep] = (inadPorRep[rep]||0) + 1; }
     });
 
     // ── Helpers de estilo ──
@@ -3241,7 +3256,7 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v34';
+const CACHE_KEY = 'dashCache_v35';
 // Limpar versões antigas do cache
 try { ['dashCache_v1','dashCache_v2','dashCache_v3','dashCache_v4','dashCache_v5','dashCache_v6','dashCache_v7','dashCache_v8','dashCache_v9','dashCache_v10','dashCache_v11','dashCache_v12','dashCache_v13','dashCache_v14','dashCache_v15','dashCache_v16','dashCache_v17','dashCache_v18','dashCache_v19','dashCache_v20','dashCache_v21'].forEach(k=>localStorage.removeItem(k)); } catch(e) {}
 
