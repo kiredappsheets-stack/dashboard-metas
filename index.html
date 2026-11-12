@@ -1149,15 +1149,15 @@ function renderDashboard(data) {
           <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:16px">${m}</div>
           <div style="display:flex;flex-direction:column;gap:16px">
             <div>
-              <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px">📦 Peças Vendidas</div>
-              <div style="position:relative;height:220px">
-                <canvas id="chartMarca_pecas_${m.replace(/\s+/g,'_')}"></canvas>
-              </div>
-            </div>
-            <div>
               <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px">💰 Vendas (R$)</div>
               <div style="position:relative;height:220px">
                 <canvas id="chartMarca_venda_${m.replace(/\s+/g,'_')}"></canvas>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px">📦 Peças Vendidas</div>
+              <div style="position:relative;height:220px">
+                <canvas id="chartMarca_pecas_${m.replace(/\s+/g,'_')}"></canvas>
               </div>
             </div>
           </div>
