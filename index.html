@@ -1146,9 +1146,20 @@ function renderDashboard(data) {
       <div style="display:flex;flex-direction:column;gap:16px">
         ${marcas.map(m => `
         <div data-chart-marca="${m}" style="background:var(--surface2);border-radius:10px;padding:16px;border-top:3px solid ${corPorMarca[m]}">
-          <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">📦 ${m}</div>
-          <div style="position:relative;height:260px">
-            <canvas id="chartMarca_${m.replace(/\s+/g,'_')}"></canvas>
+          <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:16px">${m}</div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px">📦 Peças Vendidas</div>
+              <div style="position:relative;height:220px">
+                <canvas id="chartMarca_pecas_${m.replace(/\s+/g,'_')}"></canvas>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px">💰 Valor Vendido (R$)</div>
+              <div style="position:relative;height:220px">
+                <canvas id="chartMarca_venda_${m.replace(/\s+/g,'_')}"></canvas>
+              </div>
+            </div>
           </div>
         </div>`).join('')}
       </div>
@@ -2840,23 +2851,23 @@ function renderDashboard(data) {
           return bM - aM;
         });
 
-        // Um gráfico por marca — só coleções com dados para aquela marca
+        // Um par de gráficos por marca — só coleções com dados para aquela marca
         marcasOrdenadas.forEach(m => {
           const colecoesMarca = colecoes.filter(c => (idx[c]?.[m]?.pecas || 0) > 0);
-          const canvasId = 'chartMarca_' + m.replace(/\s+/g,'_');
+          const slug = m.replace(/\s+/g,'_');
+          const cor  = corPorMarca[m];
+
           mkChart(
-            canvasId,
-            [{
-              label: 'Peças Vendidas',
-              data: colecoesMarca.map(c => idx[c][m].pecas),
-              backgroundColor: corPorMarca[m] + 'cc',
-              borderColor: corPorMarca[m],
-              borderWidth: 1,
-              borderRadius: 4,
-            }],
-            'Peças',
-            false,
-            colecoesMarca   // eixo X específico desta marca
+            'chartMarca_pecas_' + slug,
+            [{ label: 'Peças Vendidas', data: colecoesMarca.map(c => idx[c][m].pecas),
+               backgroundColor: cor + 'cc', borderColor: cor, borderWidth: 1, borderRadius: 4 }],
+            'Peças', false, colecoesMarca
+          );
+          mkChart(
+            'chartMarca_venda_' + slug,
+            [{ label: 'Valor Vendido', data: colecoesMarca.map(c => idx[c][m].venda),
+               backgroundColor: cor + 'cc', borderColor: cor, borderWidth: 1, borderRadius: 4 }],
+            'Faturamento (R$)', true, colecoesMarca
           );
         });
       };
