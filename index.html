@@ -2485,9 +2485,13 @@ function renderDashboard(data) {
     }
 
     // Reps com meta na coleção atual (= rep ativo)
-    const repsAtivos = new Set(
-      (cachedData||[]).filter(d => d.meta > 0).map(d => String(d.rep||'').trim()).filter(Boolean)
-    );
+    // Inclui também reps cadastrados (cachedRepresentantes e cachedClientesLoc) para não perder
+    // clientes vinculados a reps sem meta ainda (ex: rep novo ou sem metas cadastradas)
+    const repsAtivos = new Set([
+      ...(cachedData||[]).filter(d => d.meta > 0).map(d => String(d.rep||'').trim()).filter(Boolean),
+      ...(cachedRepresentantes||[]).map(r => String(r['REPRESENTANTE[REP]']||r['[REP]']||r['REP']||'').trim()).filter(Boolean),
+      ...(cachedClientesLoc||[]).map(r => String(gV(r,'REP')||'').trim()).filter(Boolean)
+    ]);
 
     // Determinar rep da última coleção por cliente (independente de marca)
     // cachedClientes2 já vem ordenado por COLECAO ASC, então a última linha é a mais recente
