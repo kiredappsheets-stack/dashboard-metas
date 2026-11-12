@@ -2887,23 +2887,6 @@ function renderDashboard(data) {
               backgroundColor: cor + 'cc', borderColor: cor, borderWidth: 1, borderRadius: 4,
               type: 'bar' },
           ];
-          const metaData = colecoesMarca.map(c => idxMeta[m]?.[c] || null);
-          if (metaData.some(v => v > 0)) {
-            datasetsVenda.push({
-              label: 'Meta',
-              data: metaData,
-              type: 'line',
-              borderColor: '#f59e0b',
-              backgroundColor: 'transparent',
-              borderWidth: 2,
-              borderDash: [6, 3],
-              pointRadius: 4,
-              pointBackgroundColor: '#f59e0b',
-              datalabels: { display: false },
-              tension: 0,
-              order: 0,
-            });
-          }
 
           mkChart('chartMarca_venda_' + slug, datasetsVenda, 'Vendas (R$)', true, colecoesMarca);
           mkChart(
