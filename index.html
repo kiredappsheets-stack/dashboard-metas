@@ -340,6 +340,7 @@ const CONFIG = {
   tenantId:    "f6b9f0df-2577-4b82-9dc8-7673ebf160f2",
   workspaceId: "00000000-0000-0000-0000-000000000000",
   datasetId:   "374fd5f6-a9cb-4a72-bb8e-11930616f40e",
+  fluxoCaixaDatasetId: "c352ca5f-fc9c-41dc-b6c4-2480738d2569",
 };
 
 // Query DAX — apenas coleções com COL_ATUAL = "COL ATUAL"
@@ -502,6 +503,18 @@ SUMMARIZECOLUMNS(
   "FAT_LIQ", SUM('PEDIDO CANCELADOS'[FAT_LIQ])
 )
 ORDER BY 'PEDIDO CANCELADOS'[COLECAO] DESC, 'PEDIDO CANCELADOS'[REPRESENTANTE] ASC, [FAT_LIQ] DESC
+`;
+
+const DAX_INADIMPLENTES = `
+EVALUATE
+SELECTCOLUMNS(
+  FILTER(
+    SUMMARIZE(INADIMPLENCIA, INADIMPLENCIA[CODCLI], INADIMPLENCIA[NOME]),
+    CALCULATE(SUMX(FILTER(INADIMPLENCIA, INADIMPLENCIA[ATRASO] = "ATRASO"), INADIMPLENCIA[SALDO])) < 0
+  ),
+  "CODCLI", INADIMPLENCIA[CODCLI],
+  "NOME",   INADIMPLENCIA[NOME]
+)
 `;
 
 const DAX_KPIS_FAT = `
@@ -743,6 +756,21 @@ async function getToken() {
 // ════════════════════════════════════════════
 //  API Power BI — executa DAX
 // ════════════════════════════════════════════
+async function runDaxQueryFluxo(token, query, raw=false) {
+  const url = `https://api.powerbi.com/v1.0/myorg/datasets/${CONFIG.fluxoCaixaDatasetId}/executeQueries`;
+  const body = { queries: [{ query: query }], serializerSettings: { includeNulls: true } };
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) { const err = await res.text(); throw new Error(`API Fluxo Caixa: ${res.status} — ${err}`); }
+  const json = await res.json();
+  const rows = json.results[0].tables[0].rows;
+  if (raw) return rows;
+  return rows;
+}
+
 async function runDaxQuery(token, query, raw=false) {
   const url = `https://api.powerbi.com/v1.0/myorg/datasets/${CONFIG.datasetId}/executeQueries`;
   const body = { queries: [{ query: query }], serializerSettings: { includeNulls: true } };
@@ -2270,8 +2298,9 @@ function renderDashboard(data) {
         let codsNaMarca = codigos.filter(c => porCliente[c].marcas[marca] && cols.some(col=>(porCliente[c].marcas[marca][col]||0)>0));
         if (statusFiltro === 'inadimplente') {
           const gRR2 = (r,c) => r["PEDIDO CANCELADOS["+c+"]"] || r[c] || '';
+          const inadCodsFluxo = new Set((cachedInadimplentes||[]).map(r => (r['INADIMPLENCIA[CODCLI]']||r['CODCLI']||'').trim().toUpperCase()));
           const inadNomes = new Set((cachedRestricoes||[]).map(r => (gRR2(r,'CLIENTE')||'').trim().toUpperCase()));
-          codsNaMarca = codsNaMarca.filter(c => inadNomes.has((porCliente[c].nome||'').trim().toUpperCase()));
+          codsNaMarca = codsNaMarca.filter(c => inadCodsFluxo.has((c||'').trim().toUpperCase()) || inadNomes.has((porCliente[c].nome||'').trim().toUpperCase()));
         } else if (statusFiltro) {
           codsNaMarca = codsNaMarca.filter(c => (statusPorMarcaCli[marca]?.[c] || 'novo') === statusFiltro);
         }
@@ -2339,6 +2368,8 @@ function renderDashboard(data) {
           const subCols2 = new Array(cols.length).fill(0);
           let subGeral2 = 0;
           const gRR = (r,c) => r["PEDIDO CANCELADOS["+c+"]"] || r[c] || '';
+          // Inadimplentes: por CODCLI do Fluxo de Caixa (fonte principal) + por nome das restrições (fallback)
+          const inadimplentesCodsFluxo = new Set((cachedInadimplentes||[]).map(r => (r['INADIMPLENCIA[CODCLI]']||r['CODCLI']||'').trim().toUpperCase()));
           const inadimplentesNomes = new Set((cachedRestricoes||[]).map(r => (gRR(r,'CLIENTE')||'').trim().toUpperCase()));
           cliDoRep.forEach(cod => {
             const cli = porCliente[cod];
@@ -2365,7 +2396,7 @@ function renderDashboard(data) {
                 ${cli.nome}
                 ${loc ? `<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:1px;overflow:hidden;text-overflow:ellipsis">${loc}</span>` : ''}
               </td>
-              <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span>${inadimplentesNomes.has((cli.nome||'').trim().toUpperCase()) ? ' <span class="cli-status inadimplente" style="margin:0">Inadimplente</span>' : ''}${tendIcon}</td>
+              <td class="col-status"><span class="cli-status ${st}" style="margin:0">${statusLabel[st]}</span>${(inadimplentesCodsFluxo.has((cod||'').trim().toUpperCase()) || inadimplentesNomes.has((cli.nome||'').trim().toUpperCase())) ? ' <span class="cli-status inadimplente" style="margin:0">Inadimplente</span>' : ''}${tendIcon}</td>
               <td class="col-crm">${(() => { const crmEstado = getCrmEstado(cod); const crmClass = crmEstado === 'validado' ? ' crm-validado' : crmEstado === 'recusado' ? ' crm-recusado' : crmEstado === 'financeiro' ? ' crm-financeiro' : ''; return `<button class="crm-icon${crmClass}" data-cod="${cod}" data-nome="${cli.nome.replace(/"/g,'&quot;')}">CRM</button>`; })()}</td>`;
             const crmEventosCli = getCrmEventos(cod);
             cols.forEach((col,ci) => {
@@ -3063,6 +3094,7 @@ function applyCache(cached) {
   cachedRestricoesHist  = cached.restricoesHist  || [];
   cachedGraficosMarcaCol = cached.graficosMarcaCol || [];
   cachedMetaMarcaCol     = cached.metaMarcaCol     || [];
+  cachedInadimplentes    = cached.inadimplentes    || [];
   cachedHistMarca       = cached.histMarca       || [];
   cachedHistPeriodo     = cached.histPeriodo     || [];
   cachedClientes2       = cached.clientes2       || [];
@@ -3108,7 +3140,7 @@ async function loadDashboard() {
       try {
         const token = await getToken();
         const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
-        const [data, kpis, kpisFat, metasHist, restricoes, restricoesHist, graficosMarcaCol, metaMarcaCol, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes] = await Promise.all([
+        const [data, kpis, kpisFat, metasHist, restricoes, restricoesHist, graficosMarcaCol, metaMarcaCol, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes, inadimplentes] = await Promise.all([
           safe(() => runDaxQuery(token, DAX_QUERY, false)),
           safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
           safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -3127,6 +3159,7 @@ async function loadDashboard() {
           safe(() => runDaxQuery(token, DAX_CRM_RETORNO, true)),
           safe(() => runDaxQuery(token, DAX_LISTA_MARCAS, true)),
           safe(() => runDaxQuery(token, DAX_REPRESENTANTES, true)),
+          safe(() => runDaxQueryFluxo(token, DAX_INADIMPLENTES, true)),
         ]);
         if (!data || data.length === 0) {
           console.warn('DAX_QUERY retornou vazio — não atualiza cache');
@@ -3139,10 +3172,11 @@ async function loadDashboard() {
         cachedClientes2 = clientes2||[]; cachedCrmJustif = crmJustif||[]; cachedClientesLoc = clientesLoc||[];
         cachedGestaoCom = gestaoCom||[]; cachedColecoesDatas = colecoesDatas||[]; cachedCrmRetorno = crmRetorno||[];
         cachedListaMarcas = listaMarcas||[]; cachedRepresentantes = representantes||[];
+        cachedInadimplentes = inadimplentes||[];
         cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
         if (kpisFat && kpisFat.length > 0) cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
 
-        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, restricoesHist: cachedRestricoesHist, graficosMarcaCol: cachedGraficosMarcaCol, metaMarcaCol: cachedMetaMarcaCol, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas, representantes: cachedRepresentantes });
+        saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, restricoesHist: cachedRestricoesHist, graficosMarcaCol: cachedGraficosMarcaCol, metaMarcaCol: cachedMetaMarcaCol, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas, representantes: cachedRepresentantes, inadimplentes: cachedInadimplentes });
         // Reatualizar as abas com dados novos
         renderDashboard(cachedData);
         const now2 = new Date();
@@ -3171,7 +3205,7 @@ async function loadDashboard() {
     if (lu) lu.textContent = 'A carregar dados do Power BI…';
     const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('Query falhou:', e.message); return []; } };
 
-    const [data, kpis, kpisFat, metasHist, restricoes, restricoesHist, graficosMarcaCol, metaMarcaCol, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes] = await Promise.all([
+    const [data, kpis, kpisFat, metasHist, restricoes, restricoesHist, graficosMarcaCol, metaMarcaCol, histMarca, histPeriodo, clientes2, crmJustif, clientesLoc, gestaoCom, colecoesDatas, crmRetorno, listaMarcas, representantes, inadimplentes] = await Promise.all([
       safe(() => runDaxQuery(token, DAX_QUERY, false)),
       safe(() => runDaxQuery(token, DAX_KPIS_COL_ATUAL, true)),
       safe(() => runDaxQuery(token, DAX_KPIS_FAT, true)),
@@ -3190,6 +3224,7 @@ async function loadDashboard() {
       safe(() => runDaxQuery(token, DAX_CRM_RETORNO, true)),
       safe(() => runDaxQuery(token, DAX_LISTA_MARCAS, true)),
       safe(() => runDaxQuery(token, DAX_REPRESENTANTES, true)),
+      safe(() => runDaxQueryFluxo(token, DAX_INADIMPLENTES, true)),
     ]);
     clearTimeout(_loadTimeout);
     if (!data || data.length === 0) {
@@ -3212,11 +3247,12 @@ async function loadDashboard() {
     cachedCrmRetorno = crmRetorno || [];
     cachedListaMarcas = listaMarcas || [];
     cachedRepresentantes = representantes || [];
+    cachedInadimplentes = inadimplentes || [];
     cachedKpis = kpis && kpis.length > 0 ? kpis[0] : null;
     if (kpisFat && kpisFat.length > 0) {
       cachedKpis = Object.assign({}, cachedKpis || {}, kpisFat[0]);
     }
-    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, restricoesHist: cachedRestricoesHist, graficosMarcaCol: cachedGraficosMarcaCol, metaMarcaCol: cachedMetaMarcaCol, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas, representantes: cachedRepresentantes });
+    saveCache({ data: cachedData, kpis: cachedKpis, metasHist: cachedMetasHist, restricoes: cachedRestricoes, restricoesHist: cachedRestricoesHist, graficosMarcaCol: cachedGraficosMarcaCol, metaMarcaCol: cachedMetaMarcaCol, histMarca: cachedHistMarca, histPeriodo: cachedHistPeriodo, clientes2: cachedClientes2, crmJustif: cachedCrmJustif, clientesLoc: cachedClientesLoc, gestaoCom: cachedGestaoCom, colecoesDatas: cachedColecoesDatas, crmRetorno: cachedCrmRetorno, listaMarcas: cachedListaMarcas, representantes: cachedRepresentantes, inadimplentes: cachedInadimplentes });
     renderDashboard(data);
     _crmLoadFromSheets();
 
@@ -3278,6 +3314,7 @@ let cachedRestricoes = null;
 let cachedRestricoesHist = null;
 let cachedGraficosMarcaCol = null;
 let cachedMetaMarcaCol = [];
+let cachedInadimplentes = [];
 let cachedHistMarca = [];
 let cachedHistPeriodo = [];
 let cachedClientes2 = [];
