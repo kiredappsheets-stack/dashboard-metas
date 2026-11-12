@@ -1744,13 +1744,6 @@ function renderDashboard(data) {
         repStats[rep] = { atendidos, novos, mantidos, naoRep, exClientes, valorNovos, valorAAtender,
                           carteiraAtiva: carteira.size, carteira: carteiraTotal, carteiraCods: carteira };
       });
-      // DEBUG temporário — remove depois
-      console.log('[repStats keys]', Object.keys(repStats));
-      const felipeKey = Object.keys(repStats).find(k => k.toLowerCase().includes('felipe'));
-      if (felipeKey) console.log('[repStats Felipe]', felipeKey, repStats[felipeKey]);
-      console.log('[cliPorRepCol keys]', Object.keys(cliPorRepCol));
-      console.log('[gcRows REP samples]', (gcRows||[]).slice(0,5).map(r=>gV(r,'REP')));
-      console.log('[cachedClientes2 REP samples]', (cachedClientes2||[]).slice(0,5).map(r=>String(r['PEDIDO[REP]']||r['REP']||'')));
     }
 
     // ── Inadimplentes por rep ──
@@ -1801,6 +1794,13 @@ function renderDashboard(data) {
     Object.keys(inadPorRep).forEach(rep => {
       if (repStats[rep]) repStats[rep].inadimplentes = inadPorRep[rep];
     });
+
+    // Índice case-insensitive para repStats — resolve diferença de maiúsculas entre
+    // cachedClientesLoc (campo REP textual) e cachedRepresentantes (campo REPRESENTANTE)
+    const repStatsCI = {}; // repNormUppercase -> repStats entry
+    Object.keys(repStats).forEach(k => { repStatsCI[k.toUpperCase().trim()] = repStats[k]; });
+    // Função helper: busca repStats com fallback case-insensitive
+    const getRepStats = rep => repStats[rep] || repStatsCI[String(rep||'').toUpperCase().trim()] || null;
 
     // ── Helpers de estilo ──
     const shortRep = n => n.replace(/\b(REPRESENTACOES|REPRESENTACAO|COMERCIAL|LTDA\.?|LIMITADA|UNIPESSOAL|S\/S|& CIA)\b/gi,'').replace(/\s+/g,' ').trim();
@@ -1928,7 +1928,7 @@ function renderDashboard(data) {
       let repRows = Object.entries(repsNaMarca).map(([rep, rd]) => {
         const meta   = metaDestaMarca[rep] || 0;
         const pct    = meta > 0 ? rd.venda / meta : 0;
-        const st     = repStats[rep] || { novos:0, mantidos:0, naoRep:0, exClientes:0, carteira:0, valorNovos:0 };
+        const st     = repStats[rep] || repStats[Object.keys(repStats).find(k=>k.toUpperCase()===rep.toUpperCase())||''] || { novos:0, mantidos:0, naoRep:0, exClientes:0, carteira:0, valorNovos:0 };
         const pcPed  = rd.pedidos > 0 ? rd.pecas / rd.pedidos : 0;
         const pedMed = rd.clisA > 0 ? rd.venda / rd.clisA : 0;
         return { rep, ...rd, meta, pct, pcPed, pedMed,
@@ -1941,7 +1941,7 @@ function renderDashboard(data) {
       Object.keys(metaDestaMarca).forEach(rep => {
         if (repsNaMarca[rep]) return; // já tem venda, já está na lista
         const meta = metaDestaMarca[rep] || 0;
-        const st   = repStats[rep] || { novos:0, mantidos:0, naoRep:0, exClientes:0, valorNovos:0 };
+        const st   = repStats[rep] || repStats[Object.keys(repStats).find(k=>k.toUpperCase()===rep.toUpperCase())||''] || { novos:0, mantidos:0, naoRep:0, exClientes:0, valorNovos:0 };
         repRows.push({ rep, codRep: ufPorRep[rep]?.cod||'', uf: ufPorRep[rep]?.uf||'',
                        pecas:0, pedidos:0, clisA:0, venda:0, meta, pct:0, pcPed:0, pedMed:0,
                        naoRep:st.naoRep||0, novos:st.novos, mantidos:st.mantidos, exClientes:st.exClientes,
@@ -2942,7 +2942,7 @@ function renderDashboard(data) {
           const subColsHtml = subCols.map(v=>`<td class="col-val rep-sub-val">${v>0?fmt(v):'—'}</td>`).join('');
 
           // Stats da Gestão Comercial para este rep
-          const gcSt = (!isSemRep && repStats[rep]) ? repStats[rep] : null;
+          const gcSt = (!isSemRep) ? getRepStats(rep) : null;
           const gcStatsHtml = (() => {
             if (!gcSt) return '';
             const fN  = v => v != null && v > 0 ? v : '—';
@@ -3613,10 +3613,10 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v48';
+const CACHE_KEY = 'dashCache_v49';
 // Limpar TODAS as versões antigas — também limpa tudo se quota atingida
 try {
-  for(let i=1;i<=47;i++) localStorage.removeItem('dashCache_v'+i);
+  for(let i=1;i<=48;i++) localStorage.removeItem('dashCache_v'+i);
   // Se ainda há chaves antigas ocupando espaço, limpa tudo
   const keysToRemove = [];
   for(let i=0;i<localStorage.length;i++){
