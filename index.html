@@ -561,6 +561,8 @@ SUMMARIZE(
   PEDIDO[COD_REP],
   PEDIDO[MARCA],
   PEDIDO[COLECAO],
+  PEDIDO[MUNICIPIO],
+  PEDIDO[ESTADO],
   "VENDA", SUM(PEDIDO[FAT_LIQ])
 )
 ORDER BY PEDIDO[CLIENTE] ASC, PEDIDO[MARCA] ASC, PEDIDO[COLECAO] ASC
@@ -2401,6 +2403,7 @@ function renderDashboard(data) {
 
     // Índice de localização: codcli -> { cidade, estado, codrep, rep }
     const locPorCod = {};
+    // 1. Fonte primária: tabela CLIENTES (cadastro) — tem CODCLI, CIDADE, ESTADO, REP
     if (cachedClientesLoc && cachedClientesLoc.length) {
       cachedClientesLoc.forEach(r => {
         const cod    = String(gV(r,'CODCLI')||'').trim();
@@ -2409,6 +2412,23 @@ function renderDashboard(data) {
         const codrep = String(gV(r,'CODREP')||'').trim();
         const rep    = String(gV(r,'REP')||'').trim();
         if (cod) locPorCod[cod] = { cidade, estado, codrep, rep };
+      });
+    }
+    // 2. Fallback: tabela PEDIDO — clientes não cadastrados em CLIENTES ainda têm MUNICIPIO/ESTADO no pedido
+    if (cachedClientes2 && cachedClientes2.length) {
+      cachedClientes2.forEach(r => {
+        const cod    = String(gV(r,'CODCLI')||'').trim();
+        const cidade = String(gV(r,'MUNICIPIO')||gV(r,'CIDADE')||'').trim();
+        const estado = String(gV(r,'ESTADO')||'').trim();
+        if (!cod) return;
+        if (!locPorCod[cod]) {
+          // Cliente não está no cadastro — usar dados do pedido
+          locPorCod[cod] = { cidade, estado, codrep: '', rep: '' };
+        } else if (!locPorCod[cod].cidade && cidade) {
+          // Está no cadastro mas sem cidade — complementar com dados do pedido
+          locPorCod[cod].cidade = cidade;
+          locPorCod[cod].estado = locPorCod[cod].estado || estado;
+        }
       });
     }
 
@@ -3406,10 +3426,10 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v43';
+const CACHE_KEY = 'dashCache_v44';
 // Limpar TODAS as versões antigas — também limpa tudo se quota atingida
 try {
-  for(let i=1;i<=42;i++) localStorage.removeItem('dashCache_v'+i);
+  for(let i=1;i<=43;i++) localStorage.removeItem('dashCache_v'+i);
   // Se ainda há chaves antigas ocupando espaço, limpa tudo
   const keysToRemove = [];
   for(let i=0;i<localStorage.length;i++){
