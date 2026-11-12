@@ -2226,12 +2226,12 @@ function renderDashboard(data) {
       + '</div>'
       + '<div style="flex:1"></div>'
       // Select de Representante
-      + '<select class="inad-filter-select" id="inad-sel-rep" onchange="window._inadFiltros.rep=this.value;window._inadFiltros.cliente=\'\';document.getElementById(\'tab-inadimplentes\').innerHTML=buildInadimplentes()">'
+      + '<select class="inad-filter-select" id="inad-sel-rep" onchange="window._inadFiltros.rep=this.value;window._inadFiltros.cliente=\'\';window._reRenderInad()">'
       + '<option value="">Todos os representantes</option>'
       + todosReps.map(r => '<option value="' + r.replace(/"/g,'&quot;') + '"' + (filtros.rep===r?' selected':'') + '>' + shortRep(r) + '</option>').join('')
       + '</select>'
       // Select de Cliente
-      + '<select class="inad-filter-select" id="inad-sel-cli" onchange="window._inadFiltros.cliente=this.value;document.getElementById(\'tab-inadimplentes\').innerHTML=buildInadimplentes()">'
+      + '<select class="inad-filter-select" id="inad-sel-cli" onchange="window._inadFiltros.cliente=this.value;window._reRenderInad()">'
       + '<option value="">Todos os clientes</option>'
       + todosClientes
           .filter(c => !filtros.rep || c.rep === filtros.rep)
@@ -2239,7 +2239,7 @@ function renderDashboard(data) {
           .join('')
       + '</select>';
     if (temFiltro) {
-      html += '<button class="inad-filter-clear" onclick="window._inadFiltros={rep:\'\',cliente:\'\'};document.getElementById(\'tab-inadimplentes\').innerHTML=buildInadimplentes()">✕ Limpar filtros</button>';
+      html += '<button class="inad-filter-clear" onclick="window._inadFiltros={rep:\'\',cliente:\'\'};window._reRenderInad()">✕ Limpar filtros</button>';
     }
     html += '</div>'
       + '<div class="inad-cols-grid" style="overflow-y:auto;flex:1;grid-template-columns:repeat(' + nCols + ',minmax(0,1fr))">';
@@ -3140,6 +3140,12 @@ function renderDashboard(data) {
     <div class="tab-content hidden" id="tab-leads" style="padding:0;height:100%;overflow:hidden"><iframe src="https://lojistas.myrockdenim.com.br/admin.html" style="width:100%;height:100%;border:none;display:block" allow="identity-credentials-get" title="Leads de Lojistas"></iframe></div>
   `;
 
+  // ── Re-render aba Inadimplentes (chamado pelos filtros) ──
+  window._reRenderInad = function() {
+    const el = document.getElementById('tab-inadimplentes');
+    if (el) el.innerHTML = buildInadimplentes();
+  };
+
   // ── Chart.js: gráficos de marca × coleção ──────────────────────────────
   let _grafMarcasSel = new Set(); // marcas selecionadas (vazio = todas)
 
@@ -3400,10 +3406,10 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v42';
+const CACHE_KEY = 'dashCache_v43';
 // Limpar TODAS as versões antigas — também limpa tudo se quota atingida
 try {
-  for(let i=1;i<=41;i++) localStorage.removeItem('dashCache_v'+i);
+  for(let i=1;i<=42;i++) localStorage.removeItem('dashCache_v'+i);
   // Se ainda há chaves antigas ocupando espaço, limpa tudo
   const keysToRemove = [];
   for(let i=0;i<localStorage.length;i++){
