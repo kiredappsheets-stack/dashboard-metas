@@ -5446,7 +5446,8 @@ function _renderMetasGrid() {
     return;
   }
 
-  const colecoesAtivas = new Set([...colecoesData, ...colecoesLocais]);
+  // Botão de editar somente para coleções vigentes (do cachedData), não para histórico
+  const colecoesAtivas = new Set(colecoesData);
 
   // ---------- índice hist[colecao][rep] = {meta, venda} ----------
   const histIdx = {};
