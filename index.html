@@ -2244,6 +2244,8 @@ function renderDashboard(data) {
     if (temFiltro) {
       html += '<button class="inad-filter-clear" onclick="window._inadFiltros={rep:\'\',cliente:\'\'};window._reRenderInad()">✕ Limpar filtros</button>';
     }
+    html += '</div>'; // fecha container de filtros
+
     // ── Resumo por marca ──
     // Mapa CODCLI → marca principal (via cachedClientes2)
     const marcaPorCodI = {};
