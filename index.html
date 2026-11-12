@@ -2802,12 +2802,13 @@ function renderDashboard(data) {
                 }
               },
               datalabels: {
-                anchor: 'end',
-                align: 'end',
-                offset: 2,
-                color: '#94a3b8',
-                font: { size: 9, weight: '600' },
-                formatter: (val) => {
+                anchor: 'center',
+                align: 'center',
+                color: '#fff',
+                font: { size: 9, weight: '700' },
+                formatter: (val, ctx) => {
+                  // Linha de meta: sem label
+                  if (ctx.dataset.type === 'line') return '';
                   if (!val) return '';
                   if (isMoney) {
                     return val >= 1e6
@@ -2818,7 +2819,7 @@ function renderDashboard(data) {
                     ? (val/1e3).toFixed(1) + 'k'
                     : val.toLocaleString('pt-BR');
                 },
-                clip: false,
+                clip: true,
               }
             },
             layout: { padding: { top: 20 } },
