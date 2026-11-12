@@ -1627,12 +1627,28 @@ function renderDashboard(data) {
     // Todas as coleções disponíveis
     const todasCols = [...new Set((cachedClientes2||[]).map(r => String(gV(r,'COLECAO')||'').trim()).filter(Boolean))].sort();
 
+    // Mapa CODREP → nome do representante (igual ao da aba Clientes)
+    const nomeRepPorCodGC = {};
+    (cachedRepresentantes||[]).forEach(r => {
+      const cod  = String(r['REPRESENTANTE[CODREP]']||r['[CODREP]']||r['CODREP']||'').trim();
+      const nome = String(r['REPRESENTANTE[REPRESENTANTE]']||r['[REPRESENTANTE]']||r['REPRESENTANTE']||'').trim();
+      if (cod && nome) nomeRepPorCodGC[cod] = nome;
+    });
+    const traduzRepGC = raw => {
+      if (!raw) return '';
+      if (/^\d+$/.test(raw)) return nomeRepPorCodGC[raw] || raw;
+      return raw;
+    };
+
     // Índice rep do cadastro (CLIENTES[REP]) por codcli — igual à prioridade da aba Clientes
+    // Usa CODREP como prioridade para traduzir código numérico em nome
     const repCadastroPorCod = {};
     (cachedClientesLoc||[]).forEach(r => {
       const gVg = (row,c) => { const k=Object.keys(row).find(k2=>k2.toUpperCase().includes(c.toUpperCase()))||c; return row[k]??null; };
-      const cod = String(gVg(r,'CODCLI')||'').trim();
-      const rep = String(gVg(r,'REP')||'').trim();
+      const cod    = String(gVg(r,'CODCLI')||'').trim();
+      const codrep = String(gVg(r,'CODREP')||'').trim();
+      const repRaw = String(gVg(r,'REP')||'').trim();
+      const rep    = nomeRepPorCodGC[codrep] || traduzRepGC(repRaw) || repRaw;
       if (cod && rep) repCadastroPorCod[cod] = rep;
     });
 
@@ -1651,7 +1667,7 @@ function renderDashboard(data) {
       const cliPorRepCol = {}; // rep -> col -> Set(codcli)
 
       cachedClientes2.forEach(r => {
-        const repPedido = String(gV(r,'REP')||'').trim();
+        const repPedido = traduzRepGC(String(gV(r,'REP')||'').trim());
         const codcli = String(gV(r,'CODCLI')||'').trim();
         const col    = String(gV(r,'COLECAO')||'').trim();
         const venda  = parseFloat(gV(r,'VENDA')||0) || 0;
