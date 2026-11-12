@@ -473,8 +473,9 @@ SUMMARIZE(
   PEDIDO,
   PEDIDO[MARCA],
   PEDIDO[COLECAO],
-  "VENDA", SUM(PEDIDO[FAT_LIQ]),
-  "PECAS", SUM(PEDIDO[QTDE_ORIG])
+  "VENDA",       SUM(PEDIDO[FAT_LIQ]),
+  "PECAS",       SUM(PEDIDO[QTDE_ORIG]),
+  "PECAS_FAT",   SUM(PEDIDO[QTDE_FAT])
 )
 ORDER BY PEDIDO[COLECAO] ASC, PEDIDO[MARCA] ASC
 `;
@@ -1113,12 +1114,16 @@ function renderDashboard(data) {
       <!-- Totalizadores rápidos -->
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">
         ${marcas.map(m => {
-          const totalV = cachedGraficosMarcaCol.filter(r=>gG(r,'MARCA')===m).reduce((a,r)=>a+gN(r,'VENDA'),0);
-          const totalP = cachedGraficosMarcaCol.filter(r=>gG(r,'MARCA')===m).reduce((a,r)=>a+gN(r,'PECAS'),0);
+          const rows   = cachedGraficosMarcaCol.filter(r=>gG(r,'MARCA')===m);
+          const totalV = rows.reduce((a,r)=>a+gN(r,'VENDA'),0);
+          const totalP = rows.reduce((a,r)=>a+gN(r,'PECAS'),0);
+          const totalF = rows.reduce((a,r)=>a+gN(r,'PECAS_FAT'),0);
+          const aberto = Math.max(0, totalP - totalF);
           return `<div style="background:var(--surface2);border-radius:8px;padding:10px 14px;border-left:3px solid ${corPorMarca[m]};min-width:160px">
             <div style="font-size:11px;color:var(--muted);font-weight:600">${m}</div>
             <div style="font-size:14px;font-weight:700;color:var(--tx)">R$ ${(totalV/1e6).toFixed(1)}M</div>
-            <div style="font-size:11px;color:var(--muted)">${totalP.toLocaleString('pt-BR')} peças</div>
+            <div style="font-size:11px;color:var(--muted)">${totalP.toLocaleString('pt-BR')} peças vendidas</div>
+            <div style="font-size:11px;color:var(--amber)">${aberto.toLocaleString('pt-BR')} a faturar</div>
           </div>`;
         }).join('')}
       </div>
@@ -1131,11 +1136,19 @@ function renderDashboard(data) {
         </div>
       </div>
 
-      <!-- Gráfico de Peças -->
-      <div style="background:var(--surface2);border-radius:10px;padding:16px">
-        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">📦 Peças Faturadas por Marca e Coleção</div>
+      <!-- Gráfico de Peças Vendidas -->
+      <div style="background:var(--surface2);border-radius:10px;padding:16px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">📦 Peças Vendidas por Marca e Coleção</div>
         <div style="position:relative;height:280px">
           <canvas id="chartPecas"></canvas>
+        </div>
+      </div>
+
+      <!-- Gráfico de Peças a Faturar -->
+      <div style="background:var(--surface2);border-radius:10px;padding:16px">
+        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">⏳ Peças Vendidas Não Faturadas por Marca e Coleção</div>
+        <div style="position:relative;height:280px">
+          <canvas id="chartPecasAFaturar"></canvas>
         </div>
       </div>
     </div>
@@ -2678,7 +2691,14 @@ function renderDashboard(data) {
       cachedGraficosMarcaCol.forEach(r => {
         const col = gG(r,'COLECAO'); const marca = gG(r,'MARCA');
         if (!idx[col]) idx[col] = {};
-        idx[col][marca] = { venda: gN(r,'VENDA'), pecas: gN(r,'PECAS') };
+        const pecas    = gN(r,'PECAS');
+        const pecasFat = gN(r,'PECAS_FAT');
+        idx[col][marca] = {
+          venda:        gN(r,'VENDA'),
+          pecas:        pecas,
+          pecas_fat:    pecasFat,
+          pecas_aberto: Math.max(0, pecas - pecasFat),
+        };
       });
 
       const mkDatasets = tipo => marcas.map(m => ({
@@ -2720,8 +2740,9 @@ function renderDashboard(data) {
         });
       }
 
-      mkChart('chartVendas', mkDatasets('venda'), 'Faturamento (R$)', true);
-      mkChart('chartPecas',  mkDatasets('pecas'), 'Peças', false);
+      mkChart('chartVendas',       mkDatasets('venda'),        'Faturamento (R$)', true);
+      mkChart('chartPecas',        mkDatasets('pecas'),        'Peças vendidas', false);
+      mkChart('chartPecasAFaturar',mkDatasets('pecas_aberto'), 'Peças não faturadas', false);
     }
 
     // Carrega Chart.js se necessário
