@@ -1908,10 +1908,24 @@ function renderDashboard(data) {
         </span>
       </div>`;
 
+    // DEBUG: painel temporário para diagnosticar chaves de repStats vs marcaMap
+    const _dbgFelipeRepStats = Object.keys(repStats).filter(k=>k.toLowerCase().includes('felipe'));
+    const _dbgFelipeMarca = Object.keys(marcaMap).flatMap(m=>Object.keys(marcaMap[m]).filter(k=>k.toLowerCase().includes('felipe')));
+    const _dbgHtml = `<details style="margin:4px 20px 0;font-size:11px;color:var(--muted);border:1px solid rgba(255,255,0,.2);border-radius:4px;padding:4px 8px;background:rgba(255,255,0,.04)">
+      <summary style="cursor:pointer;font-weight:600;color:#facc15">🐛 Debug Felipe (remove depois)</summary>
+      <div style="margin-top:6px;line-height:1.8">
+        <b>repStats keys com "felipe":</b> ${JSON.stringify(_dbgFelipeRepStats)}<br>
+        <b>marcaMap keys com "felipe":</b> ${JSON.stringify(_dbgFelipeMarca)}<br>
+        <b>repStats[repStats-key].carteira:</b> ${_dbgFelipeRepStats.map(k=>k+'='+repStats[k].carteira).join(', ')||'—'}<br>
+        <b>repStats TODAS as chaves:</b> ${JSON.stringify(Object.keys(repStats))}
+      </div>
+    </details>`;
+
     let html = '<div style="padding:16px 20px 8px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">'
       + '<div style="font-size:15px;font-weight:700;color:var(--tx)">Gestão Comercial</div>'
       + '<div style="font-size:12px;color:var(--muted)">Coleção vigente: ' + colLabel + '</div>'
       + '</div>'
+      + _dbgHtml
       + legendaHtml
       + '<div style="overflow-y:auto;flex:1;padding:0 16px 24px;display:flex;flex-direction:column;gap:24px">';
 
@@ -3613,10 +3627,10 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v49';
+const CACHE_KEY = 'dashCache_v50';
 // Limpar TODAS as versões antigas — também limpa tudo se quota atingida
 try {
-  for(let i=1;i<=48;i++) localStorage.removeItem('dashCache_v'+i);
+  for(let i=1;i<=49;i++) localStorage.removeItem('dashCache_v'+i);
   // Se ainda há chaves antigas ocupando espaço, limpa tudo
   const keysToRemove = [];
   for(let i=0;i<localStorage.length;i++){
