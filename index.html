@@ -648,13 +648,10 @@ ORDER BY PEDIDO[MARCA] ASC
 
 const DAX_REPRESENTANTES = `
 EVALUATE
-ADDCOLUMNS(
-  SUMMARIZE(
-    REPRESENTANTE,
-    REPRESENTANTE[CODREP],
-    REPRESENTANTE[REPRESENTANTE]
-  ),
-  "TELEFONE", RELATED(CLIENTES[TELEFONE])
+SUMMARIZE(
+  REPRESENTANTE,
+  REPRESENTANTE[CODREP],
+  REPRESENTANTE[REPRESENTANTE]
 )
 ORDER BY REPRESENTANTE[REPRESENTANTE] ASC
 `;
@@ -1799,11 +1796,10 @@ function renderDashboard(data) {
 
     // Índice case-insensitive para repStats — resolve diferença de maiúsculas entre
     // cachedClientesLoc (campo REP textual) e cachedRepresentantes (campo REPRESENTANTE)
-    // var em vez de const para que buildClientes (hoisted) possa acessar via closure
-    var repStatsCI = {}; // repNormUppercase -> repStats entry
-    Object.keys(repStats).forEach(k => { repStatsCI[k.toUpperCase().trim()] = repStats[k]; });
-    // Função helper: busca repStats com fallback case-insensitive
-    function getRepStats(rep) { return repStats[rep] || repStatsCI[String(rep||'').toUpperCase().trim()] || null; }
+    // Exposto globalmente para que buildClientes (re-executada em eventos) possa acessar
+    window._repStatsCI = {};
+    Object.keys(repStats).forEach(k => { window._repStatsCI[k.toUpperCase().trim()] = repStats[k]; });
+    window._repStatsRef = repStats;
 
     // ── Helpers de estilo ──
     const shortRep = n => n.replace(/\b(REPRESENTACOES|REPRESENTACAO|COMERCIAL|LTDA\.?|LIMITADA|UNIPESSOAL|S\/S|& CIA)\b/gi,'').replace(/\s+/g,' ').trim();
@@ -2958,8 +2954,8 @@ function renderDashboard(data) {
           const repNomeHtml = `<span class="rep-nome">${repLabel}</span>`;
           const subColsHtml = subCols.map(v=>`<td class="col-val rep-sub-val">${v>0?fmt(v):'—'}</td>`).join('');
 
-          // Stats da Gestão Comercial para este rep
-          const gcSt = (!isSemRep) ? getRepStats(rep) : null;
+          // Stats da Gestão Comercial para este rep (lookup case-insensitive)
+          const gcSt = (!isSemRep) ? (repStats[rep] || (window._repStatsCI||{})[String(rep||'').toUpperCase().trim()] || null) : null;
           const gcStatsHtml = (() => {
             if (!gcSt) return '';
             const fN  = v => v != null && v > 0 ? v : '—';
@@ -3630,10 +3626,10 @@ function renderDashboard(data) {
 // ════════════════════════════════════════════
 //  CACHE LOCAL — atualiza às 4h, às 12h e às 18h
 // ════════════════════════════════════════════
-const CACHE_KEY = 'dashCache_v51';
+const CACHE_KEY = 'dashCache_v52';
 // Limpar TODAS as versões antigas — também limpa tudo se quota atingida
 try {
-  for(let i=1;i<=50;i++) localStorage.removeItem('dashCache_v'+i);
+  for(let i=1;i<=51;i++) localStorage.removeItem('dashCache_v'+i);
   // Se ainda há chaves antigas ocupando espaço, limpa tudo
   const keysToRemove = [];
   for(let i=0;i<localStorage.length;i++){
